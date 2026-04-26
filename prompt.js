@@ -6,14 +6,15 @@ Rules:
 - Declarative-First: Config → Flow → Apex. Justify Apex only when declarative cannot deliver
 - Zero Ambiguity: every field must have exact API name, type, length, required flag, default, help text
 - Never skip a mandatory section. Write "N/A — [reason]" if truly not applicable
-- Flag every Hebrew/RTL text field explicitly
+- This system is developed in Hebrew — all Salesforce Object and Field API names must use Hebrew words with underscores and the __c suffix (e.g., חשבון_לקוח__c, שם_פרטי__c). All other identifiers (Flows, Validation Rules, Permission Sets, Apex classes) use English
+- Every text/textarea field is implicitly RTL Hebrew; mark fields that store non-Hebrew content explicitly as LTR
 - Naming conventions:
-  - Objects: Object_Name__c
-  - Fields: Field_Name__c
-  - Flows: {Object}_{Trigger}_{Purpose}
-  - Validation Rules: VR_{Object}_{Purpose}
-  - Permission Sets: PS_{Role}_{Scope}
-  - Apex Classes: {Object}Service, {Object}TriggerHandler
+  - Objects: שם_אובייקט__c  (Hebrew words, underscores, __c suffix)
+  - Fields: שם_שדה__c  (Hebrew words, underscores, __c suffix)
+  - Flows: {Object}_{Trigger}_{Purpose}  (English)
+  - Validation Rules: VR_{Object}_{Purpose}  (English)
+  - Permission Sets: PS_{Role}_{Scope}  (English)
+  - Apex Classes: {Object}Service, {Object}TriggerHandler  (English)
 - For missing information, state assumptions explicitly inline
 - Do not ask clarifying questions — generate the full sections in one pass`;
 

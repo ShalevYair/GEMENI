@@ -1,7 +1,7 @@
 import { getSectionPrompt } from './prompt.js';
 
 const GEMINI_ENDPOINT =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 const MAX_OUTPUT_TOKENS = 65000;
 const TOTAL_CHUNKS = 3;
 

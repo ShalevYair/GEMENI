@@ -48,8 +48,8 @@ A static, client-side web app that converts a Hebrew Functional Specification Do
 
 ## Gemini API
 
-- **Model:** `gemini-2.5-pro-latest`
-- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-latest:generateContent`
+- **Model:** `gemini-2.5-pro`
+- **Endpoint:** `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent`
 - **Auth:** API key as query parameter
 - **Max output tokens per call:** 65,000
 

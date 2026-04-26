@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hebrew FSD → Salesforce TSD</title>
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- mammoth.js — extract text from .docx -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <!-- pdf.js — extract text from PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    // Point pdf.js worker to CDN
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Hebrew FSD &rarr; Salesforce TSD</h1>
+      <p class="subtitle">העלה מסמך FSD בעברית וקבל TSD מלא באנגלית בפורמט Markdown</p>
+    </header>
+
+    <main>
+      <!-- API Key -->
+      <section class="card" aria-labelledby="api-key-label">
+        <label id="api-key-label" for="api-key">מפתח Gemini API</label>
+        <input
+          type="password"
+          id="api-key"
+          placeholder="הדבק את מפתח ה-API כאן"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <p class="hint">המפתח נשמר בזיכרון בלבד ואינו נשלח לשום מקום מלבד ל-Gemini API.</p>
+      </section>
+
+      <!-- File upload -->
+      <section class="card" aria-labelledby="file-section-label">
+        <label id="file-section-label">קובץ FSD</label>
+        <div class="file-upload-wrapper">
+          <label for="file-input" class="file-btn" role="button" tabindex="0">
+            בחר קובץ
+          </label>
+          <input
+            type="file"
+            id="file-input"
+            accept=".docx,.pdf"
+            aria-label="העלאת קובץ FSD"
+          />
+          <span id="file-label" class="file-name">לא נבחר קובץ</span>
+        </div>
+        <p class="hint">פורמטים נתמכים: Word (.docx) ו-PDF</p>
+      </section>
+
+      <!-- Actions -->
+      <div class="actions">
+        <button id="generate-btn" class="btn btn-primary">
+          ⚡ צור TSD
+        </button>
+        <button id="retry-btn" class="btn btn-warning" style="display:none" aria-live="polite">
+          🔄 נסה שוב
+        </button>
+        <button id="download-btn" class="btn btn-success" style="display:none" aria-live="polite">
+          ⬇ הורד TSD.md
+        </button>
+      </div>
+
+      <!-- Progress -->
+      <section id="progress-section" style="display:none" aria-live="polite">
+        <p id="progress-text" class="progress-label">מכין...</p>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+          <div id="progress-bar" class="progress-fill" style="width:0%" aria-valuenow="0"></div>
+        </div>
+      </section>
+
+      <!-- Error / Warning boxes (Hebrew, RTL) -->
+      <div id="error-box" class="message error" style="display:none" role="alert" aria-live="assertive"></div>
+      <div id="warning-box" class="message warning" style="display:none" role="status" aria-live="polite"></div>
+    </main>
+
+    <footer>
+      <p>הכלי פועל לחלוטין בדפדפן. אין שרת ביניים.</p>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

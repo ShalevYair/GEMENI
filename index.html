@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hebrew FSD → Salesforce TSD</title>
+  <title>ממיר FSD לעברית ל-TSD של Salesforce</title>
   <link rel="stylesheet" href="styles.css" />
 
   <!-- mammoth.js — extract text from .docx -->
@@ -11,7 +11,6 @@
   <!-- pdf.js — extract text from PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
-    // Point pdf.js worker to CDN
     if (typeof pdfjsLib !== 'undefined') {
       pdfjsLib.GlobalWorkerOptions.workerSrc =
         'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -21,14 +20,14 @@
 <body>
   <div class="container">
     <header>
-      <h1>Hebrew FSD &rarr; Salesforce TSD</h1>
-      <p class="subtitle">העלה מסמך FSD בעברית וקבל TSD מלא באנגלית בפורמט Markdown</p>
+      <h1>ממיר מסמך דרישות ל-TSD של Salesforce</h1>
+      <p class="subtitle">העלה מסמך דרישות בעברית וקבל מפרט טכני מלא באנגלית בפורמט Markdown</p>
     </header>
 
     <main>
       <!-- API Key -->
       <section class="card" aria-labelledby="api-key-label">
-        <label id="api-key-label" for="api-key">מפתח Gemini API</label>
+        <label id="api-key-label" for="api-key">מפתח API של Gemini</label>
         <input
           type="password"
           id="api-key"
@@ -36,15 +35,15 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <p class="hint">המפתח נשמר בזיכרון בלבד ואינו נשלח לשום מקום מלבד ל-Gemini API.</p>
+        <p class="hint">המפתח נשמר בזיכרון בלבד ואינו נשלח לשום מקום מלבד ל-Gemini.</p>
         <label id="project-id-label" for="project-id" style="margin-top:.5rem">
-          מזהה פרויקט Google Cloud
-          <span class="hint-inline">(אופציונלי — נדרש רק אם אתה משתמש ב-API Key של Google Cloud)</span>
+          מזהה פרויקט בענן
+          <span class="hint-inline">(אופציונלי — נדרש רק אם אתה משתמש במפתח של Google Cloud)</span>
         </label>
         <input
           type="text"
           id="project-id"
-          placeholder="my-gcp-project-id"
+          placeholder="מזהה-הפרויקט-שלך"
           autocomplete="off"
           spellcheck="false"
           dir="ltr"
@@ -53,7 +52,7 @@
 
       <!-- File upload -->
       <section class="card" aria-labelledby="file-section-label">
-        <label id="file-section-label">קובץ FSD</label>
+        <label id="file-section-label">קובץ מסמך הדרישות</label>
         <div class="file-upload-wrapper">
           <label for="file-input" class="file-btn" role="button" tabindex="0">
             בחר קובץ
@@ -62,23 +61,23 @@
             type="file"
             id="file-input"
             accept=".docx,.pdf"
-            aria-label="העלאת קובץ FSD"
+            aria-label="העלאת מסמך דרישות"
           />
           <span id="file-label" class="file-name">לא נבחר קובץ</span>
         </div>
-        <p class="hint">פורמטים נתמכים: Word (.docx) ו-PDF</p>
+        <p class="hint">פורמטים נתמכים: מסמך Word‏ (.docx) ו-PDF</p>
       </section>
 
       <!-- Actions -->
       <div class="actions">
         <button id="generate-btn" class="btn btn-primary">
-          ⚡ צור TSD
+          ⚡ צור מפרט טכני
         </button>
         <button id="retry-btn" class="btn btn-warning" style="display:none" aria-live="polite">
           🔄 נסה שוב
         </button>
         <button id="download-btn" class="btn btn-success" style="display:none" aria-live="polite">
-          ⬇ הורד TSD.md
+          ⬇ הורד את המפרט הטכני
         </button>
       </div>
 
@@ -90,7 +89,7 @@
         </div>
       </section>
 
-      <!-- Error / Warning boxes (Hebrew, RTL) -->
+      <!-- Error / Warning boxes -->
       <div id="error-box" class="message error" style="display:none" role="alert" aria-live="assertive"></div>
       <div id="warning-box" class="message warning" style="display:none" role="status" aria-live="polite"></div>
     </main>

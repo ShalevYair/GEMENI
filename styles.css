@@ -76,6 +76,12 @@ header h1 {
   color: var(--muted);
 }
 
+.hint-inline {
+  font-size: .78rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
 /* ── Inputs ── */
 input[type="password"],
 input[type="text"] {

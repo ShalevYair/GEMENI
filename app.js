@@ -11,6 +11,7 @@ let chunkResults = [null, null, null]; // index 0 = chunk 1, etc.
 
 // --- DOM refs ---
 const apiKeyInput = document.getElementById('api-key');
+const projectIdInput = document.getElementById('project-id');
 const fileInput = document.getElementById('file-input');
 const fileLabel = document.getElementById('file-label');
 const generateBtn = document.getElementById('generate-btn');
@@ -53,7 +54,7 @@ generateBtn.addEventListener('click', async () => {
       showProgress(0);
       extractedText = await extractText(file);
     }
-    await runChunks(apiKey, 1);
+    await runChunks(apiKey, projectIdInput.value.trim(), 1);
   } catch (err) {
     showError(`שגיאה כללית: ${err.message}`);
   } finally {
@@ -73,7 +74,7 @@ retryBtn.addEventListener('click', async () => {
   }
   setUIBusy(true);
   try {
-    await runChunks(apiKey, failedChunk);
+    await runChunks(apiKey, projectIdInput.value.trim(), failedChunk);
   } catch (err) {
     showError(`שגיאה כללית: ${err.message}`);
   } finally {
@@ -94,7 +95,7 @@ downloadBtn.addEventListener('click', () => {
 });
 
 // --- Run chunks starting from startChunk ---
-async function runChunks(apiKey, startChunk) {
+async function runChunks(apiKey, projectId, startChunk) {
   for (let chunk = startChunk; chunk <= TOTAL_CHUNKS; chunk++) {
     if (chunkResults[chunk - 1] !== null) continue; // already done
 
@@ -103,7 +104,7 @@ async function runChunks(apiKey, startChunk) {
     progressText.textContent = `מייצר סעיף ${chunk}/${TOTAL_CHUNKS}...`;
 
     try {
-      const result = await callGemini(apiKey, extractedText, chunk);
+      const result = await callGemini(apiKey, projectId, extractedText, chunk);
       chunkResults[chunk - 1] = result;
     } catch (err) {
       retryBtn.dataset.failedChunk = chunk;
@@ -118,7 +119,7 @@ async function runChunks(apiKey, startChunk) {
 }
 
 // --- Gemini API call ---
-async function callGemini(apiKey, fsdText, chunkNumber) {
+async function callGemini(apiKey, projectId, fsdText, chunkNumber) {
   const prompt = getSectionPrompt(fsdText, chunkNumber);
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -126,11 +127,14 @@ async function callGemini(apiKey, fsdText, chunkNumber) {
   };
 
   const url = `${GEMINI_ENDPOINT}?key=${encodeURIComponent(apiKey)}`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (projectId) headers['x-goog-user-project'] = projectId;
+
   let response;
   try {
     response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
   } catch (networkErr) {

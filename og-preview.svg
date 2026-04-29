@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0070d2"/>
+      <stop offset="100%" stop-color="#6f42c1"/>
+    </linearGradient>
+    <linearGradient id="logoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.08"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Decorative circles -->
+  <circle cx="180" cy="120" r="240" fill="#ffffff" opacity="0.06"/>
+  <circle cx="1050" cy="540" r="320" fill="#ffffff" opacity="0.05"/>
+
+  <!-- Logo block -->
+  <g transform="translate(80, 120)">
+    <rect width="140" height="140" rx="32" fill="url(#logoBg)" stroke="#ffffff" stroke-opacity="0.25" stroke-width="2"/>
+    <path d="M44 44h52a14 14 0 0 1 0 28h-30a14 14 0 0 0 0 28h52" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="103" cy="44" r="7" fill="#ffffff"/>
+    <circle cx="37" cy="100" r="7" fill="#ffffff"/>
+  </g>
+
+  <!-- Badge -->
+  <g transform="translate(80, 295)">
+    <rect width="280" height="44" rx="22" fill="#ffffff" fill-opacity="0.18" stroke="#ffffff" stroke-opacity="0.3"/>
+    <text x="140" y="29" text-anchor="middle" font-family="Heebo, Arial, sans-serif" font-size="16" font-weight="500" fill="#ffffff" direction="rtl">משרד התחבורה · Salesforce</text>
+  </g>
+
+  <!-- Title -->
+  <text x="80" y="420" font-family="Heebo, Arial, sans-serif" font-size="78" font-weight="800" fill="#ffffff" letter-spacing="-2">SF Architect Agent</text>
+
+  <!-- Tagline -->
+  <text x="80" y="490" font-family="Heebo, Arial, sans-serif" font-size="28" font-weight="400" fill="#ffffff" fill-opacity="0.9" direction="rtl">סוכן ארכיטקט שמכיר את ה-Org שלך</text>
+  <text x="80" y="528" font-family="Heebo, Arial, sans-serif" font-size="22" font-weight="300" fill="#ffffff" fill-opacity="0.78" direction="rtl">צולב אפיון מול המצב הקיים · מפיק TSD מלא · מזהה קונפליקטים</text>
+
+  <!-- Bottom strip -->
+  <g transform="translate(80, 565)" font-family="Heebo, Arial, sans-serif" font-size="18" fill="#ffffff" fill-opacity="0.7">
+    <text x="0" y="0">REUSE</text>
+    <text x="100" y="0">·</text>
+    <text x="120" y="0">EXTEND</text>
+    <text x="225" y="0">·</text>
+    <text x="245" y="0">CREATE</text>
+    <text x="345" y="0">·</text>
+    <text x="365" y="0">CONFLICT</text>
+    <text x="490" y="0">·</text>
+    <text x="510" y="0">ADRs</text>
+  </g>
+</svg>

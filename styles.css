@@ -1,6 +1,9 @@
 /* ── Reset & base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* hidden attribute must beat layout rules */
+[hidden] { display: none !important; }
+
 :root {
   --brand: #0070d2;
   --brand-dark: #005fb2;
@@ -86,6 +89,16 @@ code {
   position: relative;
   max-width: 760px;
   margin: 0 auto;
+}
+
+.hero-logo {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 1rem;
+  filter: drop-shadow(0 4px 14px rgba(0,0,0,0.18));
+  border-radius: 14px;
+  background: rgba(255,255,255,0.08);
+  padding: 6px;
 }
 
 .hero-badge {

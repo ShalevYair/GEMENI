@@ -1,10 +1,10 @@
 import { getSectionPrompt } from './prompt.js';
+import { CLAUDE_DESKTOP_PROMPT } from './claude-prompt.js';
 
 const GEMINI_ENDPOINT =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 const MAX_OUTPUT_TOKENS = 65000;
 const TOTAL_CHUNKS = 3;
-const CLAUDE_PROMPT_PATH = './prompts/extract-deployed-state.md';
 
 // --- State ---
 let apiKey = '';
@@ -212,20 +212,8 @@ function openApiKeyModal() {
 // ════════════════════════════════════════════════════════════════
 // Claude Desktop Prompt Modal
 // ════════════════════════════════════════════════════════════════
-let claudePromptCache = null;
-
-claudePromptBtn.addEventListener('click', async () => {
-  if (!claudePromptCache) {
-    try {
-      const res = await fetch(CLAUDE_PROMPT_PATH);
-      if (!res.ok) throw new Error(`לא ניתן לטעון את הפרומפט (${res.status})`);
-      claudePromptCache = await res.text();
-    } catch (err) {
-      showError(`שגיאה בטעינת הפרומפט: ${err.message}`);
-      return;
-    }
-  }
-  claudePromptText.value = claudePromptCache;
+claudePromptBtn.addEventListener('click', () => {
+  claudePromptText.value = CLAUDE_DESKTOP_PROMPT;
   claudePromptModal.hidden = false;
 });
 

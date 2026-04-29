@@ -236,10 +236,121 @@ footer {
   padding-top: .5rem;
 }
 
+/* ── Collapsible sections ── */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  cursor: pointer;
+  user-select: none;
+  padding: .1rem 0;
+  outline: none;
+}
+
+.collapsible-header:focus-visible {
+  outline: 2px solid var(--brand);
+  border-radius: 4px;
+}
+
+.collapsible-title {
+  font-weight: 600;
+  font-size: .95rem;
+  flex: 1;
+}
+
+.chevron {
+  font-size: .75rem;
+  color: var(--muted);
+  transition: transform var(--transition);
+}
+
+.collapsible-body {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  margin-top: .75rem;
+}
+
+/* ── Badges ── */
+.badge {
+  display: inline-block;
+  padding: .15rem .55rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-optional {
+  background: #e8f4ff;
+  color: var(--brand);
+  border: 1px solid #b3d7f5;
+}
+
+/* ── Textarea (state / inflight) ── */
+.state-textarea {
+  width: 100%;
+  padding: .6rem .75rem;
+  border: 1px solid #d8dde6;
+  border-radius: var(--radius);
+  font-size: .85rem;
+  font-family: 'Consolas', 'Courier New', monospace;
+  background: #fafbfc;
+  color: var(--text);
+  resize: vertical;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  direction: ltr;
+  text-align: left;
+}
+
+.state-textarea:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(0,112,210,.15);
+}
+
+/* ── No-state notice ── */
+.no-state-notice {
+  padding: .5rem .75rem;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius);
+  font-size: .82rem;
+  color: #7d4a00;
+  direction: rtl;
+  text-align: right;
+}
+
+/* ── Output info box ── */
+.output-info {
+  background: #f0f8ff;
+  border: 1px solid #b3d7f5;
+  border-radius: var(--radius);
+  padding: .85rem 1.1rem;
+  font-size: .875rem;
+  color: var(--text);
+  direction: rtl;
+  text-align: right;
+}
+
+.output-info ul {
+  margin: .4rem 0 0 0;
+  padding-right: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+}
+
+/* ── Container wider for state textareas ── */
+.container {
+  max-width: 780px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 480px) {
   header h1 { font-size: 1.35rem; }
   .card { padding: 1rem; }
   .actions { flex-direction: column; }
   .btn { width: 100%; justify-content: center; }
+  .state-textarea { font-size: .78rem; }
 }

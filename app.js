@@ -12,6 +12,8 @@ let chunkResults = [null, null, null]; // index 0 = chunk 1, etc.
 // --- DOM refs ---
 const apiKeyInput = document.getElementById('api-key');
 const projectIdInput = document.getElementById('project-id');
+const orgStateInput = document.getElementById('org-state');
+const inFlightInput = document.getElementById('inflight-specs');
 const fileInput = document.getElementById('file-input');
 const fileLabel = document.getElementById('file-label');
 const generateBtn = document.getElementById('generate-btn');
@@ -22,11 +24,55 @@ const progressBar = document.getElementById('progress-bar');
 const progressText = document.getElementById('progress-text');
 const errorBox = document.getElementById('error-box');
 const warningBox = document.getElementById('warning-box');
+const noStateNotice = document.getElementById('no-state-notice');
+
+// --- Collapsible sections ---
+function initCollapsible(toggleId, bodyId) {
+  const toggle = document.getElementById(toggleId);
+  const body = document.getElementById(bodyId);
+  if (!toggle || !body) return;
+
+  toggle.addEventListener('click', () => expandCollapsible(toggle, body));
+  toggle.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      expandCollapsible(toggle, body);
+    }
+  });
+}
+
+function expandCollapsible(toggle, body) {
+  const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+  toggle.setAttribute('aria-expanded', String(!isExpanded));
+  const chevron = toggle.querySelector('.chevron');
+  if (isExpanded) {
+    body.hidden = true;
+    if (chevron) chevron.textContent = '▼';
+  } else {
+    body.hidden = false;
+    if (chevron) chevron.textContent = '▲';
+  }
+}
+
+initCollapsible('state-toggle', 'state-body');
+initCollapsible('inflight-toggle', 'inflight-body');
+
+// Show no-state notice when org state textarea loses focus and is empty
+orgStateInput.addEventListener('blur', () => {
+  const hasState = orgStateInput.value.trim().length > 0;
+  noStateNotice.hidden = hasState;
+});
+
+orgStateInput.addEventListener('input', () => {
+  if (orgStateInput.value.trim().length > 0) {
+    noStateNotice.hidden = true;
+  }
+});
 
 // --- File selection label ---
 fileInput.addEventListener('change', () => {
   const file = fileInput.files[0];
-  fileLabel.textContent = file ? file.name : 'בחר קובץ (Word או PDF)';
+  fileLabel.textContent = file ? file.name : 'לא נבחר קובץ';
   extractedText = '';
   resetOutput();
 });
@@ -41,8 +87,16 @@ generateBtn.addEventListener('click', async () => {
   }
   const file = fileInput.files[0];
   if (!file) {
-    showError('נא לבחור קובץ Word או PDF.');
+    showError('נא לבחור קובץ FSD (Word או PDF).');
     return;
+  }
+
+  const orgState = orgStateInput.value.trim();
+  if (!orgState) {
+    showWarning(
+      '⚠ לא הוזן מצב ארגון — הסוכן יעצב כ-Greenfield ויסמן כל הנחה מבנית עם NO-STATE. ' +
+      'מומלץ מאוד להזין state snapshot לפני הרצה.'
+    );
   }
 
   setUIBusy(true);
@@ -54,7 +108,7 @@ generateBtn.addEventListener('click', async () => {
       showProgress(0);
       extractedText = await extractText(file);
     }
-    await runChunks(apiKey, projectIdInput.value.trim(), 1);
+    await runChunks(apiKey, projectIdInput.value.trim(), orgState, inFlightInput.value.trim(), 1);
   } catch (err) {
     showError(`שגיאה כללית: ${err.message}`);
   } finally {
@@ -74,7 +128,8 @@ retryBtn.addEventListener('click', async () => {
   }
   setUIBusy(true);
   try {
-    await runChunks(apiKey, projectIdInput.value.trim(), failedChunk);
+    const orgState = orgStateInput.value.trim();
+    await runChunks(apiKey, projectIdInput.value.trim(), orgState, inFlightInput.value.trim(), failedChunk);
   } catch (err) {
     showError(`שגיאה כללית: ${err.message}`);
   } finally {
@@ -84,27 +139,39 @@ retryBtn.addEventListener('click', async () => {
 
 // --- Download ---
 downloadBtn.addEventListener('click', () => {
-  const content = chunkResults.join('\n\n');
+  const content = buildCombinedOutput();
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'TSD.md';
+  a.download = 'TSD_SF_Architect.md';
   a.click();
   URL.revokeObjectURL(url);
 });
 
+function buildCombinedOutput() {
+  const separator = '\n\n---\n\n';
+  const header = `<!-- SF Architect Agent — TSD Output -->\n<!-- Generated: ${new Date().toISOString()} -->\n<!-- Contains: 00_executive_summary · 01_objects · 02_fields · 03_automations · 04_permissions · 05_layouts · 06_integrations · 07_impact_analysis -->\n\n`;
+  return header + chunkResults.filter(Boolean).join(separator);
+}
+
 // --- Run chunks starting from startChunk ---
-async function runChunks(apiKey, projectId, startChunk) {
+async function runChunks(apiKey, projectId, orgState, inFlightSpecs, startChunk) {
+  const chunkLabels = [
+    'מייצר: סיכום מנהלי, אובייקטים, שדות (1/3)...',
+    'מייצר: אוטומציות, הרשאות, UI, אינטגרציות (2/3)...',
+    'מייצר: ניתוח השפעה — REUSE/EXTEND/CREATE, קונפליקטים, ADRs (3/3)...',
+  ];
+
   for (let chunk = startChunk; chunk <= TOTAL_CHUNKS; chunk++) {
-    if (chunkResults[chunk - 1] !== null) continue; // already done
+    if (chunkResults[chunk - 1] !== null) continue;
 
     const progressPct = ((chunk - 1) / TOTAL_CHUNKS) * 100;
     showProgress(progressPct);
-    progressText.textContent = `מייצר סעיף ${chunk}/${TOTAL_CHUNKS}...`;
+    progressText.textContent = chunkLabels[chunk - 1];
 
     try {
-      const result = await callGemini(apiKey, projectId, extractedText, chunk);
+      const result = await callGemini(apiKey, projectId, extractedText, chunk, orgState, inFlightSpecs);
       chunkResults[chunk - 1] = result;
     } catch (err) {
       retryBtn.dataset.failedChunk = chunk;
@@ -114,13 +181,13 @@ async function runChunks(apiKey, projectId, startChunk) {
   }
 
   showProgress(100);
-  progressText.textContent = 'הושלם!';
+  progressText.textContent = 'הושלם! 8 קבצי TSD נוצרו בהצלחה.';
   downloadBtn.style.display = 'inline-block';
 }
 
 // --- Gemini API call ---
-async function callGemini(apiKey, projectId, fsdText, chunkNumber) {
-  const prompt = getSectionPrompt(fsdText, chunkNumber);
+async function callGemini(apiKey, projectId, fsdText, chunkNumber, orgState, inFlightSpecs) {
+  const prompt = getSectionPrompt(fsdText, chunkNumber, orgState, inFlightSpecs);
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
@@ -159,7 +226,7 @@ async function callGemini(apiKey, projectId, fsdText, chunkNumber) {
 
   if (finishReason === 'MAX_TOKENS') {
     showWarning(
-      `אזהרה: התגובה לחלק ${chunkNumber} נקטעה כי הגיעה למגבלת אסימונים. ייתכן שחלק מהמידע חסר.`
+      `אזהרה: התגובה לחלק ${chunkNumber} נקטעה — הגיעה למגבלת אסימונים. ייתכן שחלק מהתוכן חסר.`
     );
   }
 

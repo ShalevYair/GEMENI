@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ממיר FSD לעברית ל-TSD של Salesforce</title>
+  <title>SF Architect Agent — משרד התחבורה</title>
   <link rel="stylesheet" href="styles.css" />
 
   <!-- mammoth.js — extract text from .docx -->
@@ -20,8 +20,8 @@
 <body>
   <div class="container">
     <header>
-      <h1>ממיר מסמך דרישות ל-TSD של Salesforce</h1>
-      <p class="subtitle">העלה מסמך דרישות בעברית וקבל מפרט טכני מלא באנגלית בפורמט Markdown</p>
+      <h1>SF Architect Agent</h1>
+      <p class="subtitle">ממיר אפיון (FSD) ל-TSD ארכיטקטוני מלא — עם ניתוח מצב ארגון קיים, קונפליקטים והחלטות ADR</p>
     </header>
 
     <main>
@@ -50,9 +50,64 @@
         />
       </section>
 
-      <!-- File upload -->
+      <!-- Org State Snapshot -->
+      <section class="card" aria-labelledby="state-section-label">
+        <div class="collapsible-header" id="state-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="state-body">
+          <span id="state-section-label" class="collapsible-title">
+            מצב ארגון נוכחי (State Snapshot)
+          </span>
+          <span class="badge badge-optional">אופציונלי אך מומלץ</span>
+          <span class="chevron" aria-hidden="true">▼</span>
+        </div>
+        <div id="state-body" class="collapsible-body" hidden>
+          <p class="hint">
+            הדבק כאן את ה-JSON snapshot של מצב ה-org הנוכחי. ללא מידע זה הסוכן יעצב כ-Greenfield
+            ויסמן הנחות עם ⚠ NO-STATE.
+          </p>
+          <p class="hint" style="margin-top:.3rem">
+            <strong>מה להכניס:</strong> אובייקטים קיימים, שדות, אוטומציות, הרשאות, אינטגרציות — בפורמט JSON
+            או טקסט חופשי מסודר.
+          </p>
+          <textarea
+            id="org-state"
+            class="state-textarea"
+            dir="ltr"
+            placeholder='{ "objects": [...], "fields": [...], "automations": [...] }'
+            aria-label="הדבק JSON snapshot של מצב הארגון"
+            rows="10"
+          ></textarea>
+          <div id="no-state-notice" class="no-state-notice" aria-live="polite" hidden>
+            ⚠ לא הוזן מצב ארגון — הפלט יסומן עם NO-STATE על כל הנחה מבנית
+          </div>
+        </div>
+      </section>
+
+      <!-- In-Flight Specs -->
+      <section class="card" aria-labelledby="inflight-section-label">
+        <div class="collapsible-header" id="inflight-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="inflight-body">
+          <span id="inflight-section-label" class="collapsible-title">
+            אפיונים בתהליך (In-Flight)
+          </span>
+          <span class="badge badge-optional">אופציונלי</span>
+          <span class="chevron" aria-hidden="true">▼</span>
+        </div>
+        <div id="inflight-body" class="collapsible-body" hidden>
+          <p class="hint">
+            אפיונים שאושרו אך טרם עלו לייצור. הסוכן ישתמש במידע זה כדי למנוע כפילויות וקונפליקטים.
+          </p>
+          <textarea
+            id="inflight-specs"
+            class="state-textarea"
+            placeholder="לדוגמה: Permit_Renewal_Phase2 — status: in-build — אובייקטים מושפעים: רישיון_רכב__c — שדות עתידיים: תאריך_חידוש__c"
+            aria-label="פרט אפיונים בתהליך"
+            rows="5"
+          ></textarea>
+        </div>
+      </section>
+
+      <!-- FSD File upload -->
       <section class="card" aria-labelledby="file-section-label">
-        <label id="file-section-label">קובץ מסמך הדרישות</label>
+        <label id="file-section-label">מסמך האפיון הפונקציונלי (FSD)</label>
         <div class="file-upload-wrapper">
           <label for="file-input" class="file-btn" role="button" tabindex="0">
             בחר קובץ
@@ -61,23 +116,33 @@
             type="file"
             id="file-input"
             accept=".docx,.pdf"
-            aria-label="העלאת מסמך דרישות"
+            aria-label="העלאת מסמך FSD"
           />
           <span id="file-label" class="file-name">לא נבחר קובץ</span>
         </div>
-        <p class="hint">פורמטים נתמכים: מסמך Word‏ (.docx) ו-PDF</p>
+        <p class="hint">פורמטים נתמכים: Word‏ (.docx) ו-PDF</p>
       </section>
+
+      <!-- Output info -->
+      <div class="output-info">
+        <strong>הפלט שתקבל (3 חלקים → קובץ MD אחד):</strong>
+        <ul>
+          <li>00 סיכום מנהלי &nbsp;·&nbsp; 01 אובייקטים &nbsp;·&nbsp; 02 שדות</li>
+          <li>03 אוטומציות &nbsp;·&nbsp; 04 הרשאות &nbsp;·&nbsp; 05 UI &nbsp;·&nbsp; 06 אינטגרציות</li>
+          <li><strong>07 ניתוח השפעה</strong> — REUSE/EXTEND/CREATE, קונפליקטים, ADRs</li>
+        </ul>
+      </div>
 
       <!-- Actions -->
       <div class="actions">
         <button id="generate-btn" class="btn btn-primary">
-          ⚡ צור מפרט טכני
+          ⚡ צור TSD ארכיטקטוני
         </button>
         <button id="retry-btn" class="btn btn-warning" style="display:none" aria-live="polite">
           🔄 נסה שוב
         </button>
         <button id="download-btn" class="btn btn-success" style="display:none" aria-live="polite">
-          ⬇ הורד את המפרט הטכני
+          ⬇ הורד TSD
         </button>
       </div>
 
@@ -95,7 +160,7 @@
     </main>
 
     <footer>
-      <p>הכלי פועל לחלוטין בדפדפן. אין שרת ביניים.</p>
+      <p>הכלי פועל לחלוטין בדפדפן. אין שרת ביניים. מפתח ה-API לא נשמר.</p>
     </footer>
   </div>
 

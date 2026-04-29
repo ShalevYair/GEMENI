@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SF Architect Agent — Org State Schema",
+  "description": "Shared schema for deployed.json (current production state) and in-flight.json (approved but not yet deployed). In-flight items add 'spec_origin' and 'status' per item. Rule: if same api_name appears in both files, in-flight wins.",
+  "type": "object",
+  "required": ["_metadata"],
+  "properties": {
+    "_metadata": {
+      "type": "object",
+      "required": ["captured_at", "source"],
+      "properties": {
+        "captured_at": { "type": "string", "format": "date-time" },
+        "source": { "type": "string", "enum": ["snapshot-builder", "manual", "agent-output"] },
+        "api_version": { "type": "string", "example": "63.0" },
+        "edition": { "type": "string", "example": "Government Cloud Plus" }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["api_name", "label"],
+        "properties": {
+          "api_name": { "type": "string", "description": "Hebrew + __c, e.g. רישיון_רכב__c" },
+          "label": { "type": "string" },
+          "label_plural": { "type": "string" },
+          "purpose": { "type": "string" },
+          "owd": { "type": "string", "enum": ["Private", "Read", "Read/Write", "Public", "ControlledByParent"] },
+          "record_types": { "type": "array", "items": { "type": "string" } },
+          "domain": { "type": "string" },
+          "spec_origin": { "type": "string", "description": "in-flight only — name of the spec that introduced this object" },
+          "status": { "type": "string", "enum": ["approved", "in-build"], "description": "in-flight only" }
+        }
+      }
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["object", "api_name", "type"],
+        "properties": {
+          "object": { "type": "string" },
+          "api_name": { "type": "string" },
+          "label": { "type": "string" },
+          "type": { "type": "string", "example": "Text(255) | Date | Picklist | Formula(Date) | Lookup(Account)" },
+          "required": { "type": "boolean" },
+          "unique": { "type": "boolean" },
+          "default_value": { "type": ["string", "number", "boolean", "null"] },
+          "formula": { "type": ["string", "null"] },
+          "picklist_values": { "type": "array", "items": { "type": "string" } },
+          "help_text": { "type": "string" },
+          "business_logic": { "type": "string" },
+          "fls_visible_to": { "type": "array", "items": { "type": "string" }, "description": "Permission Set API names that grant FLS" },
+          "rtl": { "type": "boolean", "default": true },
+          "spec_origin": { "type": "string", "description": "in-flight only" },
+          "status": { "type": "string", "enum": ["approved", "in-build"], "description": "in-flight only" }
+        }
+      }
+    },
+    "automations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "api_name"],
+        "properties": {
+          "type": { "type": "string", "enum": ["Flow", "Apex", "Approval Process", "Validation Rule"] },
+          "api_name": { "type": "string" },
+          "object": { "type": "string" },
+          "trigger": { "type": "string", "example": "Before Save | After Save | Scheduled | Platform Event" },
+          "purpose": { "type": "string" },
+          "active": { "type": "boolean" },
+          "spec_origin": { "type": "string" },
+          "status": { "type": "string", "enum": ["approved", "in-build"] }
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "api_name"],
+        "properties": {
+          "type": { "type": "string", "enum": ["Permission Set", "Permission Set Group", "Profile"] },
+          "api_name": { "type": "string" },
+          "label": { "type": "string" },
+          "object_perms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "object": { "type": "string" },
+                "crud": { "type": "string", "example": "CRUD | RU | R" }
+              }
+            }
+          },
+          "field_perms_count": { "type": "integer" },
+          "assigned_users_count": { "type": "integer" },
+          "spec_origin": { "type": "string" },
+          "status": { "type": "string", "enum": ["approved", "in-build"] }
+        }
+      }
+    },
+    "integrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "api_name"],
+        "properties": {
+          "type": { "type": "string", "enum": ["Named Credential", "External Credential", "Connected App"] },
+          "api_name": { "type": "string" },
+          "endpoint": { "type": "string" },
+          "auth_type": { "type": "string", "example": "OAuth | JWT | Named Principal | Anonymous" },
+          "used_by": { "type": "array", "items": { "type": "string" } },
+          "spec_origin": { "type": "string" },
+          "status": { "type": "string", "enum": ["approved", "in-build"] }
+        }
+      }
+    },
+    "layouts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["api_name", "object"],
+        "properties": {
+          "type": { "type": "string", "enum": ["Page Layout", "Lightning Page", "Quick Action", "LWC"] },
+          "api_name": { "type": "string" },
+          "object": { "type": "string" },
+          "purpose": { "type": "string" },
+          "spec_origin": { "type": "string" },
+          "status": { "type": "string", "enum": ["approved", "in-build"] }
+        }
+      }
+    }
+  }
+}

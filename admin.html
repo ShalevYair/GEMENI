@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>מסך ניהול — SF Architect Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Gate (email verification) -->
+  <div id="gate" class="gate-screen">
+    <form id="gate-form" class="gate-card">
+      <div style="font-size: 2.2rem; margin-bottom: 0.5rem">🔒</div>
+      <h1>מסך ניהול</h1>
+      <p>גישה מוגבלת. הזן את כתובת המייל הארגונית שלך כדי להמשיך.</p>
+      <input
+        type="email"
+        id="gate-email"
+        placeholder="name@mot.gov.il"
+        autocomplete="email"
+        required
+        dir="ltr"
+      />
+      <button type="submit" class="btn btn-primary">כניסה</button>
+      <p id="gate-error" class="message error" hidden style="margin-top: 0.85rem; text-align: right"></p>
+      <p style="margin-top: 1rem; font-size: 0.78rem">
+        <a href="index.html">← חזרה למסך הראשי</a>
+      </p>
+    </form>
+  </div>
+
+  <!-- Admin shell -->
+  <div id="admin-shell" class="admin-shell" hidden>
+    <header class="admin-header">
+      <div>
+        <h1>מסך ניהול — אפיונים מאושרים</h1>
+        <p style="color: var(--muted); font-size: 0.88rem">מחובר כ: <span id="user-email"></span></p>
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
+        <a href="index.html" class="btn-ghost">← חזרה למסך הראשי</a>
+        <button id="export-btn" class="btn-ghost" type="button">⬇ ייצא הכל</button>
+        <button id="logout-btn" class="btn-ghost" type="button">יציאה</button>
+      </div>
+    </header>
+
+    <!-- Stats -->
+    <div class="admin-stats">
+      <div class="stat-card">
+        <div class="stat-num" id="stat-specs">0</div>
+        <div class="stat-label">אפיונים מאושרים</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-objects">0</div>
+        <div class="stat-label">אובייקטים מתוכננים</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-fields">0</div>
+        <div class="stat-label">שדות מתוכננים</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="stat-automations">0</div>
+        <div class="stat-label">אוטומציות מתוכננות</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <button class="tab active" data-tab="specs" type="button">אפיונים</button>
+      <button class="tab" data-tab="objects" type="button">אובייקטים</button>
+      <button class="tab" data-tab="fields" type="button">שדות</button>
+      <button class="tab" data-tab="automations" type="button">אוטומציות</button>
+    </div>
+
+    <!-- Tab content -->
+    <div id="tab-specs" class="tab-content"></div>
+    <div id="tab-objects" class="tab-content" hidden></div>
+    <div id="tab-fields" class="tab-content" hidden></div>
+    <div id="tab-automations" class="tab-content" hidden></div>
+
+    <p style="margin-top: 2rem; font-size: 0.78rem; color: var(--muted); text-align: center">
+      הנתונים נשמרים ב-localStorage של הדפדפן בלבד. לאחר מעבר לגיט הארגוני — האחסון יעבור לשם.
+    </p>
+  </div>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

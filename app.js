@@ -4,98 +4,271 @@ const GEMINI_ENDPOINT =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 const MAX_OUTPUT_TOKENS = 65000;
 const TOTAL_CHUNKS = 3;
+const CLAUDE_PROMPT_PATH = './prompts/extract-deployed-state.md';
 
 // --- State ---
-let extractedText = '';
-let chunkResults = [null, null, null]; // index 0 = chunk 1, etc.
+let apiKey = '';
+let fsdText = '';
+let fsdFile = null;
+let deployedState = '';
+let inFlightState = '';
+let chunkResults = [null, null, null];
 
 // --- DOM refs ---
-const apiKeyInput = document.getElementById('api-key');
-const projectIdInput = document.getElementById('project-id');
-const orgStateInput = document.getElementById('org-state');
-const inFlightInput = document.getElementById('inflight-specs');
-const fileInput = document.getElementById('file-input');
-const fileLabel = document.getElementById('file-label');
 const generateBtn = document.getElementById('generate-btn');
 const retryBtn = document.getElementById('retry-btn');
-const downloadBtn = document.getElementById('download-btn');
+const downloadTsdBtn = document.getElementById('download-tsd-btn');
+const downloadInflightBtn = document.getElementById('download-inflight-btn');
 const progressSection = document.getElementById('progress-section');
 const progressBar = document.getElementById('progress-bar');
 const progressText = document.getElementById('progress-text');
 const errorBox = document.getElementById('error-box');
 const warningBox = document.getElementById('warning-box');
-const noStateNotice = document.getElementById('no-state-notice');
 
-// --- Collapsible sections ---
-function initCollapsible(toggleId, bodyId) {
-  const toggle = document.getElementById(toggleId);
-  const body = document.getElementById(bodyId);
-  if (!toggle || !body) return;
+// API key modal
+const apikeyModal = document.getElementById('apikey-modal');
+const apikeyInput = document.getElementById('apikey-modal-input');
+const apikeySaveBtn = document.getElementById('apikey-modal-save');
+const apikeyCancelBtn = document.getElementById('apikey-modal-cancel');
 
-  toggle.addEventListener('click', () => expandCollapsible(toggle, body));
-  toggle.addEventListener('keydown', (e) => {
+// Claude prompt modal
+const claudePromptBtn = document.getElementById('show-claude-prompt-btn');
+const claudePromptModal = document.getElementById('claude-prompt-modal');
+const claudePromptText = document.getElementById('claude-prompt-text');
+const claudePromptCopyBtn = document.getElementById('claude-prompt-copy');
+const claudePromptCloseBtn = document.getElementById('claude-prompt-close');
+
+// ════════════════════════════════════════════════════════════════
+// Dropzones
+// ════════════════════════════════════════════════════════════════
+function setupDropzone({ zoneId, inputId, statusId, accept, onFile }) {
+  const zone = document.getElementById(zoneId);
+  const input = document.getElementById(inputId);
+  const status = document.getElementById(statusId);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    try {
+      await onFile(file, zone, status);
+    } catch (err) {
+      showFileStatus(status, file.name, err.message, true, () => clearFileStatus(zone, status));
+    }
+  };
+
+  zone.addEventListener('click', () => input.click());
+  zone.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      expandCollapsible(toggle, body);
+      input.click();
     }
+  });
+
+  input.addEventListener('change', () => handleFile(input.files[0]));
+
+  zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    zone.classList.add('drag-over');
+  });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    handleFile(e.dataTransfer.files[0]);
   });
 }
 
-function expandCollapsible(toggle, body) {
-  const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
-  toggle.setAttribute('aria-expanded', String(!isExpanded));
-  const chevron = toggle.querySelector('.chevron');
-  if (isExpanded) {
-    body.hidden = true;
-    if (chevron) chevron.textContent = '▼';
-  } else {
-    body.hidden = false;
-    if (chevron) chevron.textContent = '▲';
-  }
+function showFileStatus(statusEl, name, meta, invalid, onRemove) {
+  statusEl.hidden = false;
+  statusEl.classList.toggle('invalid', !!invalid);
+  statusEl.innerHTML = `
+    <span>${invalid ? '❌' : '✅'}</span>
+    <span class="file-name">${escapeHtml(name)}</span>
+    <span class="file-meta">${escapeHtml(meta)}</span>
+    <button type="button" aria-label="הסר" title="הסר">✕</button>
+  `;
+  statusEl.querySelector('button').addEventListener('click', onRemove);
 }
 
-initCollapsible('state-toggle', 'state-body');
-initCollapsible('inflight-toggle', 'inflight-body');
+function clearFileStatus(zone, statusEl) {
+  statusEl.hidden = true;
+  statusEl.innerHTML = '';
+  zone.classList.remove('has-file');
+}
 
-// Show no-state notice when org state textarea loses focus and is empty
-orgStateInput.addEventListener('blur', () => {
-  const hasState = orgStateInput.value.trim().length > 0;
-  noStateNotice.hidden = hasState;
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── deployed.json ──
+setupDropzone({
+  zoneId: 'deployed-dropzone',
+  inputId: 'deployed-input',
+  statusId: 'deployed-status',
+  accept: '.json',
+  onFile: async (file, zone, status) => {
+    const text = await file.text();
+    const parsed = JSON.parse(text); // throws on invalid JSON
+    const counts = countSections(parsed);
+    deployedState = text;
+    zone.classList.add('has-file');
+    showFileStatus(status, file.name, counts, false, () => {
+      deployedState = '';
+      clearFileStatus(zone, status);
+    });
+  },
 });
 
-orgStateInput.addEventListener('input', () => {
-  if (orgStateInput.value.trim().length > 0) {
-    noStateNotice.hidden = true;
+// ── in-flight.json ──
+setupDropzone({
+  zoneId: 'inflight-dropzone',
+  inputId: 'inflight-input',
+  statusId: 'inflight-status',
+  accept: '.json',
+  onFile: async (file, zone, status) => {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const counts = countSections(parsed);
+    inFlightState = text;
+    zone.classList.add('has-file');
+    showFileStatus(status, file.name, counts, false, () => {
+      inFlightState = '';
+      clearFileStatus(zone, status);
+    });
+  },
+});
+
+// ── FSD (.docx / .pdf) ──
+setupDropzone({
+  zoneId: 'fsd-dropzone',
+  inputId: 'fsd-input',
+  statusId: 'fsd-status',
+  accept: '.docx,.pdf',
+  onFile: async (file, zone, status) => {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['docx', 'pdf'].includes(ext)) {
+      throw new Error('פורמט לא נתמך. רק .docx או .pdf.');
+    }
+    fsdText = await extractText(file);
+    fsdFile = file;
+    chunkResults = [null, null, null];
+    hideDownloadButtons();
+    zone.classList.add('has-file');
+    showFileStatus(status, file.name, `${Math.round(fsdText.length / 1000)}K תווים`, false, () => {
+      fsdText = '';
+      fsdFile = null;
+      clearFileStatus(zone, status);
+    });
+  },
+});
+
+function countSections(parsed) {
+  const sections = ['objects', 'fields', 'automations', 'permissions', 'integrations', 'layouts'];
+  const parts = sections
+    .filter((s) => Array.isArray(parsed[s]) && parsed[s].length > 0)
+    .map((s) => `${parsed[s].length} ${s}`);
+  return parts.length > 0 ? parts.join(' · ') : 'ריק / empty';
+}
+
+// ════════════════════════════════════════════════════════════════
+// API Key Modal
+// ════════════════════════════════════════════════════════════════
+function openApiKeyModal() {
+  return new Promise((resolve, reject) => {
+    apikeyModal.hidden = false;
+    apikeyInput.value = '';
+    setTimeout(() => apikeyInput.focus(), 50);
+
+    const cleanup = () => {
+      apikeyModal.hidden = true;
+      apikeySaveBtn.removeEventListener('click', onSave);
+      apikeyCancelBtn.removeEventListener('click', onCancel);
+      apikeyInput.removeEventListener('keydown', onKey);
+    };
+    const onSave = () => {
+      const v = apikeyInput.value.trim();
+      if (!v) {
+        apikeyInput.focus();
+        return;
+      }
+      cleanup();
+      resolve(v);
+    };
+    const onCancel = () => {
+      cleanup();
+      reject(new Error('ביטול הזנת מפתח.'));
+    };
+    const onKey = (e) => {
+      if (e.key === 'Enter') onSave();
+      if (e.key === 'Escape') onCancel();
+    };
+    apikeySaveBtn.addEventListener('click', onSave);
+    apikeyCancelBtn.addEventListener('click', onCancel);
+    apikeyInput.addEventListener('keydown', onKey);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// Claude Desktop Prompt Modal
+// ════════════════════════════════════════════════════════════════
+let claudePromptCache = null;
+
+claudePromptBtn.addEventListener('click', async () => {
+  if (!claudePromptCache) {
+    try {
+      const res = await fetch(CLAUDE_PROMPT_PATH);
+      if (!res.ok) throw new Error(`לא ניתן לטעון את הפרומפט (${res.status})`);
+      claudePromptCache = await res.text();
+    } catch (err) {
+      showError(`שגיאה בטעינת הפרומפט: ${err.message}`);
+      return;
+    }
+  }
+  claudePromptText.value = claudePromptCache;
+  claudePromptModal.hidden = false;
+});
+
+claudePromptCloseBtn.addEventListener('click', () => {
+  claudePromptModal.hidden = true;
+});
+
+claudePromptCopyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(claudePromptText.value);
+    claudePromptCopyBtn.textContent = '✅ הועתק!';
+    setTimeout(() => (claudePromptCopyBtn.textContent = '📋 העתק פרומפט'), 1800);
+  } catch {
+    claudePromptText.select();
+    document.execCommand('copy');
+    claudePromptCopyBtn.textContent = '✅ הועתק!';
+    setTimeout(() => (claudePromptCopyBtn.textContent = '📋 העתק פרומפט'), 1800);
   }
 });
 
-// --- File selection label ---
-fileInput.addEventListener('change', () => {
-  const file = fileInput.files[0];
-  fileLabel.textContent = file ? file.name : 'לא נבחר קובץ';
-  extractedText = '';
-  resetOutput();
-});
-
-// --- Main generate ---
+// ════════════════════════════════════════════════════════════════
+// Generate
+// ════════════════════════════════════════════════════════════════
 generateBtn.addEventListener('click', async () => {
   clearMessages();
-  const apiKey = apiKeyInput.value.trim();
-  if (!apiKey) {
-    showError('נא להזין מפתח API של Gemini.');
-    return;
-  }
-  const file = fileInput.files[0];
-  if (!file) {
-    showError('נא לבחור קובץ FSD (Word או PDF).');
+
+  if (!fsdText) {
+    showError('נא להעלות מסמך FSD לפני יצירת ה-TSD.');
     return;
   }
 
-  const orgState = orgStateInput.value.trim();
-  if (!orgState) {
+  if (!apiKey) {
+    try {
+      apiKey = await openApiKeyModal();
+    } catch {
+      return;
+    }
+  }
+
+  if (!deployedState && !inFlightState) {
     showWarning(
-      '⚠ לא הוזן מצב ארגון — הסוכן יעצב כ-Greenfield ויסמן כל הנחה מבנית עם NO-STATE. ' +
-      'מומלץ מאוד להזין state snapshot לפני הרצה.'
+      '⚠ לא הועלה אף קובץ state. הסוכן יעצב כ-greenfield ויסמן הנחות עם NO-STATE. ' +
+      'מומלץ להעלות לפחות deployed.json.'
     );
   }
 
@@ -103,143 +276,198 @@ generateBtn.addEventListener('click', async () => {
   retryBtn.dataset.failedChunk = '';
 
   try {
-    if (!extractedText) {
-      progressText.textContent = 'מחלץ טקסט מהקובץ...';
-      showProgress(0);
-      extractedText = await extractText(file);
-    }
-    await runChunks(apiKey, projectIdInput.value.trim(), orgState, inFlightInput.value.trim(), 1);
+    await runChunks(1);
   } catch (err) {
-    showError(`שגיאה כללית: ${err.message}`);
+    showError(`שגיאה: ${err.message}`);
   } finally {
     setUIBusy(false);
   }
 });
 
-// --- Retry failed chunk ---
 retryBtn.addEventListener('click', async () => {
-  const failedChunk = parseInt(retryBtn.dataset.failedChunk, 10);
-  if (!failedChunk) return;
+  const failed = parseInt(retryBtn.dataset.failedChunk, 10);
+  if (!failed) return;
   clearMessages();
-  const apiKey = apiKeyInput.value.trim();
-  if (!apiKey) {
-    showError('נא להזין מפתח API של Gemini.');
-    return;
-  }
   setUIBusy(true);
   try {
-    const orgState = orgStateInput.value.trim();
-    await runChunks(apiKey, projectIdInput.value.trim(), orgState, inFlightInput.value.trim(), failedChunk);
+    await runChunks(failed);
   } catch (err) {
-    showError(`שגיאה כללית: ${err.message}`);
+    showError(`שגיאה: ${err.message}`);
   } finally {
     setUIBusy(false);
   }
 });
 
-// --- Download ---
-downloadBtn.addEventListener('click', () => {
-  const content = buildCombinedOutput();
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+downloadTsdBtn.addEventListener('click', () => {
+  const content = buildTsdMarkdown();
+  downloadFile(content, deriveFilename('TSD', 'md'), 'text/markdown;charset=utf-8');
+});
+
+downloadInflightBtn.addEventListener('click', () => {
+  const json = extractInflightJson(chunkResults[2] || '');
+  if (!json) {
+    showError('לא נמצא JSON של in-flight בפלט. נסה ליצור מחדש את חלק 3.');
+    return;
+  }
+  downloadFile(json, 'in-flight-updated.json', 'application/json;charset=utf-8');
+});
+
+function buildTsdMarkdown() {
+  const header = `<!-- SF Architect Agent — TSD -->\n<!-- Generated: ${new Date().toISOString()} -->\n<!-- Files: 00_executive_summary · 01_objects · 02_fields · 03_automations · 04_permissions · 05_layouts · 06_integrations · 07_impact_analysis -->\n\n`;
+  const cleaned = chunkResults
+    .map((c) => (c ? stripInflightBlock(c) : ''))
+    .filter(Boolean)
+    .join('\n\n---\n\n');
+  return header + cleaned;
+}
+
+function stripInflightBlock(text) {
+  // Remove the trailing in-flight-updated.json fenced block (and the heading) from the markdown
+  const headingRe = /\n#\s*in-flight-updated\.json[\s\S]*$/i;
+  return text.replace(headingRe, '').trimEnd();
+}
+
+function extractInflightJson(text) {
+  const fenceRe = /```json\s*\n([\s\S]*?)\n```/i;
+  const match = text.match(fenceRe);
+  if (!match) return null;
+  const candidate = match[1].trim();
+  try {
+    JSON.parse(candidate);
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+function deriveFilename(prefix, ext) {
+  const base = fsdFile ? fsdFile.name.replace(/\.[^.]+$/, '') : 'spec';
+  const clean = base.replace(/[^\w֐-׿\-]+/g, '_').slice(0, 40);
+  return `${prefix}_${clean}.${ext}`;
+}
+
+function downloadFile(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'TSD_SF_Architect.md';
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-});
-
-function buildCombinedOutput() {
-  const separator = '\n\n---\n\n';
-  const header = `<!-- SF Architect Agent — TSD Output -->\n<!-- Generated: ${new Date().toISOString()} -->\n<!-- Contains: 00_executive_summary · 01_objects · 02_fields · 03_automations · 04_permissions · 05_layouts · 06_integrations · 07_impact_analysis -->\n\n`;
-  return header + chunkResults.filter(Boolean).join(separator);
 }
 
-// --- Run chunks starting from startChunk ---
-async function runChunks(apiKey, projectId, orgState, inFlightSpecs, startChunk) {
-  const chunkLabels = [
+function hideDownloadButtons() {
+  downloadTsdBtn.hidden = true;
+  downloadInflightBtn.hidden = true;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Run chunks
+// ════════════════════════════════════════════════════════════════
+async function runChunks(startChunk) {
+  const labels = [
     'מייצר: סיכום מנהלי, אובייקטים, שדות (1/3)...',
     'מייצר: אוטומציות, הרשאות, UI, אינטגרציות (2/3)...',
-    'מייצר: ניתוח השפעה — REUSE/EXTEND/CREATE, קונפליקטים, ADRs (3/3)...',
+    'מייצר: ניתוח השפעה + in-flight מעודכן (3/3)...',
   ];
-
   for (let chunk = startChunk; chunk <= TOTAL_CHUNKS; chunk++) {
     if (chunkResults[chunk - 1] !== null) continue;
-
-    const progressPct = ((chunk - 1) / TOTAL_CHUNKS) * 100;
-    showProgress(progressPct);
-    progressText.textContent = chunkLabels[chunk - 1];
-
+    showProgress(((chunk - 1) / TOTAL_CHUNKS) * 100);
+    progressText.textContent = labels[chunk - 1];
     try {
-      const result = await callGemini(apiKey, projectId, extractedText, chunk, orgState, inFlightSpecs);
-      chunkResults[chunk - 1] = result;
+      chunkResults[chunk - 1] = await callGemini(chunk);
     } catch (err) {
       retryBtn.dataset.failedChunk = chunk;
-      retryBtn.style.display = 'inline-block';
-      throw new Error(`שגיאה בעיבוד חלק ${chunk}: ${err.message}`);
+      retryBtn.hidden = false;
+      throw new Error(`חלק ${chunk}: ${err.message}`);
     }
   }
-
   showProgress(100);
-  progressText.textContent = 'הושלם! 8 קבצי TSD נוצרו בהצלחה.';
-  downloadBtn.style.display = 'inline-block';
+  progressText.textContent = '✅ הושלם — TSD מלא + in-flight.json מעודכן מוכנים להורדה.';
+  downloadTsdBtn.hidden = false;
+  if (extractInflightJson(chunkResults[2] || '')) {
+    downloadInflightBtn.hidden = false;
+  }
+
+  // Save approved spec to localStorage for admin screen
+  saveSpecToHistory();
 }
 
-// --- Gemini API call ---
-async function callGemini(apiKey, projectId, fsdText, chunkNumber, orgState, inFlightSpecs) {
-  const prompt = getSectionPrompt(fsdText, chunkNumber, orgState, inFlightSpecs);
+function saveSpecToHistory() {
+  try {
+    const inflightJson = extractInflightJson(chunkResults[2] || '');
+    const record = {
+      spec_name: deriveFilename('', '').replace(/^_|\.$/g, '') || `spec-${Date.now()}`,
+      generated_at: new Date().toISOString(),
+      fsd_filename: fsdFile?.name || 'unknown',
+      fsd_size_chars: fsdText.length,
+      had_deployed_state: !!deployedState,
+      had_inflight_state: !!inFlightState,
+      inflight_output: inflightJson ? JSON.parse(inflightJson) : null,
+    };
+    const key = 'sf-architect:approved-specs';
+    const existing = JSON.parse(localStorage.getItem(key) || '[]');
+    existing.unshift(record);
+    localStorage.setItem(key, JSON.stringify(existing.slice(0, 200)));
+  } catch (err) {
+    console.warn('Failed to save spec history', err);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Gemini API
+// ════════════════════════════════════════════════════════════════
+async function callGemini(chunkNumber) {
+  const prompt = getSectionPrompt(fsdText, chunkNumber, deployedState, inFlightState);
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
   };
-
   const url = `${GEMINI_ENDPOINT}?key=${encodeURIComponent(apiKey)}`;
-  const headers = { 'Content-Type': 'application/json' };
-  if (projectId) headers['x-goog-user-project'] = projectId;
 
   let response;
   try {
     response = await fetch(url, {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-  } catch (networkErr) {
-    throw new Error(`בעיית רשת: ${networkErr.message}`);
+  } catch (e) {
+    throw new Error(`בעיית רשת: ${e.message}`);
   }
 
   if (!response.ok) {
-    let msg = `קוד שגיאה ${response.status}`;
+    let msg = `קוד ${response.status}`;
     try {
-      const errJson = await response.json();
-      msg += `: ${errJson?.error?.message || response.statusText}`;
-    } catch (_) {}
+      const j = await response.json();
+      msg += `: ${j?.error?.message || response.statusText}`;
+    } catch {}
+    if (response.status === 400 || response.status === 403) {
+      apiKey = '';
+      msg += ' — ייתכן שמפתח ה-API שגוי. נסה שוב.';
+    }
     throw new Error(msg);
   }
 
   const data = await response.json();
   const candidate = data?.candidates?.[0];
-  if (!candidate) throw new Error('התגובה מה-API ריקה.');
-
-  const finishReason = candidate.finishReason;
+  if (!candidate) throw new Error('התגובה ריקה.');
   const text = candidate?.content?.parts?.map((p) => p.text).join('') ?? '';
-
-  if (finishReason === 'MAX_TOKENS') {
-    showWarning(
-      `אזהרה: התגובה לחלק ${chunkNumber} נקטעה — הגיעה למגבלת אסימונים. ייתכן שחלק מהתוכן חסר.`
-    );
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    showWarning(`חלק ${chunkNumber} נקטע בגלל מגבלת אסימונים. ייתכן שחלק מהתוכן חסר.`);
   }
-
-  if (!text) throw new Error('לא התקבל תוכן בתגובה.');
+  if (!text) throw new Error('לא התקבל תוכן.');
   return text;
 }
 
-// --- Text extraction ---
+// ════════════════════════════════════════════════════════════════
+// File extraction
+// ════════════════════════════════════════════════════════════════
 async function extractText(file) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'docx') return extractDocx(file);
   if (ext === 'pdf') return extractPdf(file);
-  throw new Error('פורמט קובץ לא נתמך. יש להעלות קובץ Word (.docx) או PDF.');
+  throw new Error('פורמט לא נתמך.');
 }
 
 async function extractDocx(file) {
@@ -250,7 +478,7 @@ async function extractDocx(file) {
         const result = await mammoth.extractRawText({ arrayBuffer: e.target.result });
         resolve(result.value);
       } catch (err) {
-        reject(new Error(`שגיאה בקריאת קובץ Word: ${err.message}`));
+        reject(new Error(`קריאת Word נכשלה: ${err.message}`));
       }
     };
     reader.onerror = () => reject(new Error('שגיאה בקריאת הקובץ.'));
@@ -263,17 +491,17 @@ async function extractPdf(file) {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
-        const typedArray = new Uint8Array(e.target.result);
-        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+        const arr = new Uint8Array(e.target.result);
+        const pdf = await pdfjsLib.getDocument({ data: arr }).promise;
         const pages = [];
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          pages.push(content.items.map((item) => item.str).join(' '));
+          pages.push(content.items.map((it) => it.str).join(' '));
         }
         resolve(pages.join('\n'));
       } catch (err) {
-        reject(new Error(`שגיאה בקריאת קובץ PDF: ${err.message}`));
+        reject(new Error(`קריאת PDF נכשלה: ${err.message}`));
       }
     };
     reader.onerror = () => reject(new Error('שגיאה בקריאת הקובץ.'));
@@ -281,41 +509,33 @@ async function extractPdf(file) {
   });
 }
 
-// --- UI helpers ---
+// ════════════════════════════════════════════════════════════════
+// UI helpers
+// ════════════════════════════════════════════════════════════════
 function showProgress(pct) {
-  progressSection.style.display = 'block';
+  progressSection.hidden = false;
   progressBar.style.width = `${pct}%`;
   progressBar.setAttribute('aria-valuenow', pct);
 }
 
 function setUIBusy(busy) {
   generateBtn.disabled = busy;
-  fileInput.disabled = busy;
-  apiKeyInput.disabled = busy;
-  if (!busy) retryBtn.style.display = retryBtn.dataset.failedChunk ? 'inline-block' : 'none';
-}
-
-function resetOutput() {
-  chunkResults = [null, null, null];
-  downloadBtn.style.display = 'none';
-  retryBtn.style.display = 'none';
-  progressSection.style.display = 'none';
-  clearMessages();
+  if (!busy) retryBtn.hidden = !retryBtn.dataset.failedChunk;
 }
 
 function showError(msg) {
   errorBox.textContent = msg;
-  errorBox.style.display = 'block';
+  errorBox.hidden = false;
 }
 
 function showWarning(msg) {
   warningBox.textContent = msg;
-  warningBox.style.display = 'block';
+  warningBox.hidden = false;
 }
 
 function clearMessages() {
-  errorBox.style.display = 'none';
+  errorBox.hidden = true;
   errorBox.textContent = '';
-  warningBox.style.display = 'none';
+  warningBox.hidden = true;
   warningBox.textContent = '';
 }

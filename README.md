@@ -1,110 +1,106 @@
 # SF Architect Agent — משרד התחבורה
 
-A static, client-side web app that acts as a **stateful Salesforce Solution Architect**. It accepts a Hebrew Functional Specification Document (FSD) together with the current org state snapshot and in-flight specs, then produces a complete 8-file architectural TSD — including a critical impact analysis with REUSE/EXTEND/CREATE classification, conflict detection, and ADRs.
+A static, client-side web app that acts as a **stateful Salesforce Solution Architect**. It accepts a Hebrew Functional Specification Document (FSD), the current org state (`deployed.json`), and approved-but-not-yet-deployed work (`in-flight.json`), then produces a complete 8-file architectural TSD plus an updated `in-flight.json` for the next session.
 
-## What Makes This Different From a Plain TSD Generator
+## What Makes This Different
 
 A standard TSD generator treats every spec as greenfield. This agent is **stateful**:
 
-- It reads the current production org state (objects, fields, flows, permissions, integrations)
-- It reads in-flight specs (approved but not yet deployed)
-- For every FSD requirement it decides: ✅ REUSE · 🔧 EXTEND · 🆕 CREATE · ⚠ CONFLICT
-- It surfaces conflicts and architectural risks **before** proposing a design
-- It documents every non-trivial choice as an ADR
+- Reads the current production state (objects, fields, flows, permissions, integrations, layouts)
+- Reads in-flight specs (approved but not yet deployed)
+- For every FSD requirement classifies: ✅ REUSE · 🔧 EXTEND · 🆕 CREATE · ⚠ CONFLICT
+- Surfaces conflicts and architectural risks **before** proposing a design
+- Documents every non-trivial choice as an ADR
+- Outputs an updated `in-flight.json` so the next session sees this spec's components
+
+## Architecture in One Picture
+
+```
+┌──────────────────────┐    ┌────────────────────────┐
+│  deployed.json       │───▶│                        │
+│  (from SF, via       │    │   SF Architect Agent   │───▶ TSD (8 files)
+│   Claude Desktop +   │    │   (Gemini 2.5 Flash)   │───▶ in-flight-updated.json
+│   SF MCP)            │    │                        │
+└──────────────────────┘    │                        │
+┌──────────────────────┐    │                        │
+│  in-flight.json      │───▶│                        │
+│  (output of last run)│    │                        │
+└──────────────────────┘    │                        │
+┌──────────────────────┐    │                        │
+│  FSD (.docx / .pdf)  │───▶│                        │
+└──────────────────────┘    └────────────────────────┘
+```
 
 ## Usage
 
-1. Open `index.html` in a modern browser (Chrome, Firefox, Edge) — or visit the GitHub Pages URL.
-2. Paste your **Gemini API key**.
-3. *(Recommended)* Expand **"מצב ארגון נוכחי"** and paste the JSON state snapshot of the current org. Without this the agent designs as greenfield and marks every structural assumption with `⚠ NO-STATE`.
-4. *(Optional)* Expand **"אפיונים בתהליך"** and describe specs currently in build/design.
-5. Select your `.docx` or `.pdf` FSD file.
-6. Click **⚡ צור TSD ארכיטקטוני**.
-7. When all 3 chunks complete, click **⬇ הורד TSD** to download a single combined Markdown file.
+1. Open `index.html` in a modern browser (or visit GitHub Pages URL).
+2. **Step 1** — Drop your `deployed.json`. Don't have one? Click **"הפק deployed.json דרך Claude Desktop"** to copy a ready-made prompt for Claude Desktop with SF MCP that will produce the file for you.
+3. **Step 2** — Drop your `in-flight.json` (from a previous run, or download from the Admin screen).
+4. **Step 3** — Drop your FSD (`.docx` or `.pdf`).
+5. **Step 4** — Click **⚡ צור TSD ארכיטקטוני**. You'll be asked for a Gemini API key (free at [aistudio.google.com/api-keys](https://aistudio.google.com/api-keys)).
+6. When done — download the TSD and the updated `in-flight.json`.
 
-> No build step, no npm, no server required.
-
-## Output Files (Combined Into One MD)
+## Output Files (combined into one MD)
 
 | File | Content |
 |------|---------|
-| `00_executive_summary` | Business context, solution approach, key decisions, risks (~1 page) |
-| `01_objects` | Per-object REUSE/EXTEND/CREATE classification, OWD, record types |
-| `02_fields` | Per-field spec: API name (Hebrew), type, formula, FLS, RTL, business logic |
-| `03_automations` | Flows, Apex, Approval Processes, Validation Rules — with declarative justification |
+| `00_executive_summary` | Business context, approach, key decisions, top 3 risks |
+| `01_objects` | Per-object: REUSE/EXTEND/CREATE/CONFLICT, OWD, record types |
+| `02_fields` | Per-field: API name (Hebrew), type, formula, FLS, RTL, business logic |
+| `03_automations` | Flows, Apex, Approval Processes, Validation Rules + declarative justification |
 | `04_permissions` | Permission Sets (new/extended), sharing rules, FLS matrix |
 | `05_layouts` | Page Layouts, Lightning Pages, LWC, RTL considerations |
 | `06_integrations` | Named Credentials, callout patterns, error handling |
-| `07_impact_analysis` | **The critical file** — reuse table, conflict table, components touched/not touched, ADRs, open questions, risk summary |
+| `07_impact_analysis` | **The critical file** — reuse, conflicts, ADRs, open questions, risks |
 
-## Org State Snapshot Format
+Plus a separate downloadable `in-flight-updated.json` for the next session.
 
-Paste a JSON object with any subset of these keys:
+## State File Schema
 
-```json
-{
-  "objects": [
-    { "api_name": "רישיון_רכב__c", "label": "רישיון רכב", "owd": "Private", "domain": "permits" }
-  ],
-  "fields": [
-    { "object": "רישיון_רכב__c", "api_name": "תאריך_פקיעה__c", "type": "Date", "required": false }
-  ],
-  "automations": [
-    { "type": "Flow", "api_name": "VehiclePermit_BeforeSave_CalculateSLA", "active": true }
-  ],
-  "permissions": [
-    { "type": "Permission Set", "api_name": "PS_Permits_Manager" }
-  ],
-  "integrations": [
-    { "type": "Named Credential", "api_name": "NC_Police_API" }
-  ],
-  "in_flight": [
-    { "spec_name": "Permit_Renewal_Phase2", "status": "in-build", "objects_affected": ["רישיון_רכב__c"] }
-  ]
-}
-```
+Both `deployed.json` and `in-flight.json` share the same JSON schema (see [`schema/state-schema.json`](schema/state-schema.json)). Sections: `objects`, `fields`, `automations`, `permissions`, `integrations`, `layouts`.
 
-Empty or missing sections are fine — the agent notes "Greenfield — no existing components" and continues.
+`in-flight.json` items additionally carry:
+- `spec_origin` — name of the spec that introduced this item
+- `status` — `approved` or `in-build`
 
-## Naming Conventions (Enforced by the Agent)
+**Precedence rule:** if the same `api_name` appears in both files, the in-flight version wins (it's the most recent design intent).
+
+## Naming Conventions (enforced by the agent)
 
 | Component | Convention | Example |
 |-----------|-----------|---------|
-| Objects | Hebrew words + underscores + `__c` | `רישיון_רכב__c` |
-| Fields | Hebrew words + underscores + `__c` | `תאריך_פקיעה__c` |
-| Flows | `{Object}_{Trigger}_{Purpose}` (English) | `VehiclePermit_BeforeSave_CalculateSLA` |
-| Validation Rules | `VR_{Object}_{Purpose}` | `VR_VehiclePermit_RequireExpiryDate` |
+| Objects | Hebrew + `__c` | `רישיון_רכב__c` |
+| Fields | Hebrew + `__c` | `תאריך_פקיעה__c` |
+| Flows | English `{Object}_{Trigger}_{Purpose}` | `VehiclePermit_BeforeSave_CalculateSLA` |
+| Validation Rules | `VR_{Object}_{Purpose}` | `VR_VehiclePermit_RequireExpiry` |
 | Permission Sets | `PS_{Role}_{Scope}` | `PS_Permits_Manager` |
 | Named Credentials | `NC_{SystemName}` | `NC_Police_API` |
-| Apex Classes | `{Object}Service`, `{Object}TriggerHandler` | `VehiclePermitService` |
+| Apex Classes | `{Object}Service` | `VehiclePermitService` |
 
-## Architecture Decisions Recorded (ADR Format)
+## Admin Screen
 
-Every non-trivial architectural choice is documented in `07_impact_analysis` as:
+`admin.html` — separate page protected by an email gate (`shalevya@mot.gov.il` for now). Shows aggregated approved specs, all designed objects/fields/automations across all sessions, and lets you export a merged `in-flight.json`.
 
-```
-### ADR-YYYY-MM-DD-NNN: Title
-- Context:
-- Decision:
-- Rationale:
-- Alternatives considered:
-- Consequences:
-```
+Storage: **localStorage on the browser** (will move to organizational git later — auth and storage will both be upgraded then).
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `index.html` | App shell — API key input, state/in-flight textareas, file upload |
-| `styles.css` | Styling (no framework) |
-| `app.js` | File extraction, Gemini API calls, chunk orchestration, UI logic |
-| `prompt.js` | Full SF Architect Agent system prompt + 3-chunk section factory |
-| `tsd-to-salesforce/` | Separate Next.js app — takes a TSD and generates Salesforce metadata |
+| `index.html` | Main app — file uploads, generation flow |
+| `admin.html` / `admin.js` | Admin screen for approved specs |
+| `app.js` | File handling, Gemini calls, chunk orchestration, history save |
+| `prompt.js` | SF Architect Agent system prompt + 3-chunk factory |
+| `styles.css` | Styling |
+| `schema/state-schema.json` | JSON Schema reference for both state files |
+| `prompts/extract-deployed-state.md` | Prompt for Claude Desktop to produce `deployed.json` |
+| `tsd-to-salesforce/` | Separate Next.js app — TSD → SF metadata (next phase) |
 
 ## Libraries (CDN, no npm)
 
-- [mammoth.js](https://github.com/mwilliamson/mammoth.js) — `.docx` → plain text
-- [pdf.js](https://mozilla.github.io/pdf.js/) — PDF → plain text
+- [mammoth.js](https://github.com/mwilliamson/mammoth.js) — `.docx` → text
+- [pdf.js](https://mozilla.github.io/pdf.js/) — PDF → text
+- [Heebo](https://fonts.google.com/specimen/Heebo) — Hebrew-friendly typography
 
 ## Gemini API
 
@@ -112,19 +108,16 @@ Every non-trivial architectural choice is documented in `07_impact_analysis` as:
 - **Max output tokens per call:** 65,000
 - **Auth:** API key as query parameter — stored in memory only, never persisted
 
-## Error Handling
+## Security & Privacy
 
-| Scenario | Behaviour |
-|----------|-----------|
-| No API key or file | Hebrew validation message |
-| No org state provided | Hebrew warning — agent proceeds with `⚠ NO-STATE` markers |
-| Network error | Hebrew error with details |
-| Non-2xx API response | Hebrew error with HTTP status and Gemini message |
-| `finish_reason = MAX_TOKENS` | Hebrew warning (output kept, may be incomplete) |
-| Chunk failure | Hebrew error + Retry button — completed chunks preserved |
+- Gemini API key lives in a JS variable for the session — never in `localStorage`, `sessionStorage`, cookies, or logs.
+- All processing is client-side. Only outbound request: directly to the Gemini API.
+- State JSONs are read into memory and sent to Gemini only as part of the prompt.
+- Admin screen uses localStorage on the user's browser only — no server, no sync.
 
-## Security Notes
+## Roadmap
 
-- The Gemini API key is stored only in a JavaScript variable for the session — never written to `localStorage`, `sessionStorage`, cookies, or any log.
-- All processing is client-side. The only outbound request is directly to the Gemini API.
-- Org state pasted into the textarea is never sent anywhere except to Gemini as part of the prompt.
+- [ ] Move admin storage from localStorage to organizational git
+- [ ] Real Google OAuth on the admin screen
+- [ ] Snapshot Builder (automated `deployed.json` refresh on a schedule)
+- [ ] Cross-session deduplication when the same component is approved twice

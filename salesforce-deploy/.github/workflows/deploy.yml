@@ -3,7 +3,7 @@ name: Deploy to Salesforce
 on:
   push:
     branches:
-      - claude/hebrew-doc-processor-app-1yne8
+      - main
     paths:
       - 'salesforce-deploy/**'
 

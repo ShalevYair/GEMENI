@@ -1,0 +1,36 @@
+name: Deploy to Salesforce
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'salesforce-deploy/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Salesforce CLI
+        run: npm install -g @salesforce/cli
+
+      - name: Write Private Key
+        run: echo "${{ secrets.SF_PRIVATE_KEY }}" > server.key
+
+      - name: Authenticate to Salesforce
+        run: |
+          sf org login jwt \
+            --username ${{ secrets.SF_USERNAME }} \
+            --jwt-key-file server.key \
+            --client-id ${{ secrets.SF_CONSUMER_KEY }} \
+            --instance-url https://login.salesforce.com \
+            --alias myorg
+
+      - name: Deploy to Salesforce
+        run: |
+          cd salesforce-deploy
+          sf project deploy start \
+            --manifest manifest/package.xml \
+            --target-org myorg

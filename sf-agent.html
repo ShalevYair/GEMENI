@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SF Architect Agent — משרד התחבורה</title>
+  <meta name="description" content="סוכן ארכיטקט שמקבל אפיון פונקציונלי, מצליב מול המצב הקיים בארגון, ומפיק TSD ארכיטקטוני מלא של Salesforce עם ניתוח השפעה והחלטות.">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="favicon.svg" />
+  <meta name="theme-color" content="#0070d2" />
+
+  <!-- Open Graph / WhatsApp / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="SF Architect Agent — משרד התחבורה" />
+  <meta property="og:description" content="סוכן ארכיטקט שמקבל אפיון פונקציונלי, מצליב מול המצב הקיים בארגון, ומפיק TSD ארכיטקטוני מלא של Salesforce עם ניתוח השפעה והחלטות." />
+  <meta property="og:image" content="og-preview.svg" />
+  <meta property="og:locale" content="he_IL" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="SF Architect Agent — משרד התחבורה" />
+  <meta name="twitter:description" content="סוכן ארכיטקט שמקבל אפיון פונקציונלי ומפיק TSD ארכיטקטוני מלא של Salesforce." />
+  <meta name="twitter:image" content="og-preview.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div class="hero-content">
+        <img src="favicon.svg" alt="" class="hero-logo" aria-hidden="true" />
+        <div class="hero-badge">משרד התחבורה · Salesforce Architecture</div>
+        <h1>SF Architect Agent</h1>
+        <p class="hero-tagline">סוכן ארכיטקט שמכיר את ה-org שלך — מקבל אפיון פונקציונלי, צולב מול המצב הקיים והעתידי, ומפיק TSD ארכיטקטוני מלא עם ניתוח השפעה והחלטות.</p>
+      </div>
+    </header>
+
+    <main class="main">
+
+      <!-- About -->
+      <section class="about">
+        <h2>מה הכלי הזה עושה?</h2>
+        <div class="about-grid">
+          <div class="about-card">
+            <div class="about-num">1</div>
+            <h3>קולט שלושה דברים</h3>
+            <p>מסמך אפיון פונקציונלי (FSD בעברית), מצב נוכחי של ה-org (deployed.json) ואפיונים בתהליך (in-flight.json).</p>
+          </div>
+          <div class="about-card">
+            <div class="about-num">2</div>
+            <h3>חושב כארכיטקט</h3>
+            <p>מצליב כל דרישה מול המצב — מסווג כל פריט ל-REUSE / EXTEND / CREATE / CONFLICT. מזהה קונפליקטים לפני העיצוב.</p>
+          </div>
+          <div class="about-card">
+            <div class="about-num">3</div>
+            <h3>מפיק TSD מלא</h3>
+            <p>שמונה קבצים: סיכום מנהלי, אובייקטים, שדות, אוטומציות, הרשאות, UI, אינטגרציות, וקובץ ניתוח השפעה עם ADRs וסיכוני ארכיטקטורה.</p>
+          </div>
+          <div class="about-card">
+            <div class="about-num">4</div>
+            <h3>מעדכן את הזיכרון</h3>
+            <p>מפיק <code>in-flight-updated.json</code> — עם הרכיבים החדשים שתוכננו — מוכן לשימוש בהרצה הבאה.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Stepper -->
+      <section class="stepper-section">
+        <ol class="stepper">
+          <li class="step">
+            <span class="step-num">1</span>
+            <span class="step-label">העלאת מצב Org</span>
+          </li>
+          <li class="step">
+            <span class="step-num">2</span>
+            <span class="step-label">העלאת אפיונים בתהליך</span>
+          </li>
+          <li class="step">
+            <span class="step-num">3</span>
+            <span class="step-label">העלאת FSD</span>
+          </li>
+          <li class="step">
+            <span class="step-num">4</span>
+            <span class="step-label">צור TSD</span>
+          </li>
+        </ol>
+      </section>
+
+      <!-- Step 1: deployed.json -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title-row">
+            <span class="card-step">שלב 1</span>
+            <h2>מצב ה-Org הנוכחי <span class="card-subtitle">(deployed.json)</span></h2>
+          </div>
+          <button id="show-claude-prompt-btn" class="btn-ghost" type="button" title="העתק פרומפט ל-Claude Desktop להפקת deployed.json מ-SF">
+            🤖 הפק deployed.json דרך Claude Desktop
+          </button>
+        </div>
+        <p class="card-help">JSON המתאר את האובייקטים, השדות, האוטומציות, ההרשאות והאינטגרציות שכבר פרוסים. אם לא מועלה — הסוכן יעצב כ-greenfield ויסמן הנחות עם ⚠ NO-STATE.</p>
+        <div id="deployed-dropzone" class="dropzone" tabindex="0" role="button" aria-label="גרור או לחץ להעלאת deployed.json">
+          <div class="dropzone-icon">📥</div>
+          <div class="dropzone-text">
+            <strong>גרור לכאן את deployed.json</strong>
+            <span>או <u>לחץ לבחירה</u></span>
+          </div>
+          <input type="file" id="deployed-input" accept=".json" hidden />
+        </div>
+        <div id="deployed-status" class="file-status" hidden></div>
+      </section>
+
+      <!-- Step 2: in-flight.json -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title-row">
+            <span class="card-step">שלב 2</span>
+            <h2>אפיונים בתהליך <span class="card-subtitle">(in-flight.json)</span></h2>
+          </div>
+          <a href="admin.html" class="btn-ghost" target="_blank">⚙ מסך ניהול</a>
+        </div>
+        <p class="card-help">JSON של אפיונים שאושרו אך טרם פרוסים. הסוכן ייקח אותם בחשבון כדי למנוע כפילויות. <strong>כלל:</strong> אם אותו api_name מופיע בשני הקבצים — in-flight גובר.</p>
+        <div id="inflight-dropzone" class="dropzone" tabindex="0" role="button" aria-label="גרור או לחץ להעלאת in-flight.json">
+          <div class="dropzone-icon">📋</div>
+          <div class="dropzone-text">
+            <strong>גרור לכאן את in-flight.json</strong>
+            <span>או <u>לחץ לבחירה</u> · אופציונלי</span>
+          </div>
+          <input type="file" id="inflight-input" accept=".json" hidden />
+        </div>
+        <div id="inflight-status" class="file-status" hidden></div>
+      </section>
+
+      <!-- Step 3: FSD -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title-row">
+            <span class="card-step">שלב 3</span>
+            <h2>מסמך האפיון הפונקציונלי <span class="card-subtitle">(FSD)</span></h2>
+          </div>
+        </div>
+        <p class="card-help">מסמך הדרישות בפורמט Word (.docx) או PDF.</p>
+        <div id="fsd-dropzone" class="dropzone" tabindex="0" role="button" aria-label="גרור או לחץ להעלאת FSD">
+          <div class="dropzone-icon">📄</div>
+          <div class="dropzone-text">
+            <strong>גרור לכאן את ה-FSD</strong>
+            <span>או <u>לחץ לבחירה</u> · .docx או .pdf</span>
+          </div>
+          <input type="file" id="fsd-input" accept=".docx,.pdf" hidden />
+        </div>
+        <div id="fsd-status" class="file-status" hidden></div>
+      </section>
+
+      <!-- Step 4: Generate -->
+      <section class="card card-action">
+        <div class="card-header">
+          <div class="card-title-row">
+            <span class="card-step">שלב 4</span>
+            <h2>הפקת ה-TSD</h2>
+          </div>
+        </div>
+        <p class="card-help">הסוכן יעבד את הקלט בשלושה צעדים, ויצור TSD מלא + in-flight.json מעודכן להרצה הבאה.</p>
+        <div class="actions">
+          <button id="generate-btn" class="btn btn-primary">⚡ צור TSD ארכיטקטוני</button>
+          <button id="retry-btn" class="btn btn-warning" hidden>🔄 נסה שוב</button>
+          <button id="download-tsd-btn" class="btn btn-success" hidden>⬇ הורד TSD</button>
+          <button id="download-inflight-btn" class="btn btn-success" hidden>⬇ הורד in-flight.json מעודכן</button>
+        </div>
+
+        <section id="progress-section" class="progress-section" hidden aria-live="polite">
+          <p id="progress-text" class="progress-label">מכין...</p>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+            <div id="progress-bar" class="progress-fill" style="width:0%" aria-valuenow="0"></div>
+          </div>
+        </section>
+
+        <div id="error-box" class="message error" hidden role="alert" aria-live="assertive"></div>
+        <div id="warning-box" class="message warning" hidden role="status" aria-live="polite"></div>
+      </section>
+
+    </main>
+
+    <footer class="footer">
+      <div class="footer-content">
+        <span>הכלי פועל לחלוטין בדפדפן · אין שרת ביניים · מפתח API נשמר בזיכרון בלבד</span>
+        <a href="admin.html" target="_blank">מסך ניהול</a>
+      </div>
+    </footer>
+  </div>
+
+  <!-- API Key Modal -->
+  <div id="apikey-modal" class="modal" hidden role="dialog" aria-labelledby="apikey-modal-title">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <h3 id="apikey-modal-title">מפתח API של Gemini</h3>
+      <p>נדרש מפתח API פעיל כדי להריץ את הסוכן. המפתח נשמר בזיכרון הסשן בלבד.</p>
+      <input type="password" id="apikey-modal-input" placeholder="AIza..." autocomplete="off" spellcheck="false" dir="ltr" />
+      <p class="modal-hint">
+        אין לך מפתח? אפשר ליצור אחד <strong>בחינם</strong> ב-
+        <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener">aistudio.google.com/api-keys</a>.
+      </p>
+      <div class="modal-actions">
+        <button id="apikey-modal-cancel" class="btn btn-ghost-secondary" type="button">ביטול</button>
+        <button id="apikey-modal-save" class="btn btn-primary" type="button">שמור והמשך</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Claude Desktop Prompt Modal -->
+  <div id="claude-prompt-modal" class="modal" hidden role="dialog" aria-labelledby="claude-prompt-title">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog modal-dialog-large">
+      <h3 id="claude-prompt-title">פרומפט להפקת deployed.json דרך Claude Desktop</h3>
+      <p>
+        העתק את הפרומפט למטה והדבק אותו ב-Claude Desktop עם שרת MCP של Salesforce מחובר.
+        Claude יישאל את ה-org ויחזיר JSON שאפשר לשמור כ-deployed.json.
+      </p>
+      <textarea id="claude-prompt-text" readonly></textarea>
+      <div class="modal-actions">
+        <button id="claude-prompt-copy" class="btn btn-primary" type="button">📋 העתק פרומפט</button>
+        <button id="claude-prompt-close" class="btn btn-ghost-secondary" type="button">סגור</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+  <script type="module" src="nav.js"></script>
+</body>
+</html>

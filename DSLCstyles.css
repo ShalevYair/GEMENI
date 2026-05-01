@@ -566,3 +566,40 @@ body.light-mode .agent-tag:hover {
 }
 .chat-send-btn:hover { opacity: 0.85; }
 .chat-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Mindmap page layout after nav injection ── */
+.mindmap-page .app-layout { height: 100vh; overflow: hidden; }
+.mindmap-page .app-content {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-color) !important;
+  padding: 0;
+}
+.mindmap-page.light-mode .app-content { background: #f8fafc !important; }
+
+/* ── Panel filter row ── */
+.panel-filter-row {
+  margin-bottom: 18px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border-light);
+}
+.panel-filter-row .party-filter-select { width: 100%; max-width: 100%; box-sizing: border-box; border-radius: 10px; }
+
+/* ── Sidebar dark mode on mindmap page ── */
+.mindmap-page:not(.light-mode) .sidebar {
+  background: #0f172a;
+  border-color: #334155;
+}
+.mindmap-page:not(.light-mode) .sidebar-brand {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-color: #334155;
+}
+.mindmap-page:not(.light-mode) .sidebar-title { color: #e2e8f0; }
+.mindmap-page:not(.light-mode) .sidebar-section-label { color: #64748b; }
+.mindmap-page:not(.light-mode) a.nav-item { color: #94a3b8; }
+.mindmap-page:not(.light-mode) a.nav-item:hover,
+.mindmap-page:not(.light-mode) .nav-item-active { background: rgba(96,165,250,0.12); color: #93bbfd; }
+.mindmap-page:not(.light-mode) .nav-badge-active { background: rgba(52,211,153,0.12); color: #34d399; border-color: rgba(52,211,153,0.3); }
+.mindmap-page:not(.light-mode) .nav-badge-soon { background: rgba(71,85,105,0.3); color: #64748b; border-color: #334155; }

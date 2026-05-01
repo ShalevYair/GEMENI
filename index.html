@@ -5,16 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>אגם הסוכנים</title>
   <meta name="description" content="מערכת סוכנים חכמים לניהול מחזור החיים המלא של פיתוח תוכנה — מאיסוף דרישות ועד אבטחה ופריסה." />
-
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <meta name="theme-color" content="#0070d2" />
-
   <meta property="og:type" content="website" />
   <meta property="og:title" content="אגם הסוכנים" />
   <meta property="og:description" content="מערכת סוכנים חכמים לניהול מחזור החיים המלא של פיתוח תוכנה." />
   <meta property="og:image" content="og-preview.svg" />
   <meta property="og:locale" content="he_IL" />
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -23,7 +20,6 @@
 <body>
   <div class="home-page">
 
-    <!-- Hero -->
     <section class="home-hero">
       <div class="home-hero-content">
         <h1>אגם הסוכנים</h1>
@@ -32,7 +28,6 @@
       </div>
     </section>
 
-    <!-- Lifecycle visual -->
     <section class="home-section">
       <div class="lifecycle-bar">
         <span class="lc-step">דרישות</span>
@@ -49,33 +44,36 @@
       </div>
     </section>
 
+    <!-- Mind map toolbar -->
+    <section class="home-section" style="padding-top:0;">
+      <div class="mindmap-toolbar">
+        <div class="mindmap-toolbar-info">
+          <span class="mindmap-toolbar-icon">🗺</span>
+          <div class="mindmap-toolbar-text">
+            <strong>מפת SDLC</strong>
+            <span>תרשים אינטראקטיבי של מחזור חיי תוכנה עם סוכני AI</span>
+          </div>
+        </div>
+        <div class="mindmap-toolbar-btns">
+          <button onclick="location.href='SDLCMindMap.html#chat'" class="mindmap-toolbar-btn mindmap-toolbar-btn-chat">💬 שאל</button>
+          <button onclick="saveMindmapZoom(2); location.href='SDLCMindMap.html'" class="mindmap-toolbar-btn" title="הגדל טקסט">+</button>
+          <button onclick="saveMindmapZoom(-2); location.href='SDLCMindMap.html'" class="mindmap-toolbar-btn" title="הקטן טקסט">−</button>
+          <button id="mm-mode-btn" onclick="toggleMindmapMode(this)" class="mindmap-toolbar-btn" title="מצב בהיר/כהה">☀</button>
+          <a href="SDLCMindMap.html" class="mindmap-toolbar-btn mindmap-toolbar-btn-open">פתח מפה →</a>
+        </div>
+      </div>
+    </section>
+
     <!-- Agents grid -->
-    <section class="home-section">
+    <section class="home-section" style="padding-top:0;">
       <div class="agents-grid">
 
-        <div class="agent-card agent-mindmap"
-             onclick="location.href='SDLCMindMap.html'"
-             role="link" tabindex="0"
-             onkeydown="if(event.key==='Enter')location.href='SDLCMindMap.html'">
+        <a href="SDLCMindMap.html" class="agent-card agent-mindmap">
           <div class="agent-card-icon">🗺</div>
           <h3>מפת SDLC</h3>
           <p>תרשים אינטראקטיבי של מחזור חיי תוכנה עם סוכני AI — לחץ לחקור</p>
-          <div class="mindmap-card-btns">
-            <button class="mindmap-btn"
-                    onclick="event.stopPropagation(); location.href='SDLCMindMap.html#chat'"
-                    title="פתח צ׳אט">💬 שאל</button>
-            <button class="mindmap-btn"
-                    onclick="event.stopPropagation(); saveMindmapZoom(2); location.href='SDLCMindMap.html'"
-                    title="הגדל טקסט">+</button>
-            <button class="mindmap-btn"
-                    onclick="event.stopPropagation(); saveMindmapZoom(-2); location.href='SDLCMindMap.html'"
-                    title="הקטן טקסט">−</button>
-            <button class="mindmap-btn"
-                    onclick="event.stopPropagation(); toggleMindmapMode(); location.href='SDLCMindMap.html'"
-                    title="מצב בהיר/כהה">☀</button>
-          </div>
           <span class="agent-status active">פעיל</span>
-        </div>
+        </a>
 
         <div class="agent-card agent-soon">
           <div class="agent-card-icon">📋</div>
@@ -185,10 +183,15 @@
       var cur = parseInt(localStorage.getItem('sdlc-font-size') || '16');
       localStorage.setItem('sdlc-font-size', Math.max(14, Math.min(28, cur + step)));
     }
-    function toggleMindmapMode() {
+    function toggleMindmapMode(btn) {
       var isLight = localStorage.getItem('sdlc-dark-mode') === 'light';
       localStorage.setItem('sdlc-dark-mode', isLight ? 'dark' : 'light');
+      if (btn) btn.textContent = isLight ? '☀' : '☾';
     }
+    document.addEventListener('DOMContentLoaded', function() {
+      var btn = document.getElementById('mm-mode-btn');
+      if (btn) btn.textContent = localStorage.getItem('sdlc-dark-mode') === 'light' ? '☾' : '☀';
+    });
   </script>
   <script type="module" src="nav.js"></script>
 </body>

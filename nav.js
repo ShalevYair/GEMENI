@@ -1,6 +1,3 @@
-// Shared navigation module — injected into every page.
-// Import this as <script type="module" src="nav.js"></script>.
-
 const AGENTS = [
   { id: 'requirements',        name: 'אוסף הדרישות',          icon: '📋', href: null },
   { id: 'project-manager',     name: 'מנהל הפרויקט',           icon: '📊', href: null },
@@ -28,14 +25,18 @@ function getActiveId() {
 
 function buildSidebar() {
   const activeId = getActiveId();
-
-  const items = AGENTS.map((a) => {
+  const toolItems = `
+        <a href="SDLCMindMap.html" class="nav-item ${activeId === 'mindmap' ? 'nav-item-active' : ''}" title="מפת SDLC">
+          <span class="nav-icon">🗺</span>
+          <span class="nav-name">מפת SDLC</span>
+          <span class="nav-badge nav-badge-active">פעיל</span>
+        </a>`;
+  const agentItems = AGENTS.map((a) => {
     const active = a.id === activeId;
     const available = !!a.href;
     const tag = available
       ? `<span class="nav-badge nav-badge-active">פעיל</span>`
       : `<span class="nav-badge nav-badge-soon">בקרוב</span>`;
-
     if (available) {
       return `
         <a href="${a.href}" class="nav-item ${active ? 'nav-item-active' : ''}" title="${a.name}">
@@ -51,7 +52,6 @@ function buildSidebar() {
         ${tag}
       </span>`;
   }).join('');
-
   return `
     <div class="sidebar-inner">
       <a href="index.html" class="sidebar-brand">
@@ -61,20 +61,13 @@ function buildSidebar() {
         </div>
       </a>
       <div class="sidebar-section-label">כלים</div>
-      <nav class="sidebar-nav sidebar-nav-tools" aria-label="כלים">
-        <a href="SDLCMindMap.html" class="nav-item ${activeId === 'mindmap' ? 'nav-item-active' : ''}" title="מפת SDLC">
-          <span class="nav-icon">🗺</span>
-          <span class="nav-name">מפת SDLC</span>
-          <span class="nav-badge nav-badge-active">פעיל</span>
-        </a>
+      <nav class="sidebar-nav sidebar-nav-tools" aria-label="ניווט כלים">
+        ${toolItems}
       </nav>
       <div class="sidebar-section-label">סוכנים</div>
       <nav class="sidebar-nav" aria-label="ניווט סוכנים">
-        ${items}
+        ${agentItems}
       </nav>
-      <div class="sidebar-footer">
-        <a href="admin.html" class="sidebar-admin-link" target="_blank">⚙ מסך ניהול</a>
-      </div>
     </div>`;
 }
 
@@ -91,7 +84,6 @@ function injectSidebar() {
     </div>
     <button class="sidebar-toggle" id="sidebar-toggle" aria-label="פתח/סגור תפריט" aria-expanded="false">☰</button>
   `;
-
   const toggle = document.getElementById('sidebar-toggle');
   const sidebar = document.getElementById('sidebar');
   toggle.addEventListener('click', () => {
@@ -99,7 +91,6 @@ function injectSidebar() {
     toggle.setAttribute('aria-expanded', String(open));
     toggle.textContent = open ? '✕' : '☰';
   });
-
   document.getElementById('app-content').addEventListener('click', () => {
     if (sidebar.classList.contains('sidebar-open')) {
       sidebar.classList.remove('sidebar-open');

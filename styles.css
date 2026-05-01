@@ -872,7 +872,7 @@ code {
 ════════════════════════════════════════════════════ */
 .app-layout {
   display: flex;
-  flex-direction: row-reverse; /* sidebar on right for RTL */
+  flex-direction: row; /* dir=rtl makes first child appear on the right */
   min-height: 100vh;
 }
 

@@ -872,7 +872,7 @@ code {
 ════════════════════════════════════════════════════ */
 .app-layout {
   display: flex;
-  flex-direction: row; /* dir=rtl makes first child appear on the right */
+  flex-direction: row;
   min-height: 100vh;
 }
 
@@ -953,6 +953,10 @@ code {
   gap: 0.1rem;
   padding: 0 0.5rem;
   flex: 1;
+}
+
+.sidebar-nav-tools {
+  flex: none;
 }
 
 .nav-item {
@@ -1313,4 +1317,94 @@ a.nav-item:hover {
   .agents-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
   .lifecycle-bar { gap: 0.25rem; }
   .lc-step { font-size: 0.78rem; padding: 0.28rem 0.55rem; }
+}
+
+/* ════════════════════════════════════════════════════
+   Mind map card
+════════════════════════════════════════════════════ */
+.agent-mindmap {
+  background: linear-gradient(145deg, #0f172a 0%, #1a2744 60%, #0d1f3c 100%);
+  border: 1px solid rgba(96,165,250,0.35);
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(15,23,42,0.4);
+  overflow: hidden;
+}
+
+.agent-mindmap::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: -40px;
+  width: 160px; height: 160px;
+  background: radial-gradient(circle, rgba(96,165,250,0.14) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.agent-mindmap::after {
+  content: '';
+  position: absolute;
+  bottom: -20px; left: -20px;
+  width: 100px; height: 100px;
+  background: radial-gradient(circle, rgba(52,211,153,0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.agent-mindmap h3 { color: #93bbfd; }
+.agent-mindmap p  { color: #94a3b8; }
+
+.agent-mindmap .agent-status.active {
+  background: rgba(52,211,153,0.15);
+  color: #34d399;
+  border-color: rgba(52,211,153,0.35);
+}
+
+.agent-mindmap:hover {
+  border-color: rgba(96,165,250,0.7);
+  box-shadow: 0 8px 32px rgba(96,165,250,0.22);
+  transform: translateY(-3px);
+}
+
+.mindmap-card-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.mindmap-btn {
+  background: rgba(96,165,250,0.1);
+  border: 1px solid rgba(96,165,250,0.25);
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 0.75rem;
+  font-family: 'Heebo', sans-serif;
+  font-weight: 600;
+  color: #93bbfd;
+  cursor: pointer;
+  transition: all 0.18s;
+  line-height: 1.6;
+}
+
+.mindmap-btn:hover {
+  background: rgba(96,165,250,0.22);
+  border-color: rgba(96,165,250,0.5);
+  color: #bfdbfe;
+}
+
+/* Mind-map page: full-screen layout overrides */
+.mindmap-page .app-layout {
+  flex: 1;
+  min-height: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.mindmap-page .app-content {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a !important;
+  padding: 0;
+  height: 100vh;
 }

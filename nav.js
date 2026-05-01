@@ -20,9 +20,10 @@ const AGENTS = [
 
 function getActiveId() {
   const page = location.pathname.split('/').pop() || 'index.html';
-  if (page === 'sf-agent.html') return 'salesforce';
-  if (page === 'admin.html')    return 'salesforce'; // admin is part of the SF agent
-  return null; // home page
+  if (page === 'sf-agent.html')    return 'salesforce';
+  if (page === 'admin.html')       return 'salesforce';
+  if (page === 'SDLCMindMap.html') return 'mindmap';
+  return null;
 }
 
 function buildSidebar() {
@@ -59,6 +60,14 @@ function buildSidebar() {
           <span class="sidebar-title">אגם הסוכנים</span>
         </div>
       </a>
+      <div class="sidebar-section-label">כלים</div>
+      <nav class="sidebar-nav sidebar-nav-tools" aria-label="כלים">
+        <a href="SDLCMindMap.html" class="nav-item ${activeId === 'mindmap' ? 'nav-item-active' : ''}" title="מפת SDLC">
+          <span class="nav-icon">🗺</span>
+          <span class="nav-name">מפת SDLC</span>
+          <span class="nav-badge nav-badge-active">פעיל</span>
+        </a>
+      </nav>
       <div class="sidebar-section-label">סוכנים</div>
       <nav class="sidebar-nav" aria-label="ניווט סוכנים">
         ${items}
@@ -70,7 +79,6 @@ function buildSidebar() {
 }
 
 function injectSidebar() {
-  // Wrap existing body content in .app-layout
   const existingContent = document.body.innerHTML;
   document.body.innerHTML = `
     <div class="app-layout">
@@ -84,7 +92,6 @@ function injectSidebar() {
     <button class="sidebar-toggle" id="sidebar-toggle" aria-label="פתח/סגור תפריט" aria-expanded="false">☰</button>
   `;
 
-  // Mobile toggle
   const toggle = document.getElementById('sidebar-toggle');
   const sidebar = document.getElementById('sidebar');
   toggle.addEventListener('click', () => {
@@ -93,7 +100,6 @@ function injectSidebar() {
     toggle.textContent = open ? '✕' : '☰';
   });
 
-  // Close sidebar when clicking outside on mobile
   document.getElementById('app-content').addEventListener('click', () => {
     if (sidebar.classList.contains('sidebar-open')) {
       sidebar.classList.remove('sidebar-open');
@@ -103,7 +109,6 @@ function injectSidebar() {
   });
 }
 
-// Run after DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', injectSidebar);
 } else {

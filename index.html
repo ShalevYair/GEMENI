@@ -25,6 +25,13 @@
         <h1>אגם הסוכנים</h1>
         <p class="home-hero-tagline">מערכת סוכנים חכמים לניהול מחזור החיים המלא של פיתוח תוכנה<br>מאיסוף דרישות ועד אבטחה ופריסה.</p>
         <p class="home-hero-sub">כל סוכן מתמחה בשלב אחד במחזור החיים<br>הסוכנים עובדים יחד, כל אחד בתורו, כדי להפוך רעיון לתוכנה</p>
+        <div class="home-hero-controls">
+          <button id="home-mode-btn" onclick="toggleDarkMode(this)" class="home-hero-ctrl-btn" title="מצב בהיר/כהה">☀</button>
+          <button onclick="changeFontSize(2)" class="home-hero-ctrl-btn" title="הגדל טקסט">+</button>
+          <button onclick="changeFontSize(-2)" class="home-hero-ctrl-btn" title="הקטן טקסט">−</button>
+          <a href="SDLCMindMap.html#chat" class="home-hero-ctrl-btn">💬 שאל</a>
+          <a href="SDLCMindMap.html" class="home-hero-ctrl-btn home-hero-ctrl-btn-open">🗺 פתח מפה</a>
+        </div>
       </div>
     </section>
 
@@ -41,26 +48,6 @@
         <span class="lc-step">בדיקות</span>
         <span class="lc-arrow">←</span>
         <span class="lc-step lc-step-highlight">פריסה ✓</span>
-      </div>
-    </section>
-
-    <!-- Mind map toolbar -->
-    <section class="home-section" style="padding-top:0;">
-      <div class="mindmap-toolbar">
-        <div class="mindmap-toolbar-info">
-          <span class="mindmap-toolbar-icon">🗺</span>
-          <div class="mindmap-toolbar-text">
-            <strong>מפת SDLC</strong>
-            <span>תרשים אינטראקטיבי של מחזור חיי תוכנה עם סוכני AI</span>
-          </div>
-        </div>
-        <div class="mindmap-toolbar-btns">
-          <button onclick="location.href='SDLCMindMap.html#chat'" class="mindmap-toolbar-btn mindmap-toolbar-btn-chat">💬 שאל</button>
-          <button onclick="saveMindmapZoom(2); location.href='SDLCMindMap.html'" class="mindmap-toolbar-btn" title="הגדל טקסט">+</button>
-          <button onclick="saveMindmapZoom(-2); location.href='SDLCMindMap.html'" class="mindmap-toolbar-btn" title="הקטן טקסט">−</button>
-          <button id="mm-mode-btn" onclick="toggleMindmapMode(this)" class="mindmap-toolbar-btn" title="מצב בהיר/כהה">☀</button>
-          <a href="SDLCMindMap.html" class="mindmap-toolbar-btn mindmap-toolbar-btn-open">פתח מפה →</a>
-        </div>
       </div>
     </section>
 
@@ -179,18 +166,25 @@
   </div>
 
   <script>
-    function saveMindmapZoom(step) {
-      var cur = parseInt(localStorage.getItem('sdlc-font-size') || '16');
-      localStorage.setItem('sdlc-font-size', Math.max(14, Math.min(28, cur + step)));
+    function toggleDarkMode(btn) {
+      var isDark = document.body.classList.toggle('dark-mode');
+      localStorage.setItem('home-dark-mode', isDark ? 'dark' : 'light');
+      if (btn) btn.textContent = isDark ? '☾' : '☀';
     }
-    function toggleMindmapMode(btn) {
-      var isLight = localStorage.getItem('sdlc-dark-mode') === 'light';
-      localStorage.setItem('sdlc-dark-mode', isLight ? 'dark' : 'light');
-      if (btn) btn.textContent = isLight ? '☀' : '☾';
+    function changeFontSize(step) {
+      var cur = parseFloat(localStorage.getItem('home-font-size') || '16');
+      var next = Math.max(13, Math.min(20, cur + step));
+      document.documentElement.style.fontSize = next + 'px';
+      localStorage.setItem('home-font-size', next);
     }
     document.addEventListener('DOMContentLoaded', function() {
-      var btn = document.getElementById('mm-mode-btn');
-      if (btn) btn.textContent = localStorage.getItem('sdlc-dark-mode') === 'light' ? '☾' : '☀';
+      if (localStorage.getItem('home-dark-mode') === 'dark') {
+        document.body.classList.add('dark-mode');
+        var btn = document.getElementById('home-mode-btn');
+        if (btn) btn.textContent = '☾';
+      }
+      var sz = parseFloat(localStorage.getItem('home-font-size') || '16');
+      if (sz !== 16) document.documentElement.style.fontSize = sz + 'px';
     });
   </script>
   <script type="module" src="nav.js"></script>

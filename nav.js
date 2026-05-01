@@ -56,8 +56,7 @@ function buildSidebar() {
       <a href="index.html" class="sidebar-brand">
         <img src="favicon.svg" alt="" class="sidebar-logo" />
         <div class="sidebar-brand-text">
-          <span class="sidebar-title">מרכז הסוכנים</span>
-          <span class="sidebar-subtitle">משרד התחבורה</span>
+          <span class="sidebar-title">אגם הסוכנים</span>
         </div>
       </a>
       <div class="sidebar-section-label">סוכנים</div>

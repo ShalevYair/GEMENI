@@ -53,6 +53,30 @@
     <section class="home-section">
       <div class="agents-grid">
 
+        <div class="agent-card agent-mindmap"
+             onclick="location.href='SDLCMindMap.html'"
+             role="link" tabindex="0"
+             onkeydown="if(event.key==='Enter')location.href='SDLCMindMap.html'">
+          <div class="agent-card-icon">🗺</div>
+          <h3>מפת SDLC</h3>
+          <p>תרשים אינטראקטיבי של מחזור חיי תוכנה עם סוכני AI — לחץ לחקור</p>
+          <div class="mindmap-card-btns">
+            <button class="mindmap-btn"
+                    onclick="event.stopPropagation(); location.href='SDLCMindMap.html#chat'"
+                    title="פתח צ׳אט">💬 שאל</button>
+            <button class="mindmap-btn"
+                    onclick="event.stopPropagation(); saveMindmapZoom(2); location.href='SDLCMindMap.html'"
+                    title="הגדל טקסט">+</button>
+            <button class="mindmap-btn"
+                    onclick="event.stopPropagation(); saveMindmapZoom(-2); location.href='SDLCMindMap.html'"
+                    title="הקטן טקסט">−</button>
+            <button class="mindmap-btn"
+                    onclick="event.stopPropagation(); toggleMindmapMode(); location.href='SDLCMindMap.html'"
+                    title="מצב בהיר/כהה">☀</button>
+          </div>
+          <span class="agent-status active">פעיל</span>
+        </div>
+
         <div class="agent-card agent-soon">
           <div class="agent-card-icon">📋</div>
           <h3>אוסף הדרישות</h3>
@@ -156,6 +180,16 @@
 
   </div>
 
+  <script>
+    function saveMindmapZoom(step) {
+      var cur = parseInt(localStorage.getItem('sdlc-font-size') || '16');
+      localStorage.setItem('sdlc-font-size', Math.max(14, Math.min(28, cur + step)));
+    }
+    function toggleMindmapMode() {
+      var isLight = localStorage.getItem('sdlc-dark-mode') === 'light';
+      localStorage.setItem('sdlc-dark-mode', isLight ? 'dark' : 'light');
+    }
+  </script>
   <script type="module" src="nav.js"></script>
 </body>
 </html>

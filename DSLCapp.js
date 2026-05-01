@@ -21,10 +21,6 @@ const AGENT_MAP = {
     'סוכן ספקים':      { display: 'מפעיל הספקים',    url: 'https://gemini.google.com/gem/1M_HZABG7nLvPtg_I7IQNXH2gOp02Vqu6?usp=sharing' }
 };
 
-const CSV_URL = 'SDLCMindMap.csv';
-
-// ── Font size ──────────────────────────────────────────────────────────────────────────
-
 function changeFontSize(step) {
     const root = document.documentElement;
     let current = parseInt(getComputedStyle(root).getPropertyValue('--base-font-size'));
@@ -41,7 +37,6 @@ function updateChartFontSizes() {
     if (!myChart) return;
     const option = myChart.getOption();
     if (!option || !option.series || !option.series[0]) return;
-
     function walk(node) {
         if (!node) return;
         if (node.label) {
@@ -52,15 +47,12 @@ function updateChartFontSizes() {
         }
         if (node.children) node.children.forEach(walk);
     }
-
     const seriesData = option.series[0].data;
     if (seriesData && seriesData[0]) {
         walk(seriesData[0]);
         myChart.setOption({ series: [{ data: seriesData }] });
     }
 }
-
-// ── Dark mode ─────────────────────────────────────────────────────────────────────────
 
 function toggleDarkMode() {
     document.body.classList.toggle('light-mode');
@@ -80,14 +72,10 @@ function updateChartTheme() {
             borderColor: isLight ? '#e2e8f0' : '#475569'
         },
         series: [{
-            label: {
-                backgroundColor: isLight ? '#fff' : '#1e293b',
-                shadowColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.3)'
-            },
+            label: { backgroundColor: isLight ? '#fff' : '#1e293b', shadowColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.3)' },
             lineStyle: { color: isLight ? '#cbd5e1' : '#475569' }
         }]
     });
-
     const option = myChart.getOption();
     const seriesData = option.series[0].data;
     if (seriesData && seriesData[0]) {
@@ -122,7 +110,7 @@ function updateNodeColors(node, isLight) {
     if (node.children) node.children.forEach(c => updateNodeColors(c, isLight));
 }
 
-// ── CSV & tree ─────────────────────────────────────────────────────────────────────────
+const CSV_URL = 'SDLCMindMap.csv';
 
 function loadCSV() {
     fetch(CSV_URL)
@@ -152,24 +140,21 @@ function loadCSV() {
         });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
     loadCSV();
-
-    const savedMode = localStorage.getItem('sdlc-dark-mode');
+    var savedMode = localStorage.getItem('sdlc-dark-mode');
     if (savedMode === 'light') {
         document.body.classList.add('light-mode');
-        const btn = document.getElementById('dark-mode-btn');
+        var btn = document.getElementById('dark-mode-btn');
         if (btn) btn.innerHTML = '&#9790;';
     }
-
-    const savedSize = parseInt(localStorage.getItem('sdlc-font-size') || '16');
+    var savedSize = parseInt(localStorage.getItem('sdlc-font-size') || '16');
     if (savedSize !== 16) {
         document.documentElement.style.setProperty('--base-font-size', savedSize + 'px');
         fontScale = savedSize / 16;
     }
-
     if (location.hash === '#chat') {
-        setTimeout(() => openChat(), 600);
+        setTimeout(function() { if (typeof openChat === 'function') openChat(); }, 800);
     }
 });
 
@@ -230,22 +215,12 @@ function buildTreeData(data) {
         itemStyle: { color: '#e2e8f0' },
         label: { fontSize: 18, fontWeight: '800', color: '#e2e8f0' }
     };
-
     let currentStage = null;
     let currentSubStage = null;
-
     data.forEach(row => {
         const type = (row.TYPE || '').trim().toUpperCase();
         if (!type) return;
-
-        const node = {
-            name:     row.TITLE   || 'ללא שם',
-            content:  row.CONTENT || '',
-            actors:   row.ACTORS  || '',
-            agent:    row.AGENT   || '',
-            children: []
-        };
-
+        const node = { name: row.TITLE || 'ללא שם', content: row.CONTENT || '', actors: row.ACTORS || '', agent: row.AGENT || '', children: [] };
         if (type === 'STAGE') {
             node.symbolSize = 16;
             node.itemStyle  = { color: '#2563eb' };
@@ -267,46 +242,22 @@ function buildTreeData(data) {
             else if (currentStage) currentStage.children.push(node);
         }
     });
-
     return root;
 }
-
-// ── Chart ──────────────────────────────────────────────────────────────────────────────
 
 function initChart(data) {
     const chartDom = document.getElementById('chart-area');
     if (myChart) myChart.dispose();
     myChart = echarts.init(chartDom);
-
     myChart.setOption({
-        tooltip: {
-            trigger: 'item',
-            triggerOn: 'mousemove',
-            formatter: '{b}',
-            backgroundColor: 'rgba(30,41,59,0.95)',
-            textStyle: { color: '#e2e8f0', fontFamily: 'Heebo' },
-            borderColor: '#475569',
-            borderWidth: 1,
-            padding: [8, 12]
-        },
+        tooltip: { trigger: 'item', triggerOn: 'mousemove', formatter: '{b}', backgroundColor: 'rgba(30,41,59,0.95)', textStyle: { color: '#e2e8f0', fontFamily: 'Heebo' }, borderColor: '#475569', borderWidth: 1, padding: [8, 12] },
         series: [{
             type: 'tree',
             data: [data],
             orient: 'RL',
             top: '8%', left: '20%', bottom: '8%', right: '15%',
             roam: true,
-            label: {
-                position: 'left',
-                verticalAlign: 'middle',
-                align: 'right',
-                fontFamily: 'Heebo',
-                padding: [5, 10],
-                backgroundColor: '#1e293b',
-                borderRadius: 6,
-                shadowColor: 'rgba(0,0,0,0.3)',
-                shadowBlur: 5,
-                shadowOffsetY: 2
-            },
+            label: { position: 'left', verticalAlign: 'middle', align: 'right', fontFamily: 'Heebo', padding: [5, 10], backgroundColor: '#1e293b', borderRadius: 6, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5, shadowOffsetY: 2 },
             leaves: { label: { position: 'right', verticalAlign: 'middle', align: 'left' } },
             lineStyle: { color: '#475569', width: 2, curveness: 0.6 },
             expandAndCollapse: true,
@@ -314,25 +265,19 @@ function initChart(data) {
             initialTreeDepth: 1
         }]
     });
-
     myChart.on('click', function(params) {
         const d = params.data;
         if (d.content || d.actors) showPanel(d);
         else if (d.name === 'מחזור חיים') hidePanel();
     });
-
     window.addEventListener('resize', () => myChart.resize());
 }
-
-// ── Info panel ───────────────────────────────────────────────────────────────────────
 
 function showPanel(d) {
     document.getElementById('info-default').style.display = 'none';
     document.getElementById('info-content-view').style.display = 'block';
-
     document.getElementById('info-title').innerText = d.name;
     document.getElementById('info-desc').innerText  = d.content || 'לא קיים פירוט נוסף לשלב זה.';
-
     const actorsDiv = document.getElementById('info-actors');
     if (d.actors) {
         const list = d.actors.split(',').map(a => a.trim()).filter(Boolean);
@@ -340,7 +285,6 @@ function showPanel(d) {
     } else {
         actorsDiv.innerHTML = '<span style="color:var(--text-sub);font-size:0.9rem;">לא צוינו גורמים מעורבים</span>';
     }
-
     const agentsSection = document.getElementById('agents-section');
     const agentsDiv     = document.getElementById('info-agents');
     if (d.agent) {

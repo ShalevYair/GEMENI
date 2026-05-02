@@ -45,7 +45,10 @@ function openChat() {
     document.getElementById('chat-overlay').style.display = 'flex';
     if (geminiApiKey) {
         document.getElementById('chat-api-section').style.display = 'none';
-        if (!chatWelcomeShown) {
+        const container = document.getElementById('chat-messages');
+        if (container.children.length === 0 && chatHistory.length > 0) {
+            chatHistory.forEach(m => appendChatMessage(m.role === 'user' ? 'user' : 'assistant', m.text));
+        } else if (!chatWelcomeShown) {
             chatWelcomeShown = true;
             appendChatMessage('assistant',
                 'שלום! אני כאן לעזור לך לנווט במפת המחשבה של SDLC.\n' +

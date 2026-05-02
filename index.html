@@ -210,6 +210,16 @@
       var panel = document.getElementById('home-chat-panel');
       panel.hidden = false;
       _chatOpen = true;
+      var msgs = document.getElementById('home-chat-messages');
+      if (msgs.children.length === 0 && _chatHistory.length > 0) {
+        _chatHistory.forEach(function(m) {
+          var div = document.createElement('div');
+          div.className = 'home-chat-msg home-chat-msg-' + (m.role === 'user' ? 'user' : 'assistant');
+          div.textContent = m.parts[0].text;
+          msgs.appendChild(div);
+        });
+        msgs.scrollTop = msgs.scrollHeight;
+      }
       if (_chatApiKey) {
         document.getElementById('home-chat-api-row').style.display = 'none';
       }
@@ -262,7 +272,7 @@
       var body = {
         system_instruction: { parts: [{ text: CHAT_SYSTEM }] },
         contents: _chatHistory,
-        generationConfig: { maxOutputTokens: 1024 }
+        generationConfig: { maxOutputTokens: 8192 }
       };
 
       try {

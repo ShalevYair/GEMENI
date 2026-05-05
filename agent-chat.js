@@ -1,9 +1,9 @@
 import { AGENTS } from './agents-config.js';
 
 const STORAGE_KEY  = 'gemini_api_key';
-const MODEL        = 'gemini-2.5-flash';
+const MODEL_CHAIN  = ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-2.5-flash-lite'];
 const MAX_FILE_MB  = 10;
-const DOWNLOAD_THRESHOLD = 1500; // chars — offer download for long responses
+const DOWNLOAD_THRESHOLD = 1500;
 
 // ── State ─────────────────────────────────────────────────────────────────
 let apiKey          = localStorage.getItem(STORAGE_KEY) || '';
@@ -12,7 +12,8 @@ let isLoading       = false;
 let lastFailed      = null;
 let retryTimer      = null;
 let typingCounter   = 0;
-let pendingFile     = null; // { name, mimeType, data, isInline }
+let pendingFile     = null;
+let modelIdx        = 0; // current position in MODEL_CHAIN
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 const agentId = new URLSearchParams(location.search).get('id');
@@ -92,9 +93,12 @@ function showChatReady() {
 function setHeaderActions(show) {
   const slot = document.getElementById('site-header-actions');
   if (!slot) return;
-  slot.innerHTML = show ? `
+  if (!show) { slot.innerHTML = ''; return; }
+  const modelLabel = MODEL_CHAIN[modelIdx] || MODEL_CHAIN[0];
+  slot.innerHTML = `
+    <span class="site-header-model-tag" title="מודל פעיל">${modelLabel}</span>
     <button class="site-header-btn" onclick="clearChat()" title="נקה שיחה">🗑</button>
-    <button class="site-header-btn" onclick="changeApiKey()" title="החלף מפתח API">🔑</button>` : '';
+    <button class="site-header-btn" onclick="changeApiKey()" title="החלף מפתח API">🔑</button>`;
 }
 
 // ── Empty state / suggestions ─────────────────────────────────────────────
@@ -276,7 +280,7 @@ async function callGemini(userText, file) {
     { role: 'user', parts: userParts },
   ];
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[modelIdx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -323,18 +327,64 @@ function buildUserParts(text, file) {
 }
 
 // ── Error handling ────────────────────────────────────────────────────────
+function isQuotaExceeded(msg) {
+  return /quota|exceeded your current quota|free_tier|generativelanguage.*requests/i.test(msg);
+}
+
 function handleError(err) {
   const msg = err.message || '';
   if (/API_KEY|401|403|INVALID|api key/i.test(msg)) {
     apiKey = '';
     localStorage.removeItem(STORAGE_KEY);
-    document.getElementById('api-banner').hidden   = false;
-    document.getElementById('chat-toolbar').hidden = true;
+    document.getElementById('api-banner').hidden = false;
+    setHeaderActions(false);
     appendMessage('error', 'מפתח ה-API אינו תקף. אנא הזן מפתח חדש.');
+  } else if (isQuotaExceeded(msg)) {
+    handleQuotaError();
   } else if (/429|overload|high demand|503/i.test(msg)) {
     startRetryCountdown();
   } else {
     appendMessage('error', 'שגיאה: ' + msg);
+  }
+}
+
+function handleQuotaError() {
+  const exhausted = modelIdx >= MODEL_CHAIN.length - 1;
+  if (!exhausted) {
+    const fromModel = MODEL_CHAIN[modelIdx];
+    modelIdx++;
+    const toModel = MODEL_CHAIN[modelIdx];
+    appendMessage('error',
+      `⚠️ הגעת למגבלת השימוש היומית של ${fromModel}.\n` +
+      `עובר אוטומטית ל-${toModel}... 🔄`
+    );
+    switchModelAndRetry();
+  } else {
+    appendMessage('error',
+      `⚠️ הגעת למגבלת השימוש היומית בכל המודלים הזמינים.\n` +
+      `ניתן לבדוק את המגבלות ולנסות שוב מחר:\n` +
+      `👉 <a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener">aistudio.google.com/rate-limit</a>`
+    );
+  }
+}
+
+async function switchModelAndRetry() {
+  if (!lastFailed) return;
+  setHeaderActions(true); // refresh header to show new model name
+  await new Promise(r => setTimeout(r, 800));
+  const typingId = appendTyping();
+  setLoading(true);
+  try {
+    const reply = await callGemini(lastFailed.text, lastFailed.file);
+    removeTyping(typingId);
+    document.getElementById('chat-messages').querySelectorAll('.chat-msg-error').forEach(el => el.remove());
+    appendMessage('assistant', reply);
+    lastFailed = null;
+  } catch (err) {
+    removeTyping(typingId);
+    handleError(err);
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -413,7 +463,8 @@ function appendMessage(role, text) {
   wrapper.className = `chat-msg chat-msg-${role}`;
   const bubble = document.createElement('div');
   bubble.className  = 'chat-bubble';
-  bubble.innerHTML  = formatText(text);
+  // error messages may contain trusted HTML (e.g. links); assistant/user content is escaped
+  bubble.innerHTML  = role === 'error' ? text.replace(/\n/g, '<br>') : formatText(text);
   wrapper.appendChild(bubble);
 
   if (role === 'assistant' && text.length >= DOWNLOAD_THRESHOLD) {

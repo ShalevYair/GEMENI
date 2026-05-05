@@ -925,6 +925,18 @@ code {
   gap: 6px;
 }
 
+.site-header-model-tag {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: .2rem .65rem;
+  white-space: nowrap;
+}
+body.dark-mode .site-header-model-tag { background: #162032; border-color: #334155; color: #64748b; }
+
 .site-header-btn {
   background: none;
   border: 1px solid var(--border);

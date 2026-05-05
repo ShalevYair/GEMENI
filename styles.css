@@ -41,11 +41,12 @@ body {
   background: var(--bg-gradient);
   background-attachment: fixed;
   color: var(--text);
-  min-height: 100vh;
+  height: 100vh;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 body.dark-mode {
@@ -908,6 +909,20 @@ code {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+}
+
+.site-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.site-header-action-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .site-header-btn {
@@ -968,11 +983,12 @@ body.dark-mode .site-header-btn:hover { background: #253349; border-color: #60a5
   padding: 1.1rem 1rem;
   text-decoration: none;
   border-bottom: 1px solid var(--border-soft);
-  background: linear-gradient(135deg, #f7faff 0%, #f0f4fb 100%);
+  background: var(--surface-alt);
   flex-shrink: 0;
 }
 
 .sidebar-brand:hover { text-decoration: none; }
+body.dark-mode .sidebar-brand { background: #162032; border-color: #253349; }
 
 .sidebar-logo {
   width: 36px;
@@ -1111,8 +1127,12 @@ a.nav-item:hover {
 .app-content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   background: var(--bg-gradient);
   background-attachment: fixed;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
 }
 
 /* Mobile sidebar toggle button */
@@ -1144,22 +1164,10 @@ a.nav-item:hover {
 }
 
 .home-hero {
-  background: linear-gradient(135deg, #0070d2 0%, #6f42c1 100%);
-  color: #fff;
-  padding: 4rem 1.5rem 5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 2.5rem 1.5rem 2rem;
   text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.home-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 15% 25%, rgba(255,255,255,0.14) 0%, transparent 40%),
-    radial-gradient(circle at 85% 75%, rgba(255,255,255,0.09) 0%, transparent 40%);
-  pointer-events: none;
 }
 
 .home-hero-content {
@@ -1180,8 +1188,9 @@ a.nav-item:hover {
 
 .home-hero-badge {
   display: inline-block;
-  background: rgba(255,255,255,0.16);
-  border: 1px solid rgba(255,255,255,0.28);
+  background: var(--brand-light);
+  border: 1px solid var(--border);
+  color: var(--brand);
   padding: 0.32rem 1rem;
   border-radius: 999px;
   font-size: 0.78rem;
@@ -1190,24 +1199,25 @@ a.nav-item:hover {
 }
 
 .home-hero h1 {
-  font-size: 3rem;
+  font-size: 2.4rem;
   font-weight: 800;
-  letter-spacing: -1.5px;
+  letter-spacing: -1px;
+  color: var(--text);
   margin-bottom: 0.75rem;
 }
 
 .home-hero-tagline {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 400;
-  opacity: 0.95;
+  color: var(--text-soft);
   line-height: 1.65;
   margin-bottom: 0.6rem;
 }
 
 .home-hero-sub {
-  font-size: 0.95rem;
-  font-weight: 300;
-  opacity: 0.82;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--muted);
   line-height: 1.65;
 }
 
@@ -1216,19 +1226,19 @@ a.nav-item:hover {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  margin-top: 1.75rem;
+  margin-top: 1.25rem;
   flex-wrap: wrap;
 }
 
 .home-hero-ctrl-btn {
-  background: rgba(255,255,255,0.15);
-  border: 1px solid rgba(255,255,255,0.35);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0.45rem 1.1rem;
   font-size: 0.88rem;
   font-family: 'Heebo', sans-serif;
   font-weight: 600;
-  color: #fff;
+  color: var(--text);
   cursor: pointer;
   transition: background 0.18s, border-color 0.18s;
   text-decoration: none;
@@ -1239,15 +1249,16 @@ a.nav-item:hover {
 }
 
 .home-hero-ctrl-btn:hover {
-  background: rgba(255,255,255,0.28);
-  border-color: rgba(255,255,255,0.6);
-  color: #fff;
+  background: var(--brand-light);
+  border-color: var(--brand);
+  color: var(--brand);
   text-decoration: none;
 }
 
 .home-hero-ctrl-btn-open {
-  background: rgba(255,255,255,0.22);
-  border-color: rgba(255,255,255,0.5);
+  background: var(--brand-light);
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 .home-section {
@@ -1685,7 +1696,8 @@ body.dark-mode .home-chat-input { background: #0f172a; border-color: #334155; co
 .agent-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 

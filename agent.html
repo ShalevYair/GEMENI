@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>סוכן — אגם הסוכנים</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <meta name="theme-color" content="#0070d2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <!-- mammoth for Word extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+</head>
+<body>
+  <div class="agent-page">
+
+    <!-- ── Hero ── -->
+    <header class="agent-hero">
+      <div class="agent-hero-inner">
+        <div class="agent-hero-icon" id="hero-icon"></div>
+        <div class="agent-hero-text">
+          <div class="agent-hero-badge" id="hero-badge"></div>
+          <h1 id="hero-title"></h1>
+          <p id="hero-desc"></p>
+        </div>
+        <div class="agent-hero-caps" id="hero-caps"></div>
+      </div>
+    </header>
+
+    <!-- ── Chat area ── -->
+    <div class="chat-area">
+
+      <!-- API key banner -->
+      <div id="api-banner" class="chat-api-banner">
+        <label for="api-key-input">מפתח Gemini API</label>
+        <input type="password" id="api-key-input" placeholder="AIza..." dir="ltr"
+               autocomplete="off" spellcheck="false"
+               onkeydown="if(event.key==='Enter') saveApiKey()" />
+        <button onclick="saveApiKey()">התחל</button>
+        <span class="chat-api-hint">
+          נשמר בזיכרון הדפדפן בלבד ·
+          <a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener">השג מפתח חינמי</a>
+        </span>
+      </div>
+
+      <!-- Toolbar -->
+      <div id="chat-toolbar" class="chat-toolbar" hidden>
+        <span class="chat-toolbar-info" id="toolbar-info"></span>
+        <button class="chat-toolbar-btn" onclick="clearChat()">נקה שיחה</button>
+        <button class="chat-toolbar-btn" onclick="changeApiKey()">החלף מפתח</button>
+      </div>
+
+      <!-- Messages -->
+      <div class="chat-messages" id="chat-messages"></div>
+
+      <!-- Input area -->
+      <div id="chat-input-wrapper" class="chat-input-wrapper">
+        <div class="chat-input-bar">
+          <button class="chat-attach-btn" id="file-btn" title="צרף קובץ (PDF, Word, תמונה, טקסט)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.41a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+          <input type="file" id="file-input" accept=".pdf,.docx,.txt,.csv,.json,.md,.png,.jpg,.jpeg,.gif,.webp" hidden />
+          <textarea id="chat-input" rows="1"
+            placeholder="כתוב הודעה... (ניתן גם לצרף קובץ)"></textarea>
+          <button class="chat-send-btn" id="send-btn" onclick="sendMessage()" title="שלח (Enter)">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <div class="chat-input-hint">Enter לשליחה · Shift+Enter לשורה חדשה · 📎 לצירוף קובץ</div>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="agent-chat.js"></script>
+  <script type="module" src="nav.js"></script>
+</body>
+</html>

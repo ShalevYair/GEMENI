@@ -1,5 +1,5 @@
 const AGENTS = [
-  { id: 'requirements',        name: 'אוסף הדרישות',          icon: '📋', href: null },
+  { id: 'requirements',        name: 'אוסף הדרישות',          icon: '📋', href: 'requirements-agent.html' },
   { id: 'project-manager',     name: 'מנהל הפרויקט',           icon: '📊', href: null },
   { id: 'project-coordinator', name: 'רכזת הפרויקטים',         icon: '🗂️', href: null },
   { id: 'spec-king',           name: 'מלך האיפיונים',           icon: '👑', href: null },
@@ -17,7 +17,8 @@ const AGENTS = [
 
 function getActiveId() {
   const page = location.pathname.split('/').pop() || 'index.html';
-  if (page === 'sf-agent.html')    return 'salesforce';
+  if (page === 'sf-agent.html')         return 'salesforce';
+  if (page === 'requirements-agent.html') return 'requirements';
   if (page === 'admin.html')       return 'salesforce';
   if (page === 'SDLCMindMap.html') return 'mindmap';
   return null;

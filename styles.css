@@ -1937,6 +1937,27 @@ body.dark-mode .home-chat-input { background: #0f172a; border-color: #334155; co
   border-bottom-right-radius: 4px;
 }
 
+/* Download button for long assistant responses */
+.chat-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin-top: .45rem;
+  padding: .32rem .85rem;
+  font-size: .78rem;
+  font-family: 'Heebo', sans-serif;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-light);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.chat-download-btn:hover { background: #c8e4f8; border-color: var(--brand); }
+body.dark-mode .chat-download-btn { background: rgba(96,165,250,.12); color: #60a5fa; border-color: #334155; }
+body.dark-mode .chat-download-btn:hover { background: rgba(96,165,250,.22); border-color: #60a5fa; }
+
 /* File bubble inside user message */
 .chat-file-bubble {
   display: inline-flex;

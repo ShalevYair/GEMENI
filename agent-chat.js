@@ -3,6 +3,7 @@ import { AGENTS } from './agents-config.js';
 const STORAGE_KEY  = 'gemini_api_key';
 const MODEL        = 'gemini-2.5-flash';
 const MAX_FILE_MB  = 10;
+const DOWNLOAD_THRESHOLD = 1500; // chars — offer download for long responses
 
 // ── State ─────────────────────────────────────────────────────────────────
 let apiKey          = localStorage.getItem(STORAGE_KEY) || '';
@@ -414,8 +415,31 @@ function appendMessage(role, text) {
   bubble.className  = 'chat-bubble';
   bubble.innerHTML  = formatText(text);
   wrapper.appendChild(bubble);
+
+  if (role === 'assistant' && text.length >= DOWNLOAD_THRESHOLD) {
+    const dlBtn = document.createElement('button');
+    dlBtn.className   = 'chat-download-btn';
+    dlBtn.title       = 'הורד תשובה כקובץ';
+    dlBtn.innerHTML   = '⬇ הורד כקובץ';
+    dlBtn.addEventListener('click', () => downloadResponse(text));
+    wrapper.appendChild(dlBtn);
+  }
+
   msgs.appendChild(wrapper);
   msgs.scrollTop = msgs.scrollHeight;
+}
+
+function downloadResponse(text) {
+  const ts   = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  const name = agent ? agent.name.replace(/\s+/g, '-') : 'response';
+  const filename = `${name}_${ts}.md`;
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function appendTyping() {

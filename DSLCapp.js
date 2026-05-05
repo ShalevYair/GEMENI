@@ -5,20 +5,20 @@ let fontScale = 1;
 const BASE_FONT_SIZES = { root: 18, stage: 15, subStage: 14, minor: 13 };
 
 const AGENT_MAP = {
-    'ארזסטרטור':       { display: 'ארזסטרטור',        url: 'https://gemini.google.com/gem/1wrap8ggsEfWEFnU9m6EH7xbj0Wz5mxr8?usp=sharing', external: true },
-    'סוכן PMO':        { display: 'רכזת הפרויקטים',   url: 'agent.html?id=project-coordinator' },
-    'סוכן Make or Buy':{ display: 'לעשות או לקנות',   url: 'https://gemini.google.com/gem/1Q1Mv-H2Df1XRTAxTGp3J0RjPbJRuIdnC?usp=sharing', external: true },
-    'סוכן אפיון':      { display: 'מלך האיפיונים',    url: 'agent.html?id=spec-king' },
-    'סוכן Design':     { display: 'ארכיטקט התוכנה',   url: 'agent.html?id=software-architect' },
-    'סוכן UX/UI':      { display: 'מלכת העיצובים',   url: 'agent.html?id=design-queen' },
-    'סוכן פיתוח':      { display: 'אלוף הפיתוחים',   url: 'agent.html?id=dev-champ' },
+    'ארזסטרטור':       { display: 'רכזת הפרויקטים',      url: 'agent.html?id=project-coordinator' },
+    'סוכן PMO':        { display: 'רכזת הפרויקטים',      url: 'agent.html?id=project-coordinator' },
+    'סוכן Make or Buy':{ display: 'ארכיטקט הפלטפורמות',  url: 'agent.html?id=platform-architect' },
+    'סוכן אפיון':      { display: 'מלך האיפיונים',       url: 'agent.html?id=spec-king' },
+    'סוכן Design':     { display: 'ארכיטקט התוכנה',      url: 'agent.html?id=software-architect' },
+    'סוכן UX/UI':      { display: 'מלכת העיצובים',      url: 'agent.html?id=design-queen' },
+    'סוכן פיתוח':      { display: 'אלוף הפיתוחים',      url: 'agent.html?id=dev-champ' },
     'סוכן פלטפורמה':   { display: 'ארכיטקט הפלטפורמות', url: 'agent.html?id=platform-architect' },
-    'סוכן בדיקות':     { display: 'הבודק',            url: 'agent.html?id=tester' },
-    'סוכן Security':   { display: 'המאבטח',           url: 'agent.html?id=security' },
-    'סוכן Deployment': { display: 'הפורס',            url: 'https://gemini.google.com/gem/1A4ubxJYigEb_uae1IJl73b52PT5yCYpm?usp=sharing', external: true },
-    'סוכן Monitoring': { display: 'הצופה',            url: 'https://gemini.google.com/gem/1sfViXXZyyYPF0yjo5Q4dXp8OEkjFsgLX?usp=sharing', external: true },
-    'סוכן דוקומנטציה': { display: 'המתעד',            url: 'https://gemini.google.com/gem/1s4nP3PEJKavBYYn_i2B3aCIj2w4xYikN?usp=sharing', external: true },
-    'סוכן ספקים':      { display: 'מפעיל הספקים',    url: 'https://gemini.google.com/gem/1M_HZABG7nLvPtg_I7IQNXH2gOp02Vqu6?usp=sharing', external: true }
+    'סוכן בדיקות':     { display: 'הבודק',               url: 'agent.html?id=tester' },
+    'סוכן Security':   { display: 'המאבטח',              url: 'agent.html?id=security' },
+    'סוכן Deployment': { display: 'ארכיטקט הפלטפורמות',  url: 'agent.html?id=platform-architect' },
+    'סוכן Monitoring': { display: 'ארכיטקט התוכנה',      url: 'agent.html?id=software-architect' },
+    'סוכן דוקומנטציה': { display: 'מלך האיפיונים',       url: 'agent.html?id=spec-king' },
+    'סוכן ספקים':      { display: 'מנהל הפרויקט',        url: 'agent.html?id=project-manager' }
 };
 
 function changeFontSize(step) {
@@ -292,9 +292,7 @@ function showPanel(d) {
         const names = d.agent.split(',').map(a => a.trim()).filter(Boolean);
         agentsDiv.innerHTML = names.map(name => {
             const info = AGENT_MAP[name];
-            if (info) return info.external
-                ? `<a class="agent-tag" href="${info.url}" target="_blank" rel="noopener noreferrer">${info.display} ↗</a>`
-                : `<a class="agent-tag" href="${info.url}">${info.display} →</a>`;
+            if (info) return `<a class="agent-tag" href="${info.url}">${info.display}</a>`;
             return `<span class="agent-tag agent-tag-plain">${name}</span>`;
         }).join('');
     } else {

@@ -1,7 +1,7 @@
 import { AGENTS } from './agents-config.js';
 
 const STORAGE_KEY  = 'gemini_api_key';
-const MODEL_CHAIN  = ['gemini-2.5-flash', 'gemini-3-flash', 'gemini-2.5-flash-lite'];
+const MODEL_CHAIN  = ['gemini-2.5-flash', 'gemini-3.0-flash', 'gemini-2.5-flash-lite'];
 const MAX_FILE_MB  = 10;
 const DOWNLOAD_THRESHOLD = 1500;
 

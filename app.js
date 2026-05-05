@@ -7,7 +7,7 @@ const MAX_OUTPUT_TOKENS = 65000;
 const TOTAL_CHUNKS = 3;
 
 // --- State ---
-let apiKey = '';
+let apiKey = localStorage.getItem('gemini_sf_api_key') || '';
 let fsdText = '';
 let fsdFile = null;
 let deployedState = '';
@@ -192,6 +192,7 @@ function openApiKeyModal() {
         apikeyInput.focus();
         return;
       }
+      localStorage.setItem('gemini_sf_api_key', v);
       cleanup();
       resolve(v);
     };
@@ -432,6 +433,7 @@ async function callGemini(chunkNumber) {
     } catch {}
     if (response.status === 400 || response.status === 403) {
       apiKey = '';
+      localStorage.removeItem('gemini_sf_api_key');
       msg += ' — ייתכן שמפתח ה-API שגוי. נסה שוב.';
     }
     throw new Error(msg);

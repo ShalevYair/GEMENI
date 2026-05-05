@@ -25,21 +25,11 @@ document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
 });
 
-// ── Hero ──────────────────────────────────────────────────────────────────
+// ── Page title ────────────────────────────────────────────────────────────
 function populateHero() {
   document.title = `${agent.name} — אגם הסוכנים`;
-  document.getElementById('hero-icon').textContent  = agent.icon;
-  document.getElementById('hero-badge').textContent = `אגם הסוכנים · ${agent.badge}`;
-  document.getElementById('hero-title').textContent = agent.name;
-  document.getElementById('hero-desc').textContent  = agent.description;
-
-  const capsEl = document.getElementById('hero-caps');
-  agent.caps.forEach(cap => {
-    const pill = document.createElement('span');
-    pill.className   = 'cap-pill';
-    pill.textContent = cap;
-    capsEl.appendChild(pill);
-  });
+  const titleEl = document.getElementById('site-header-title');
+  if (titleEl) titleEl.textContent = `${agent.icon} ${agent.name}`;
 }
 
 function showNotFound() {

@@ -43,30 +43,22 @@ function buildSidebar() {
     <a href="SDLCMindMap.html" class="nav-item ${activeId === 'mindmap' ? 'nav-item-active' : ''}" title="מפת SDLC">
       <span class="nav-icon">🗺</span>
       <span class="nav-name">מפת SDLC</span>
-      <span class="nav-badge nav-badge-active">פעיל</span>
     </a>`;
 
   const agentItems = AGENTS.map(a => {
-    const href      = agentHref(a.id);
-    const active    = a.id === activeId;
-    const available = !!href;
-    const badge     = available
-      ? `<span class="nav-badge nav-badge-active">פעיל</span>`
-      : `<span class="nav-badge nav-badge-soon">בקרוב</span>`;
-
-    if (available) {
+    const href   = agentHref(a.id);
+    const active = a.id === activeId;
+    if (href) {
       return `
         <a href="${href}" class="nav-item ${active ? 'nav-item-active' : ''}" title="${a.name}">
           <span class="nav-icon">${a.icon}</span>
           <span class="nav-name">${a.name}</span>
-          ${badge}
         </a>`;
     }
     return `
       <span class="nav-item nav-item-disabled" title="${a.name} — בקרוב">
         <span class="nav-icon">${a.icon}</span>
         <span class="nav-name">${a.name}</span>
-        ${badge}
       </span>`;
   }).join('');
 
@@ -89,9 +81,36 @@ function buildSidebar() {
     </div>`;
 }
 
+function buildSiteHeader() {
+  const page = location.pathname.split('/').pop() || 'index.html';
+  if (page === 'SDLCMindMap.html') return '';
+  const rawTitle = document.title || 'אגם הסוכנים';
+  const title = rawTitle.split('—')[0].trim();
+  return `
+    <header class="site-header" id="site-header">
+      <span class="site-header-title" id="site-header-title">${title}</span>
+      <button class="site-header-btn" id="site-dark-btn" onclick="toggleSiteDarkMode()" title="מצב בהיר/כהה">☀</button>
+    </header>`;
+}
+
+function applyStoredDarkMode() {
+  const val = localStorage.getItem('sdlc-dark-mode');
+  if (val === 'dark') document.body.classList.add('dark-mode');
+  const btn = document.getElementById('site-dark-btn');
+  if (btn) btn.textContent = document.body.classList.contains('dark-mode') ? '☾' : '☀';
+}
+
+window.toggleSiteDarkMode = function () {
+  const isDark = document.body.classList.toggle('dark-mode');
+  localStorage.setItem('sdlc-dark-mode', isDark ? 'dark' : 'light');
+  const btn = document.getElementById('site-dark-btn');
+  if (btn) btn.textContent = isDark ? '☾' : '☀';
+};
+
 function injectSidebar() {
   const existingContent = document.body.innerHTML;
   document.body.innerHTML = `
+    ${buildSiteHeader()}
     <div class="app-layout">
       <aside class="sidebar" id="sidebar" aria-label="תפריט ראשי">
         ${buildSidebar()}
@@ -102,6 +121,7 @@ function injectSidebar() {
     </div>
     <button class="sidebar-toggle" id="sidebar-toggle" aria-label="פתח/סגור תפריט" aria-expanded="false">☰</button>
   `;
+  applyStoredDarkMode();
   const toggle  = document.getElementById('sidebar-toggle');
   const sidebar = document.getElementById('sidebar');
   toggle.addEventListener('click', () => {

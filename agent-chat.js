@@ -5,7 +5,7 @@ const MODEL        = 'gemini-2.5-flash';
 const MAX_FILE_MB  = 10;
 
 // ── State ─────────────────────────────────────────────────────────────────
-let apiKey          = sessionStorage.getItem(STORAGE_KEY) || '';
+let apiKey          = localStorage.getItem(STORAGE_KEY) || '';
 let chatHistory     = [];
 let isLoading       = false;
 let lastFailed      = null;
@@ -69,25 +69,31 @@ window.saveApiKey = function () {
   const key = document.getElementById('api-key-input').value.trim();
   if (!key) return;
   apiKey = key;
-  sessionStorage.setItem(STORAGE_KEY, key);
+  localStorage.setItem(STORAGE_KEY, key);
   showChatReady();
   document.getElementById('chat-input').focus();
 };
 
 window.changeApiKey = function () {
   apiKey = '';
-  sessionStorage.removeItem(STORAGE_KEY);
-  document.getElementById('api-banner').hidden  = false;
-  document.getElementById('chat-toolbar').hidden = true;
+  localStorage.removeItem(STORAGE_KEY);
+  document.getElementById('api-banner').hidden = false;
   document.getElementById('api-key-input').value = '';
   document.getElementById('api-key-input').focus();
+  setHeaderActions(false);
 };
 
 function showChatReady() {
-  document.getElementById('api-banner').hidden   = false; // keep hidden via attribute set below
-  document.getElementById('api-banner').hidden   = true;
-  document.getElementById('chat-toolbar').hidden = false;
-  document.getElementById('toolbar-info').textContent = `מחובר ל-Gemini · ${MODEL}`;
+  document.getElementById('api-banner').hidden = true;
+  setHeaderActions(true);
+}
+
+function setHeaderActions(show) {
+  const slot = document.getElementById('site-header-actions');
+  if (!slot) return;
+  slot.innerHTML = show ? `
+    <button class="site-header-btn" onclick="clearChat()" title="נקה שיחה">🗑</button>
+    <button class="site-header-btn" onclick="changeApiKey()" title="החלף מפתח API">🔑</button>` : '';
 }
 
 // ── Empty state / suggestions ─────────────────────────────────────────────
@@ -320,7 +326,7 @@ function handleError(err) {
   const msg = err.message || '';
   if (/API_KEY|401|403|INVALID|api key/i.test(msg)) {
     apiKey = '';
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     document.getElementById('api-banner').hidden   = false;
     document.getElementById('chat-toolbar').hidden = true;
     appendMessage('error', 'מפתח ה-API אינו תקף. אנא הזן מפתח חדש.');

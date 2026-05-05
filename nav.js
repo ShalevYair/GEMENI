@@ -89,15 +89,22 @@ function buildSiteHeader() {
   return `
     <header class="site-header" id="site-header">
       <span class="site-header-title" id="site-header-title">${title}</span>
-      <button class="site-header-btn" id="site-dark-btn" onclick="toggleSiteDarkMode()" title="מצב בהיר/כהה">☀</button>
+      <div class="site-header-controls">
+        <div id="site-header-actions" class="site-header-action-group"></div>
+        <button class="site-header-btn" onclick="changeSiteFontSize(1)" title="הגדל טקסט">+</button>
+        <button class="site-header-btn" onclick="changeSiteFontSize(-1)" title="הקטן טקסט">−</button>
+        <button class="site-header-btn" id="site-dark-btn" onclick="toggleSiteDarkMode()" title="מצב בהיר/כהה">☀</button>
+      </div>
     </header>`;
 }
 
-function applyStoredDarkMode() {
-  const val = localStorage.getItem('sdlc-dark-mode');
-  if (val === 'dark') document.body.classList.add('dark-mode');
+function applyStoredPreferences() {
+  const mode = localStorage.getItem('sdlc-dark-mode');
+  if (mode === 'dark') document.body.classList.add('dark-mode');
   const btn = document.getElementById('site-dark-btn');
   if (btn) btn.textContent = document.body.classList.contains('dark-mode') ? '☾' : '☀';
+  const sz = parseFloat(localStorage.getItem('sdlc-font-size') || '16');
+  if (sz !== 16) document.documentElement.style.fontSize = sz + 'px';
 }
 
 window.toggleSiteDarkMode = function () {
@@ -105,6 +112,13 @@ window.toggleSiteDarkMode = function () {
   localStorage.setItem('sdlc-dark-mode', isDark ? 'dark' : 'light');
   const btn = document.getElementById('site-dark-btn');
   if (btn) btn.textContent = isDark ? '☾' : '☀';
+};
+
+window.changeSiteFontSize = function (step) {
+  const cur  = parseFloat(localStorage.getItem('sdlc-font-size') || '16');
+  const next = Math.max(13, Math.min(21, cur + step));
+  document.documentElement.style.fontSize = next + 'px';
+  localStorage.setItem('sdlc-font-size', next);
 };
 
 function injectSidebar() {
@@ -121,7 +135,7 @@ function injectSidebar() {
     </div>
     <button class="sidebar-toggle" id="sidebar-toggle" aria-label="פתח/סגור תפריט" aria-expanded="false">☰</button>
   `;
-  applyStoredDarkMode();
+  applyStoredPreferences();
   const toggle  = document.getElementById('sidebar-toggle');
   const sidebar = document.getElementById('sidebar');
   toggle.addEventListener('click', () => {

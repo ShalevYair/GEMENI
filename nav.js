@@ -1,8 +1,8 @@
 const AGENTS = [
   { id: 'requirements',        name: 'אוסף הדרישות',          icon: '📋', href: 'requirements-agent.html' },
-  { id: 'project-manager',     name: 'מנהל הפרויקט',           icon: '📊', href: null },
-  { id: 'project-coordinator', name: 'רכזת הפרויקטים',         icon: '🗂️', href: null },
-  { id: 'spec-king',           name: 'מלך האיפיונים',           icon: '👑', href: null },
+  { id: 'project-manager',     name: 'מנהל הפרויקט',           icon: '📊', href: 'project-manager-agent.html' },
+  { id: 'project-coordinator', name: 'רכזת הפרויקטים',         icon: '🗂️', href: 'project-coordinator-agent.html' },
+  { id: 'spec-king',           name: 'מלך האיפיונים',           icon: '👑', href: 'spec-king-agent.html' },
   { id: 'software-architect',  name: 'ארכיטקט התוכנה',          icon: '🏗️', href: null },
   { id: 'platform-architect',  name: 'ארכיטקט הפלטפורמות',      icon: '⚙️', href: null },
   { id: 'tender-writer',       name: 'כותב המכרזים',            icon: '📝', href: null },
@@ -18,7 +18,10 @@ const AGENTS = [
 function getActiveId() {
   const page = location.pathname.split('/').pop() || 'index.html';
   if (page === 'sf-agent.html')         return 'salesforce';
-  if (page === 'requirements-agent.html') return 'requirements';
+  if (page === 'requirements-agent.html')        return 'requirements';
+  if (page === 'project-manager-agent.html')     return 'project-manager';
+  if (page === 'project-coordinator-agent.html') return 'project-coordinator';
+  if (page === 'spec-king-agent.html')           return 'spec-king';
   if (page === 'admin.html')       return 'salesforce';
   if (page === 'SDLCMindMap.html') return 'mindmap';
   return null;

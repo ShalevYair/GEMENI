@@ -1,9 +1,11 @@
 import { AGENTS } from './agents-config.js';
 
-const STORAGE_KEY  = 'gemini_api_key';
-const MODEL_CHAIN  = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
-const MAX_FILE_MB  = 10;
-const DOWNLOAD_THRESHOLD = 1500;
+const STORAGE_KEY       = 'gemini_api_key';
+const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
+const MAX_FILE_MB       = 10;
+const MAX_OUTPUT_TOKENS = 65000;
+const CHUNK_SIZE        = 50000;  // chars per input chunk for large text files
+const DOWNLOAD_THRESHOLD = 3000; // responses longer than this are auto-downloaded
 
 // ── State ─────────────────────────────────────────────────────────────────
 let apiKey          = localStorage.getItem(STORAGE_KEY) || '';
@@ -259,7 +261,7 @@ window.sendMessage = async function () {
   setLoading(true);
 
   try {
-    const reply = await callGemini(userText, fileCopy);
+    const reply = await executeCall(userText, fileCopy, typingId);
     removeTyping(typingId);
     appendMessage('assistant', reply);
     lastFailed = null;
@@ -287,7 +289,7 @@ async function callGemini(userText, file) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: agent.systemPrompt }] },
       contents,
-      generationConfig: { maxOutputTokens: 8192, temperature: 0.2 },
+      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
     }),
   });
 
@@ -324,6 +326,86 @@ function buildUserParts(text, file) {
     parts.push({ text: combined });
   }
   return parts;
+}
+
+// ── Single-shot Gemini call (no history, no history update) ───────────────
+async function callGeminiOnce(promptText) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[modelIdx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: agent.systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: promptText }] }],
+      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return data.candidates[0].content.parts.map(p => p.text).join('');
+}
+
+async function callGeminiOnceWithFallback(promptText) {
+  while (true) {
+    try {
+      return await callGeminiOnce(promptText);
+    } catch (err) {
+      if (isQuotaExceeded(err.message) && modelIdx < MODEL_CHAIN.length - 1) {
+        const from = MODEL_CHAIN[modelIdx++];
+        setHeaderActions(true);
+        appendMessage('error', `⚠️ הגעת למגבלת השימוש של ${from}. עובר ל-${MODEL_CHAIN[modelIdx]}... 🔄`);
+        await new Promise(r => setTimeout(r, 800));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+// ── Chunked processing for large text files ────────────────────────────────
+async function sendChunked(userText, file, typingId) {
+  const chunks = [];
+  for (let i = 0; i < file.text.length; i += CHUNK_SIZE) {
+    chunks.push(file.text.slice(i, i + CHUNK_SIZE));
+  }
+  const total = chunks.length;
+  const partResults = [];
+
+  for (let i = 0; i < total; i++) {
+    updateTyping(typingId, `מעבד חלק ${i + 1} מתוך ${total}...`);
+    const prompt =
+      `תוכן הקובץ "${file.name}" (חלק ${i + 1} מתוך ${total}):\n\n${chunks[i]}` +
+      (userText ? `\n\nבקשת המשתמש: ${userText}` : '');
+    partResults.push(await callGeminiOnceWithFallback(prompt));
+  }
+
+  let combined;
+  if (total === 1) {
+    combined = partResults[0];
+  } else {
+    updateTyping(typingId, 'מאחד תוצאות...');
+    const synthPrompt =
+      `עיבדתי את הקובץ "${file.name}" (${total} חלקים). להלן תוצאות כל חלק:\n\n` +
+      partResults.map((r, i) => `=== חלק ${i + 1} מתוך ${total} ===\n${r}`).join('\n\n---\n\n') +
+      (userText ? `\n\nבקשת המשתמש המקורית: ${userText}\n\n` : '\n\n') +
+      'אנא ספק תשובה מלאה וקוהרנטית המשלבת את כל המידע מהחלקים לעיל.';
+    combined = await callGeminiOnceWithFallback(synthPrompt);
+  }
+
+  const histText = `[קובץ מצורף: ${file.name}]${userText ? '\n' + userText : ''}`;
+  chatHistory.push({ role: 'user',  text: histText });
+  chatHistory.push({ role: 'model', text: combined });
+  return combined;
+}
+
+async function executeCall(userText, file, typingId) {
+  if (file && !file.isInline && file.text && file.text.length > CHUNK_SIZE) {
+    return sendChunked(userText, file, typingId);
+  }
+  return callGemini(userText, file);
 }
 
 // ── Error handling ────────────────────────────────────────────────────────
@@ -370,12 +452,12 @@ function handleQuotaError() {
 
 async function switchModelAndRetry() {
   if (!lastFailed) return;
-  setHeaderActions(true); // refresh header to show new model name
+  setHeaderActions(true);
   await new Promise(r => setTimeout(r, 800));
   const typingId = appendTyping();
   setLoading(true);
   try {
-    const reply = await callGemini(lastFailed.text, lastFailed.file);
+    const reply = await executeCall(lastFailed.text, lastFailed.file, typingId);
     removeTyping(typingId);
     document.getElementById('chat-messages').querySelectorAll('.chat-msg-error').forEach(el => el.remove());
     appendMessage('assistant', reply);
@@ -422,7 +504,7 @@ window.retryNow = async function () {
   const typingId = appendTyping();
   setLoading(true);
   try {
-    const reply = await callGemini(lastFailed.text, lastFailed.file);
+    const reply = await executeCall(lastFailed.text, lastFailed.file, typingId);
     removeTyping(typingId);
     appendMessage('assistant', reply);
     lastFailed = null;
@@ -463,17 +545,19 @@ function appendMessage(role, text) {
   wrapper.className = `chat-msg chat-msg-${role}`;
   const bubble = document.createElement('div');
   bubble.className  = 'chat-bubble';
-  // error messages may contain trusted HTML (e.g. links); assistant/user content is escaped
-  bubble.innerHTML  = role === 'error' ? text.replace(/\n/g, '<br>') : formatText(text);
-  wrapper.appendChild(bubble);
 
-  if (role === 'assistant' && text.length >= DOWNLOAD_THRESHOLD) {
+  if (role === 'assistant' && text.length > DOWNLOAD_THRESHOLD) {
+    bubble.innerHTML = '📥 הפלט ארוך — מוריד קובץ אוטומטית...';
     const dlBtn = document.createElement('button');
-    dlBtn.className   = 'chat-download-btn';
-    dlBtn.title       = 'הורד תשובה כקובץ';
-    dlBtn.innerHTML   = '⬇ הורד כקובץ';
+    dlBtn.className = 'chat-download-btn';
+    dlBtn.innerHTML = '⬇ הורד שוב';
     dlBtn.addEventListener('click', () => downloadResponse(text));
+    wrapper.appendChild(bubble);
     wrapper.appendChild(dlBtn);
+    downloadResponse(text);
+  } else {
+    bubble.innerHTML = role === 'error' ? text.replace(/\n/g, '<br>') : formatText(text);
+    wrapper.appendChild(bubble);
   }
 
   msgs.appendChild(wrapper);
@@ -507,6 +591,13 @@ function appendTyping() {
 
 function removeTyping(id) {
   document.getElementById(id)?.remove();
+}
+
+function updateTyping(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.querySelector('.chat-bubble').textContent = text;
+  el.scrollIntoView({ block: 'nearest' });
 }
 
 function hideEmpty() {

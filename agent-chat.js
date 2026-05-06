@@ -377,23 +377,13 @@ async function sendChunked(userText, file, typingId) {
   for (let i = 0; i < total; i++) {
     updateTyping(typingId, `מעבד חלק ${i + 1} מתוך ${total}...`);
     const prompt =
-      `תוכן הקובץ "${file.name}" (חלק ${i + 1} מתוך ${total}):\n\n${chunks[i]}` +
+      `תוכן הקובץ "${file.name}" — חלק ${i + 1} מתוך ${total}:\n\n${chunks[i]}\n\n` +
+      `הנחיה: עבד את החלק הזה בלבד ופלוט את התוצאה המלאה. אל תוסיף הקדמה, סיכום, או הסבר שזהו חלק X — פשוט פלוט את התוכן הרלוונטי.` +
       (userText ? `\n\nבקשת המשתמש: ${userText}` : '');
     partResults.push(await callGeminiOnceWithFallback(prompt));
   }
 
-  let combined;
-  if (total === 1) {
-    combined = partResults[0];
-  } else {
-    updateTyping(typingId, 'מאחד תוצאות...');
-    const synthPrompt =
-      `עיבדתי את הקובץ "${file.name}" (${total} חלקים). להלן תוצאות כל חלק:\n\n` +
-      partResults.map((r, i) => `=== חלק ${i + 1} מתוך ${total} ===\n${r}`).join('\n\n---\n\n') +
-      (userText ? `\n\nבקשת המשתמש המקורית: ${userText}\n\n` : '\n\n') +
-      'אנא ספק תשובה מלאה וקוהרנטית המשלבת את כל המידע מהחלקים לעיל.';
-    combined = await callGeminiOnceWithFallback(synthPrompt);
-  }
+  const combined = partResults.join('\n\n---\n\n');
 
   const histText = `[קובץ מצורף: ${file.name}]${userText ? '\n' + userText : ''}`;
   chatHistory.push({ role: 'user',  text: histText });

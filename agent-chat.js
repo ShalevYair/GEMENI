@@ -345,7 +345,11 @@ async function callGeminiOnce(promptText) {
     throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
   }
   const data = await res.json();
-  return data.candidates[0].content.parts.map(p => p.text).join('');
+  const candidate = data.candidates[0];
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    appendMessage('error', `⚠️ חלק נחתך בגלל מגבלת אסימונים — ייתכן שחלק מהתוכן חסר.`);
+  }
+  return candidate.content.parts.map(p => p.text).join('');
 }
 
 async function callGeminiOnceWithFallback(promptText) {

@@ -11,27 +11,41 @@
 ```
 אגם הסוכנים (index.html)
 ├── מפת SDLC אינטראקטיבית (SDLCMindMap.html)
+├── סוכני צ'אט — 13 סוכנים (agent.html?id=<id>)
 ├── Salesforce Killer — סוכן ארכיטקט (sf-agent.html)
 └── מסך ניהול (admin.html)
 ```
 
 ---
 
-## הכלים הפעילים
+## הסוכנים הפעילים
 
-### 🗺 מפת SDLC אינטראקטיבית
-**קובץ:** `SDLCMindMap.html`
+### 💬 סוכני צ'אט (agent.html)
 
-תרשים עץ אינטראקטיבי של כל שלבי SDLC — תכנון, אפיון, עיצוב, פיתוח, בדיקות, פריסה ותחזוקה.
-לחיצה על כל צומת מציגה: תיאור השלב, גורמים מעורבים, וסוכני AI רלוונטיים עם קישור ישיר ל-Gemini Gem.
+ממשק שיחה אחיד לכל 13 הסוכנים. כל סוכן טוען מתוך `agents-config.js` — system prompt ייעודי, הצעות התחלה, ותיאור תפקיד.
 
-**פיצ'רים:**
-- סינון לפי גורם מעורב
-- מצב בהיר/כהה
-- שינוי גודל טקסט
-- צ'אט מובנה עם Gemini לשאלות על המפה
+| מזהה | שם הסוכן | תפקיד |
+|------|----------|--------|
+| `requirements` | 📋 אוסף הדרישות | ראיונות מובנים → User Stories → SRS |
+| `project-manager` | 📊 מנהל הפרויקט | ספרינטים, סיכונים, דוחות סטטוס |
+| `project-coordinator` | 🗂️ רכזת הפרויקטים | RACI, תלויות, Deliverables |
+| `spec-king` | 👑 מלך האיפיונים | FSD מלא — מסכים, ERD, זרימות |
+| `software-architect` | 🏗️ ארכיטקט התוכנה | ארכיטקטורת מערכת, patterns, ADR |
+| `platform-architect` | ⚙️ ארכיטקט הפלטפורמות | תשתיות, אינטגרציות, CI/CD |
+| `tender-writer` | 📝 כותב המכרזים | RFP, SLA, KPIs לספקים |
+| `outsystems` | 🔷 OutSystems Expert | Domain Model, Service Actions |
+| `storyteller` | 📖 מספר הסיפורים | User Stories עם Acceptance Criteria, Epics, DoD |
+| `design-queen` | 🎨 מלכת העיצובים | Design System, Wireframes, UX |
+| `dev-champ` | 💻 אלוף הפיתוחים | Code Review, פתרון בעיות, Best Practices |
+| `tester` | 🔍 הבודק | תרחישי בדיקה, UAT, דוחות ממצאים |
+| `security` | 🔒 המאבטח | OWASP, RBAC, Audit Log, Compliance |
 
-**קבצים:** `DSLCapp.js`, `DSLCchat.js`, `DSLCstyles.css`, `SDLCMindMap.csv`
+**פיצ'רים של ממשק הצ'אט:**
+- העלאת קבצים: `.docx`, `.pdf`, `.txt`, `.csv`, `.json`, `.md`, תמונות
+- עיבוד קבצי טקסט גדולים (>50K תווים) בחלקים עם progress מובנה
+- תשובות ארוכות (>3,000 תווים) מורדות אוטומטית כקובץ `.md`
+- מגבלת פלט: עד 65,000 טוקנים לתשובה
+- Fallback אוטומטי בין מודלים בעת מגבלת quota
 
 ---
 
@@ -44,7 +58,7 @@
 | קובץ | תיאור |
 |------|--------|
 | `deployed.json` | מצב ה-org הנוכחי (אובייקטים, שדות, אוטומציות, הרשאות, אינטגרציות) |
-| `in-flight.json` | אפיונים שאושרו אך טרם פרוסים — מונע כפילויות |
+| `in-flight.json` | אפיונים שאושרו אך טרם פרוסים — מונע כפילויות (אופציונלי) |
 | FSD | מסמך אפיון פונקציונלי (`.docx` או `.pdf`) |
 
 **פלט — TSD ב-8 קבצים:**
@@ -66,8 +80,26 @@
 - מזהה קונפליקטים לפני העיצוב
 - מתעד כל החלטה כ-ADR
 - כלל עדיפות: אם אותו `api_name` מופיע ב-deployed וב-in-flight — in-flight גובר
+- Fallback אוטומטי בין מודלים בעת מגבלת quota — ממשיך מאותו chunk, לא מתחיל מחדש
 
 **קבצים:** `app.js`, `prompt.js`, `claude-prompt.js`
+
+---
+
+### 🗺 מפת SDLC אינטראקטיבית
+**קובץ:** `SDLCMindMap.html`
+
+תרשים עץ אינטראקטיבי של כל שלבי SDLC — תכנון, אפיון, עיצוב, פיתוח, בדיקות, פריסה ותחזוקה.
+לחיצה על כל צומת מציגה: תיאור השלב, גורמים מעורבים, וקישור לסוכן הרלוונטי.
+
+**פיצ'רים:**
+- סינון לפי גורם מעורב
+- מצב בהיר/כהה
+- שינוי גודל טקסט
+- צ'אט מובנה עם Gemini לשאלות על המפה
+- כל הקישורים לסוכנים מפנים לדפים המקומיים (agent.html)
+
+**קבצים:** `DSLCapp.js`, `DSLCchat.js`, `DSLCstyles.css`, `SDLCMindMap.csv`
 
 ---
 
@@ -82,9 +114,14 @@
 
 ## ניווט וממשק
 
-**`nav.js`** — סרגל צד משותף לכל הדפים. מציג כלים ורשימת הסוכנים (הפעילים ובקרוב).
+**`nav.js`** — מזריק לכל הדפים:
+- סרגל צד עם רשימת כל הסוכנים וקישורים
+- כותרת עליונה עם שם הסוכן הפעיל, כפתורי +/− גודל טקסט, ומצב בהיר/כהה
 
-**`index.html`** — דף הבית: מציג את כל הסוכנים, מפת SDLC, צ'אט עזרה מובנה, ושליטה במצב תצוגה (בהיר/כהה, גודל טקסט).
+**עיצוב אחיד בכל הדפים:**
+- Dark mode מסונכרן דרך localStorage — בחירה שמתפשטת לכל הסוכנים
+- גודל טקסט מותאם אישית מסונכרן באותו אופן
+- ללא גרדיאנטים סגול/כחול — עיצוב נקי ואחיד
 
 ---
 
@@ -92,11 +129,16 @@
 
 ```
 ├── index.html              דף בית — פורטל הסוכנים
+├── agent.html              ממשק צ'אט אחיד לכל 13 הסוכנים
 ├── sf-agent.html           Salesforce Killer
 ├── SDLCMindMap.html        מפת SDLC אינטראקטיבית
 ├── admin.html              מסך ניהול
-├── nav.js                  סרגל צד משותף
+│
+├── nav.js                  סרגל צד + כותרת עליונה משותפים
 ├── styles.css              עיצוב גלובלי
+│
+├── agent-chat.js           לוגיקת צ'אט (chunking, download, fallback)
+├── agents-config.js        הגדרות כל 13 הסוכנים (system prompt, suggestions)
 │
 ├── app.js                  לוגיקת SF Killer (קריאות Gemini, uploads, היסטוריה)
 ├── prompt.js               פרומפט סוכן הארכיטקט (3 chunks)
@@ -105,7 +147,7 @@
 │
 ├── DSLCapp.js              לוגיקת מפת ה-SDLC (ECharts, CSV, פילטרים)
 ├── DSLCchat.js             צ'אט Gemini למפת ה-SDLC
-├── DSLCstyles.css          עיצוב מפת ה-SDLC (dark theme, CSS variables)
+├── DSLCstyles.css          עיצוב מפת ה-SDLC
 ├── SDLCMindMap.csv         נתוני SDLC — שלבים, תת-שלבים, גורמים, סוכנים
 │
 ├── schema/
@@ -121,7 +163,9 @@
 
 | ספרייה | שימוש |
 |--------|--------|
-| [Gemini 2.5 Flash](https://aistudio.google.com) | מודל ה-AI לכל הסוכנים |
+| [Gemini 2.5 Flash](https://aistudio.google.com) | מודל ראשי — כל הסוכנים |
+| [Gemini 3 Flash Preview](https://ai.google.dev) | מודל fallback ראשון |
+| [Gemini 2.5 Flash Lite](https://ai.google.dev) | מודל fallback שני |
 | [ECharts](https://echarts.apache.org) | תרשים העץ האינטראקטיבי של SDLC |
 | [PapaParse](https://www.papaparse.com) | פרסינג ה-CSV של מפת ה-SDLC |
 | [mammoth.js](https://github.com/mwilliamson/mammoth.js) | חילוץ טקסט מ-.docx |
@@ -135,7 +179,13 @@
 ## מפתח API
 
 כל הסוכנים עובדים עם **Gemini API key** (חינמי ב-[aistudio.google.com/api-keys](https://aistudio.google.com/api-keys)).
-המפתח נשמר בזיכרון הסשן בלבד — לא ב-localStorage, לא בקוקיז, לא בלוגים.
+המפתח נשמר ב-localStorage — מתמיד בין סשנים ומשותף לכל הסוכנים.
+
+**Fallback אוטומטי בין מודלים:**
+כאשר מגיעים למגבלת quota היומית, המערכת עוברת אוטומטית:
+`gemini-2.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash-lite`
+
+ב-SF agent: המעבר מתרחש תוך המשך מאותו chunk — ללא צורך בהתחלה מחדש.
 
 ---
 
@@ -144,13 +194,13 @@
 - כל העיבוד client-side
 - הבקשה היחידה החוצה: ישירות ל-Gemini API
 - אין שרת ביניים
-- מפתח API אינו נשמר בשום אחסון קבוע
+- מפתח API נשמר ב-localStorage בלבד (לא נשלח לשום מקום אחר)
 
 ---
 
 ## Roadmap
 
-- [ ] סוכנים נוספים: אוסף הדרישות, מנהל הפרויקט, מלך האיפיונים, ואחרים
 - [ ] מעבר אחסון ניהול מ-localStorage ל-git ארגוני
 - [ ] OAuth אמיתי למסך הניהול
 - [ ] Snapshot Builder — רענון `deployed.json` אוטומטי מ-Salesforce
+- [ ] streaming responses — הצגת תשובות בזמן אמת תוך כדי קבלה מה-API

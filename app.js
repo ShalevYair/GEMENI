@@ -357,6 +357,10 @@ function isQuotaExceeded(msg) {
   return /quota|exceeded your current quota|free_tier|generativelanguage.*requests/i.test(msg);
 }
 
+function isHighDemand(msg) {
+  return /503|high demand|overload|temporarily unavailable/i.test(msg);
+}
+
 async function runChunks(startChunk) {
   const labels = [
     'מייצר: סיכום מנהלי, אובייקטים, שדות (1/3)...',
@@ -373,16 +377,20 @@ async function runChunks(startChunk) {
         chunkResults[chunk - 1] = await callGemini(chunk);
         break;
       } catch (err) {
-        if (isQuotaExceeded(err.message) && modelIdx < MODEL_CHAIN.length - 1) {
+        if ((isQuotaExceeded(err.message) || isHighDemand(err.message)) && modelIdx < MODEL_CHAIN.length - 1) {
           const from = MODEL_CHAIN[modelIdx++];
-          showWarning(`⚠️ מגבלת שימוש הושגה ב-${from}. עובר ל-${MODEL_CHAIN[modelIdx]} וממשיך מחלק ${chunk}...`);
-          await new Promise(r => setTimeout(r, 1000));
+          const reason = isHighDemand(err.message) ? 'עומס גבוה' : 'מגבלת שימוש';
+          showWarning(`⚠️ ${reason} ב-${from}. עובר ל-${MODEL_CHAIN[modelIdx]} וממשיך מחלק ${chunk}...`);
+          await new Promise(r => setTimeout(r, 2000));
           continue;
         }
         retryBtn.dataset.failedChunk = chunk;
         retryBtn.hidden = false;
         if (isQuotaExceeded(err.message)) {
           throw new Error(`הגעת למגבלת השימוש היומית בכל המודלים הזמינים. נסה שוב מחר.`);
+        }
+        if (isHighDemand(err.message)) {
+          throw new Error(`כל המודלים הזמינים עמוסים כרגע. נסה שוב מאוחר יותר.`);
         }
         throw new Error(`חלק ${chunk}: ${err.message}`);
       }

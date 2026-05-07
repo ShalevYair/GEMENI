@@ -25,14 +25,11 @@
         <h1>אגם הסוכנים</h1>
         <p class="home-hero-tagline">מערכת סוכנים חכמים לניהול מחזור החיים המלא של פיתוח תוכנה<br>מאיסוף דרישות ועד אבטחה ופריסה.</p>
         <p class="home-hero-sub">כל סוכן מתמחה בשלב אחד במחזור החיים<br>הסוכנים עובדים יחד, כל אחד בתורו, כדי להפוך רעיון לתוכנה</p>
-        <div class="home-hero-controls">
-          <button onclick="openHomeChat()" class="home-hero-ctrl-btn">💬 שאל</button>
-        </div>
       </div>
     </section>
 
     <!-- Agents grid -->
-    <section class="home-section" style="padding-top:0;">
+    <section class="home-section" style="padding-top:1.5rem;">
       <div class="agents-grid">
 
         <a href="SDLCMindMap.html" class="agent-card agent-mindmap">
@@ -275,6 +272,17 @@
       var sz = parseFloat(localStorage.getItem('home-font-size') || '16');
       if (sz !== 16) document.documentElement.style.fontSize = sz + 'px';
       if (_chatApiKey) document.getElementById('home-chat-api-row').style.display = 'none';
+
+      // Inject שאל button into header (next to + button)
+      var actionsSlot = document.getElementById('site-header-actions');
+      if (actionsSlot) {
+        var chatBtn = document.createElement('button');
+        chatBtn.className = 'site-header-btn';
+        chatBtn.title = 'שאל את הסוכן';
+        chatBtn.innerHTML = '💬 שאל';
+        chatBtn.onclick = openHomeChat;
+        actionsSlot.appendChild(chatBtn);
+      }
     });
   </script>
   <script type="module" src="nav.js"></script>

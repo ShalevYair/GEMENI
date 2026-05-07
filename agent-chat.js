@@ -1,4 +1,5 @@
 import { AGENTS } from './agents-config.js';
+import { getStorytellerPrompt } from './storyteller-prompt.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
 const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
@@ -25,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!agent) { showNotFound(); return; }
   populateHero();
   renderEmptyState();
+  if (agentId === 'storyteller') injectBacklogModal();
   if (apiKey) showChatReady();
   bindEvents();
 });
@@ -119,6 +121,9 @@ function renderEmptyState() {
       ${agent.suggestions.map(s =>
         `<button class="chip" onclick="window.sendSuggestion(this)">${s}</button>`
       ).join('')}
+      ${agentId === 'storyteller'
+        ? `<button class="chip chip--generate" onclick="window.openBacklogModal()">📋 צור EPIC / FEATURES / USER STORIES מקובץ</button>`
+        : ''}
     </div>`;
   msgs.appendChild(empty);
 }
@@ -623,4 +628,188 @@ function escHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+// ── Backlog Generator (storyteller agent only) ────────────────────────────
+
+function injectBacklogModal() {
+  const modal = document.createElement('div');
+  modal.id = 'backlog-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:2rem;max-width:460px;width:calc(100% - 2rem);direction:rtl;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Heebo,sans-serif;">
+      <h3 style="margin:0 0 .5rem;font-size:1.15rem;">📋 צור Backlog מקובץ</h3>
+      <p style="margin:0 0 1.25rem;color:#6b7a99;font-size:.9rem;">העלה מסמך (FSD, PRD, תיאור פיצ'ר) וקבל Epic, Features ו-User Stories מובנים ומלאים.</p>
+
+      <label id="backlog-dropzone" for="backlog-file-input" style="display:block;border:2px dashed #c8d0e0;border-radius:10px;padding:1.5rem;text-align:center;cursor:pointer;margin-bottom:1.25rem;transition:border-color .2s;">
+        <div style="font-size:2rem;margin-bottom:.5rem;">📂</div>
+        <div id="backlog-file-label" style="color:#6b7a99;font-size:.9rem;">לחץ לבחירת קובץ או גרור לכאן<br><span style="font-size:.8rem;">.docx · .txt · .md · .csv · .json</span></div>
+        <input id="backlog-file-input" type="file" accept=".docx,.txt,.md,.csv,.json" style="display:none;" onchange="window.backlogFileSelected(this)">
+      </label>
+
+      <div style="margin-bottom:1.25rem;">
+        <div style="font-weight:600;font-size:.9rem;margin-bottom:.5rem;">שפת הפלט:</div>
+        <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;cursor:pointer;">
+          <input type="radio" name="backlog-lang" value="en" checked>
+          <span><strong>English</strong> — <span style="color:#6b7a99;font-size:.85rem;">מפורט ועמוק יותר (מומלץ)</span></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+          <input type="radio" name="backlog-lang" value="he">
+          <span><strong>עברית</strong></span>
+        </label>
+      </div>
+
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="window.closeBacklogModal()" style="padding:.55rem 1.1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.9rem;font-family:Heebo,sans-serif;">ביטול</button>
+        <button onclick="window.generateBacklog()" style="padding:.55rem 1.25rem;background:#0070d2;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:600;font-family:Heebo,sans-serif;">צור Backlog ⚡</button>
+      </div>
+    </div>`;
+
+  modal.addEventListener('click', e => { if (e.target === modal) window.closeBacklogModal(); });
+  document.body.appendChild(modal);
+}
+
+window.openBacklogModal = function () {
+  if (isLoading) return;
+  const modal = document.getElementById('backlog-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+};
+
+window.closeBacklogModal = function () {
+  const modal = document.getElementById('backlog-modal');
+  if (!modal) return;
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+  const fi = document.getElementById('backlog-file-input');
+  if (fi) fi.value = '';
+  const lbl = document.getElementById('backlog-file-label');
+  if (lbl) lbl.innerHTML = `לחץ לבחירת קובץ או גרור לכאן<br><span style="font-size:.8rem;">.docx · .txt · .md · .csv · .json</span>`;
+  const dz = document.getElementById('backlog-dropzone');
+  if (dz) dz.style.borderColor = '#c8d0e0';
+};
+
+window.backlogFileSelected = function (input) {
+  const file = input.files[0];
+  if (!file) return;
+  const lbl = document.getElementById('backlog-file-label');
+  lbl.innerHTML = `<strong>${escHtml(file.name)}</strong><br><span style="font-size:.8rem;color:#6b7a99;">${(file.size / 1024).toFixed(1)} KB</span>`;
+  document.getElementById('backlog-dropzone').style.borderColor = '#0070d2';
+};
+
+window.generateBacklog = async function () {
+  const fileInput = document.getElementById('backlog-file-input');
+  const file = fileInput?.files[0];
+  if (!file) {
+    const dz = document.getElementById('backlog-dropzone');
+    if (dz) dz.style.borderColor = '#e53e3e';
+    return;
+  }
+
+  const lang = document.querySelector('input[name="backlog-lang"]:checked')?.value || 'en';
+  window.closeBacklogModal();
+  hideEmpty();
+
+  let fileData;
+  try {
+    fileData = await readFile(file);
+  } catch (e) {
+    appendMessage('error', 'שגיאה בקריאת הקובץ: ' + e.message);
+    return;
+  }
+
+  if (fileData.isInline) {
+    appendMessage('error', 'ליצירת Backlog נדרש קובץ טקסט (.docx, .txt, .md). קבצי PDF ותמונות אינם נתמכים במצב זה.');
+    return;
+  }
+
+  if (!apiKey) {
+    document.getElementById('api-banner').hidden = false;
+    document.getElementById('api-key-input').focus();
+    return;
+  }
+
+  setLoading(true);
+  const progressId = appendTyping();
+  const results = [];
+  let bModelIdx = modelIdx;
+
+  for (let chunk = 1; chunk <= 3; chunk++) {
+    updateTyping(progressId, `מייצר חלק ${chunk} מתוך 3... (${['Epic & Features', 'User Stories & AC', 'Prioritization & DoD'][chunk - 1]})`);
+    const prompt = getStorytellerPrompt(fileData.text, chunk, lang);
+
+    let done = false;
+    while (!done) {
+      try {
+        results.push(await callGeminiForBacklog(prompt, bModelIdx));
+        done = true;
+      } catch (err) {
+        const quota = isQuotaExceeded(err.message);
+        const busy  = /503|high demand|overload|temporarily/i.test(err.message);
+        if ((quota || busy) && bModelIdx < MODEL_CHAIN.length - 1) {
+          bModelIdx++;
+          appendMessage('error', `⚠️ עובר למודל ${MODEL_CHAIN[bModelIdx]} (חלק ${chunk})... 🔄`);
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          removeTyping(progressId);
+          setLoading(false);
+          appendMessage('error', `שגיאה בחלק ${chunk}: ${err.message}`);
+          return;
+        }
+      }
+    }
+  }
+
+  removeTyping(progressId);
+  setLoading(false);
+
+  const header = `<!-- Backlog generated by מספר הסיפורים | ${new Date().toISOString()} | Source: ${file.name} -->\n\n`;
+  const combined = header + results.join('\n\n---\n\n');
+  const baseName = file.name.replace(/\.[^.]+$/, '');
+  const filename  = `backlog-${baseName}.md`;
+
+  const blob = new Blob([combined], { type: 'text/markdown;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  appendMessage('assistant',
+    `✅ הבאקלוג נוצר בהצלחה והורד כ-\`${filename}\`\n\n` +
+    `הקובץ מכיל:\n` +
+    `• 00 · Epic Overview\n` +
+    `• 01 · Features\n` +
+    `• 02 · User Stories (INVEST)\n` +
+    `• 03 · Acceptance Criteria (Given-When-Then)\n` +
+    `• 04 · Backlog Prioritization (MoSCoW + WSJF)\n` +
+    `• 05 · Definition of Done & Ready\n` +
+    `• 06 · Spike Stories`
+  );
+};
+
+async function callGeminiForBacklog(promptText, mIdx) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[mIdx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: promptText }] }],
+      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+  }
+  const data      = await res.json();
+  const candidate = data.candidates[0];
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    appendMessage('error', '⚠️ חלק נחתך בגלל מגבלת אסימונים — ייתכן שחלק מהתוכן חסר.');
+  }
+  return candidate.content.parts.map(p => p.text).join('');
 }

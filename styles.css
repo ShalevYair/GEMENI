@@ -2191,6 +2191,19 @@ body.dark-mode .chat-download-btn:hover { background: rgba(96,165,250,.22); bord
   color: var(--brand);
 }
 
+.chip--generate {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 600;
+}
+
+.chip--generate:hover {
+  background: #005fb2;
+  border-color: #005fb2;
+  color: #fff;
+}
+
 /* ── File error toast ── */
 .file-error-toast {
   position: fixed;

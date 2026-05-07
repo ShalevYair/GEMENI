@@ -6,7 +6,7 @@
   <title>אגם הסוכנים</title>
   <meta name="description" content="מערכת סוכנים חכמים לניהול מחזור החיים המלא של פיתוח תוכנה — מאיסוף דרישות ועד אבטחה ופריסה." />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <meta name="theme-color" content="#0070d2" />
+  <meta name="theme-color" content="#08080f" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="אגם הסוכנים" />
   <meta property="og:description" content="מערכת סוכנים חכמים לניהול מחזור החיים המלא של פיתוח תוכנה." />
@@ -147,9 +147,9 @@
   <script>
     /* ── Dark mode & font size ── */
     function toggleDarkMode(btn) {
-      var isDark = document.body.classList.toggle('dark-mode');
-      localStorage.setItem('sdlc-dark-mode', isDark ? 'dark' : 'light');
-      if (btn) btn.textContent = isDark ? '☾' : '☀';
+      var isLight = document.body.classList.toggle('light-mode');
+      localStorage.setItem('sdlc-dark-mode', isLight ? 'light' : 'dark');
+      if (btn) btn.textContent = isLight ? '☀' : '☾';
     }
     function changeFontSize(step) {
       var cur = parseFloat(localStorage.getItem('home-font-size') || '16');
@@ -264,10 +264,10 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-      if (localStorage.getItem('sdlc-dark-mode') === 'dark') {
-        document.body.classList.add('dark-mode');
+      if (localStorage.getItem('sdlc-dark-mode') === 'light') {
+        document.body.classList.add('light-mode');
         var btn = document.getElementById('home-mode-btn');
-        if (btn) btn.textContent = '☾';
+        if (btn) btn.textContent = '☀';
       }
       var sz = parseFloat(localStorage.getItem('home-font-size') || '16');
       if (sz !== 16) document.documentElement.style.fontSize = sz + 'px';

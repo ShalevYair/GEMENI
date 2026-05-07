@@ -954,10 +954,23 @@ body.dark-mode .site-header-model-tag { background: #162032; border-color: #3341
 }
 .site-header-btn:hover { background: var(--surface-alt); border-color: var(--brand); }
 
-body.dark-mode .site-header { background: #1e293b; border-color: #334155; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-body.dark-mode .site-header-title { color: #60a5fa; }
+body.dark-mode .site-header { background: rgba(30,41,59,0.95); border-color: #334155; box-shadow: 0 2px 12px rgba(0,0,0,0.4); backdrop-filter: blur(10px); }
 body.dark-mode .site-header-btn { border-color: #334155; color: #e2e8f0; }
-body.dark-mode .site-header-btn:hover { background: #253349; border-color: #60a5fa; }
+body.dark-mode .site-header-btn:hover { background: rgba(96,165,250,0.12); border-color: #60a5fa; color: #60a5fa; }
+
+/* Site header home logo link */
+.site-header-home {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.site-header-home:hover { text-decoration: none; opacity: 0.8; }
+.site-header-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+}
 
 /* ════════════════════════════════════════════════════
    App layout — sidebar + content
@@ -1000,7 +1013,14 @@ body.dark-mode .site-header-btn:hover { background: #253349; border-color: #60a5
 }
 
 .sidebar-brand:hover { text-decoration: none; }
-body.dark-mode .sidebar-brand { background: #162032; border-color: #253349; }
+body.dark-mode .sidebar { background: #0f172a; border-color: #334155; }
+body.dark-mode .sidebar-brand { background: #1e293b; border-color: #334155; }
+body.dark-mode .sidebar-title { color: #60a5fa; font-weight: 800; }
+body.dark-mode .sidebar-section-label { color: #38bdf8; }
+body.dark-mode .nav-item { color: #94a3b8; }
+body.dark-mode a.nav-item:hover { background: rgba(96,165,250,0.12); color: #60a5fa; }
+body.dark-mode .nav-item-active { background: rgba(96,165,250,0.15); color: #60a5fa; font-weight: 600; }
+body.dark-mode .sidebar-footer { border-color: #334155; }
 
 .sidebar-logo {
   width: 36px;
@@ -1054,8 +1074,8 @@ body.dark-mode .sidebar-brand { background: #162032; border-color: #253349; }
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.55rem 0.65rem;
-  border-radius: var(--radius);
+  padding: 0.55rem 0.75rem;
+  border-radius: 50px;
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-soft);

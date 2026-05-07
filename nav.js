@@ -93,25 +93,25 @@ function buildSiteHeader() {
         <div id="site-header-actions" class="site-header-action-group"></div>
         <button class="site-header-btn" onclick="changeSiteFontSize(1)" title="הגדל טקסט">+</button>
         <button class="site-header-btn" onclick="changeSiteFontSize(-1)" title="הקטן טקסט">−</button>
-        <button class="site-header-btn" id="site-dark-btn" onclick="toggleSiteDarkMode()" title="מצב בהיר/כהה">☀</button>
+        <button class="site-header-btn" id="site-dark-btn" onclick="toggleSiteDarkMode()" title="מצב בהיר/כהה">☾</button>
       </div>
     </header>`;
 }
 
 function applyStoredPreferences() {
   const mode = localStorage.getItem('sdlc-dark-mode');
-  if (mode === 'dark') document.body.classList.add('dark-mode');
+  if (mode === 'light') document.body.classList.add('light-mode');
   const btn = document.getElementById('site-dark-btn');
-  if (btn) btn.textContent = document.body.classList.contains('dark-mode') ? '☾' : '☀';
+  if (btn) btn.textContent = document.body.classList.contains('light-mode') ? '☀' : '☾';
   const sz = parseFloat(localStorage.getItem('sdlc-font-size') || '16');
   if (sz !== 16) document.documentElement.style.fontSize = sz + 'px';
 }
 
 window.toggleSiteDarkMode = function () {
-  const isDark = document.body.classList.toggle('dark-mode');
-  localStorage.setItem('sdlc-dark-mode', isDark ? 'dark' : 'light');
+  const isLight = document.body.classList.toggle('light-mode');
+  localStorage.setItem('sdlc-dark-mode', isLight ? 'light' : 'dark');
   const btn = document.getElementById('site-dark-btn');
-  if (btn) btn.textContent = isDark ? '☾' : '☀';
+  if (btn) btn.textContent = isLight ? '☀' : '☾';
 };
 
 window.changeSiteFontSize = function (step) {

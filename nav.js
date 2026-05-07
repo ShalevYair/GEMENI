@@ -88,9 +88,7 @@ function buildSiteHeader() {
   const title = rawTitle.split('—')[0].trim();
   return `
     <header class="site-header" id="site-header">
-      <a href="index.html" class="site-header-home" id="site-header-title" title="אגם הסוכנים">
-        <img src="favicon.svg" alt="אגם הסוכנים" class="site-header-logo" />
-      </a>
+      <span class="site-header-title" id="site-header-title">${title}</span>
       <div class="site-header-controls">
         <div id="site-header-actions" class="site-header-action-group"></div>
         <button class="site-header-btn" onclick="changeSiteFontSize(1)" title="הגדל טקסט">+</button>

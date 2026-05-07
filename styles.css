@@ -1382,6 +1382,17 @@ a.nav-item:hover {
   color: inherit;
 }
 
+body.dark-mode .agent-active {
+  background: linear-gradient(180deg, #1e293b 0%, #162032 100%);
+  border-color: #3b82f6;
+  box-shadow: 0 4px 18px rgba(59,130,246,0.15);
+}
+
+body.dark-mode .agent-active:hover {
+  box-shadow: 0 8px 28px rgba(59,130,246,0.28);
+  border-color: #60a5fa;
+}
+
 .agent-status {
   display: inline-block;
   font-size: 0.7rem;

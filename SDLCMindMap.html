@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מחזור חיי תכנה – סוכני AI</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%231a2a4a'/%3E%3Crect x='22' y='20' width='20' height='14' rx='2' fill='%234a9eff' opacity='0.9'/%3E%3Crect x='25' y='36' width='14' height='2' rx='1' fill='%234a9eff' opacity='0.7'/%3E%3Crect x='25' y='40' width='10' height='2' rx='1' fill='%234a9eff' opacity='0.5'/%3E%3Cpath d='M32 10 A22 22 0 0 1 54 32' stroke='%2300d4aa' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3Cpolygon points='54,27 54,37 59,32' fill='%2300d4aa'/%3E%3Cpath d='M32 54 A22 22 0 0 1 10 32' stroke='%2300d4aa' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3Cpolygon points='10,37 10,27 5,32' fill='%2300d4aa'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="DSLCstyles.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
 </head>
-<body>
+<body class="mindmap-page">
 
     <div class="header">
         <h1>מחזור חיי תכנה – סוכני AI</h1>
@@ -19,9 +20,6 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 שאל
             </button>
-            <select id="party-filter" class="party-filter-select" onchange="applyActorFilter(this.value)" title="סנן לפי גורם מעורב">
-                <option value="all">כל הגורמים המעורבים</option>
-            </select>
             <div class="zoom-controls">
                 <button class="ctrl-btn" onclick="changeFontSize(1)" title="הגדל טקסט">+</button>
                 <button class="ctrl-btn" onclick="changeFontSize(-1)" title="הקטן טקסט">-</button>
@@ -40,24 +38,20 @@
         </div>
 
         <div id="info-panel">
+            <div class="panel-filter-row">
+                <select id="party-filter" class="party-filter-select" onchange="applyActorFilter(this.value)" title="סנן לפי גורם מעורב">
+                    <option value="all">כל הגורמים המעורבים</option>
+                </select>
+            </div>
+
             <div id="info-default">
                 <h2 class="panel-title">סוכני SDLC</h2>
                 <div class="dynamic-text">
-                    <p class="summary-paragraph">
-                        <strong>מחזור חיי תכנה</strong> הוא התהליך המלא של פיתוח מערכת תוכנה — מהרגע שמזהים צורך עסקי ועד לתחזוקה השוטפת לאחר ה-Go-Live.
-                    </p>
-                    <p class="summary-paragraph">
-                        <strong>סוכני ה-AI</strong> הם עוזרים חכמים המלווים כל שלב במחזור החיים. כל סוכן מתמחה בתחום ספציפי: תכנון, אפיון, עיצוב, פיתוח, בדיקות, פריסה ותחזוקה.
-                    </p>
-                    <p class="summary-paragraph">
-                        <strong>שלבי ה-SDLC:</strong> Planning, Requirements Analysis, Design, Implementation, Testing, Deployment ו-Maintenance — כולם מיוצגים במפה עם הסוכנים והגורמים הרלוונטיים לכל תת-שלב.
-                    </p>
-                    <p class="summary-paragraph">
-                        <strong>כיצד להשתמש:</strong> לחץ על כל צומת במפה לצפות בפירוט השלב, הגורמים המעורבים וסוכני ה-AI הרלוונטיים. לחיצה על תגית סוכן תפתח את הסוכן ב-Gemini.
-                    </p>
-                    <p class="summary-paragraph" style="color:var(--primary);font-weight:500;margin-top:25px;text-align:center;">
-                        👆 לחץ על כל נקודה בתרשים כדי לצלול פנימה
-                    </p>
+                    <p class="summary-paragraph"><strong>מחזור חיי תכנה</strong> הוא התהליך המלא של פיתוח מערכת תוכנה — מהרגע שמזהים צורך עסקי ועד לתחזוקה השוטפת לאחר ה-Go-Live.</p>
+                    <p class="summary-paragraph"><strong>סוכני ה-AI</strong> הם עוזרים חכמים המלווים כל שלב במחזור החיים. כל סוכן מתמחה בתחום ספציפי: תכנון, אפיון, עיצוב, פיתוח, בדיקות, פריסה ותחזוקה.</p>
+                    <p class="summary-paragraph"><strong>שלבי ה-SDLC:</strong> Planning, Requirements Analysis, Design, Implementation, Testing, Deployment ו-Maintenance — כולם מיוצגים במפה עם הסוכנים והגורמים הרלוונטיים לכל תת-שלב.</p>
+                    <p class="summary-paragraph"><strong>כיצד להשתמש:</strong> לחץ על כל צומת במפה לצפות בפירוט השלב, הגורמים המעורבים וסוכני ה-AI הרלוונטיים. לחיצה על תגית סוכן תפתח את הסוכן ב-Gemini.</p>
+                    <p class="summary-paragraph" style="color:var(--primary);font-weight:500;margin-top:25px;text-align:center;">👆 לחץ על כל נקודה בתרשים כדי לצלול פנימה</p>
                 </div>
             </div>
 
@@ -82,7 +76,6 @@
     <!-- Chat overlay -->
     <div class="chat-overlay" id="chat-overlay" onclick="handleOverlayClick(event)">
         <div class="chat-modal" id="chat-modal" onclick="event.stopPropagation()">
-
             <div class="chat-modal-header">
                 <div class="chat-modal-title">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -100,30 +93,23 @@
                     <button class="chat-icon-btn" onclick="closeChat()" title="סגור">&#x2715;</button>
                 </div>
             </div>
-
             <div class="chat-api-section" id="chat-api-section">
                 <div class="chat-api-label">🔑 הזן מפתח Gemini API (נשמר בדפדפן בלבד):</div>
                 <div class="chat-api-row">
-                    <input type="password" id="api-key-input" class="chat-api-input"
-                           placeholder="AIza..."
-                           onkeydown="if(event.key==='Enter') setApiKey()">
+                    <input type="password" id="api-key-input" class="chat-api-input" placeholder="AIza..." onkeydown="if(event.key==='Enter') setApiKey()">
                     <button class="chat-api-btn" onclick="setApiKey()">אישור</button>
                 </div>
             </div>
-
             <div class="chat-messages" id="chat-messages"></div>
-
             <div class="chat-input-area">
-                <input type="text" id="chat-text-input" class="chat-text-input"
-                       placeholder="שאל שאלה על מפת המחשבה..."
-                       onkeydown="if(event.key==='Enter'&&!event.shiftKey) sendChatMessage()">
+                <input type="text" id="chat-text-input" class="chat-text-input" placeholder="שאל שאלה על מפת המחשבה..." onkeydown="if(event.key==='Enter'&&!event.shiftKey) sendChatMessage()">
                 <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()">שלח</button>
             </div>
-
         </div>
     </div>
 
-    <script src="js/app.js"></script>
-    <script src="js/chat.js"></script>
+    <script src="DSLCapp.js"></script>
+    <script src="DSLCchat.js"></script>
+    <script type="module" src="nav.js"></script>
 </body>
 </html>

@@ -1,123 +1,230 @@
-# SF Architect Agent — משרד התחבורה
+# אגם הסוכנים — AI Agent Platform
 
-A static, client-side web app that acts as a **stateful Salesforce Solution Architect**. It accepts a Hebrew Functional Specification Document (FSD), the current org state (`deployed.json`), and approved-but-not-yet-deployed work (`in-flight.json`), then produces a complete 8-file architectural TSD plus an updated `in-flight.json` for the next session.
+פלטפורמת סוכני AI לניהול מחזור חיי פיתוח תוכנה (SDLC) מלא — מאיסוף דרישות ועד אבטחה ופריסה.
 
-## What Makes This Different
+האפליקציה פועלת **לחלוטין בדפדפן** — ללא שרת, ללא התקנה. כל עיבוד מתבצע client-side מול Gemini API ישירות.
 
-A standard TSD generator treats every spec as greenfield. This agent is **stateful**:
+### מפת המחשבה — תמונת הכלל
 
-- Reads the current production state (objects, fields, flows, permissions, integrations, layouts)
-- Reads in-flight specs (approved but not yet deployed)
-- For every FSD requirement classifies: ✅ REUSE · 🔧 EXTEND · 🆕 CREATE · ⚠ CONFLICT
-- Surfaces conflicts and architectural risks **before** proposing a design
-- Documents every non-trivial choice as an ADR
-- Outputs an updated `in-flight.json` so the next session sees this spec's components
+**מפת SDLC** מציגה את מחזור חיי הפיתוח כולו בתצוגת עץ אינטראקטיבית: תכנון, אפיון, עיצוב, פיתוח, בדיקות, פריסה ותחזוקה. בכל שלב ניתן ללחוץ ולקפוץ ישירות לסוכן הרלוונטי — כך שהמפה משמשת גם כמצפן וגם כנקודת כניסה לכל זרימת עבודה.
 
-## Architecture in One Picture
+### למה דרך API ולא דרך ממשק רגיל?
+
+בממשק המשתמש הרגיל של Gemini, תשובות מוגבלות ל-**2,000–8,000 טוקנים** לתשובה. דרך ה-API ניתן לקבל עד **64,000 טוקנים** — פי 8 עד פי 32 יותר.
+
+אגם הסוכנים מרחיק לכת יותר: כל גנרטור מבצע **4 קריאות API** רצופות, כל אחת עם עד 64K טוקן פלט — כך שהמסמך הסופי יכול להכיל **עד 256K טוקנים**. זאת אומרת תשובות גדולות פי **32 עד פי 128** ממה שמתקבל בממשק הרגיל.
+
+בנוסף, כל סוכן בנוי עם system prompt מדויק ביותר — מבנה קבוע, כללים מחייבים ופורמט פלט מוגדר, בדומה ל-Skill מוכן בקלוד. התוצאה: פלט מקצועי ועקבי בכל הרצה.
+
+### Fallback אוטומטי בין מודלים
+
+כאשר מגיעים למגבלת ה-quota היומית של מודל אחד, המערכת עוברת אוטומטית למודל הבא — ממשיכה מאותה נקודה, ללא צורך להתחיל מחדש:
 
 ```
-┌──────────────────────┐    ┌────────────────────────┐
-│  deployed.json       │───▶│                        │
-│  (from SF, via       │    │   SF Architect Agent   │───▶ TSD (8 files)
-│   Claude Desktop +   │    │   (Gemini 2.5 Flash)   │───▶ in-flight-updated.json
-│   SF MCP)            │    │                        │
-└──────────────────────┘    │                        │
-┌──────────────────────┐    │                        │
-│  in-flight.json      │───▶│                        │
-│  (output of last run)│    │                        │
-└──────────────────────┘    │                        │
-┌──────────────────────┐    │                        │
-│  FSD (.docx / .pdf)  │───▶│                        │
-└──────────────────────┘    └────────────────────────┘
+gemini-2.5-flash  →  gemini-3-flash-preview  →  gemini-2.5-flash-lite
 ```
 
-## Usage
+---
 
-1. Open `index.html` in a modern browser (or visit GitHub Pages URL).
-2. **Step 1** — Drop your `deployed.json`. Don't have one? Click **"הפק deployed.json דרך Claude Desktop"** to copy a ready-made prompt for Claude Desktop with SF MCP that will produce the file for you.
-3. **Step 2** — Drop your `in-flight.json` (from a previous run, or download from the Admin screen).
-4. **Step 3** — Drop your FSD (`.docx` or `.pdf`).
-5. **Step 4** — Click **⚡ צור TSD ארכיטקטוני**. You'll be asked for a Gemini API key (free at [aistudio.google.com/api-keys](https://aistudio.google.com/api-keys)).
-6. When done — download the TSD and the updated `in-flight.json`.
+## הסוכנים הפעילים
 
-## Output Files (combined into one MD)
+### 💬 סוכני צ'אט (agent.html)
 
-| File | Content |
-|------|---------|
-| `00_executive_summary` | Business context, approach, key decisions, top 3 risks |
-| `01_objects` | Per-object: REUSE/EXTEND/CREATE/CONFLICT, OWD, record types |
-| `02_fields` | Per-field: API name (Hebrew), type, formula, FLS, RTL, business logic |
-| `03_automations` | Flows, Apex, Approval Processes, Validation Rules + declarative justification |
-| `04_permissions` | Permission Sets (new/extended), sharing rules, FLS matrix |
-| `05_layouts` | Page Layouts, Lightning Pages, LWC, RTL considerations |
-| `06_integrations` | Named Credentials, callout patterns, error handling |
-| `07_impact_analysis` | **The critical file** — reuse, conflicts, ADRs, open questions, risks |
+ממשק שיחה אחיד לכל 13 הסוכנים. כל סוכן טוען מתוך `agents-config.js` — system prompt ייעודי, הצעות התחלה, ותיאור תפקיד.
 
-Plus a separate downloadable `in-flight-updated.json` for the next session.
+| מזהה | שם הסוכן | תפקיד |
+|------|----------|--------|
+| `requirements` | 📋 אוסף הדרישות | ראיונות מובנים → User Stories → SRS |
+| `project-manager` | 📊 מנהל הפרויקט | ספרינטים, סיכונים, דוחות סטטוס |
+| `project-coordinator` | 🗂️ רכזת הפרויקטים | RACI, תלויות, Deliverables |
+| `spec-king` | 👑 מלך האיפיונים | FSD מלא — מסכים, ERD, זרימות |
+| `software-architect` | 🏗️ ארכיטקט התוכנה | ארכיטקטורת מערכת, patterns, ADR |
+| `platform-architect` | ⚙️ ארכיטקט הפלטפורמות | תשתיות, אינטגרציות, CI/CD |
+| `tender-writer` | 📝 כותב המכרזים | RFP, SLA, KPIs לספקים |
+| `outsystems` | 🔷 OutSystems Expert | Domain Model, Service Actions |
+| `storyteller` | 📖 מספר הסיפורים | User Stories עם Acceptance Criteria, Epics, DoD |
+| `design-queen` | 🎨 מלכת העיצובים | Design System, Wireframes, UX |
+| `dev-champ` | 💻 אלוף הפיתוחים | Code Review, פתרון בעיות, Best Practices |
+| `tester` | 🔍 הבודק | תרחישי בדיקה, UAT, דוחות ממצאים |
+| `security` | 🔒 המאבטח | OWASP, RBAC, Audit Log, Compliance |
 
-## State File Schema
+**פיצ'רים של ממשק הצ'אט:**
+- העלאת קבצים: `.docx`, `.pdf`, `.txt`, `.csv`, `.json`, `.md`, תמונות
+- עיבוד קבצי טקסט גדולים (>50K תווים) בחלקים עם progress מובנה
+- תשובות ארוכות (>3,000 תווים) מורדות אוטומטית כקובץ `.md`
+- מגבלת פלט: עד 65,000 טוקנים לתשובה
+- Fallback אוטומטי בין מודלים בעת מגבלת quota
 
-Both `deployed.json` and `in-flight.json` share the same JSON schema (see [`schema/state-schema.json`](schema/state-schema.json)). Sections: `objects`, `fields`, `automations`, `permissions`, `integrations`, `layouts`.
+**גנרטורי מסמכים — 4 חלקים:**
 
-`in-flight.json` items additionally carry:
-- `spec_origin` — name of the spec that introduced this item
-- `status` — `approved` or `in-build`
+| סוכן | כפתור | פלט |
+|------|--------|-----|
+| 🏗️ ארכיטקט התוכנה | "הפק מסמך ארכיטקטורה" | Technical Architecture Document (`.md`) |
+| ⚙️ ארכיטקט הפלטפורמות | "הפק מסמך פלטפורמה" | Platform Architecture Document (`.md`) |
+| 🔷 OutSystems Expert | "הפק TSD מלא" | Technical Solution Design ל-O11 / ODC / שניהם (`.md`) |
+| 🎨 מלכת העיצובים | "הפק Mockup HTML" | פרוטוטיפ HTML אינטראקטיבי עם כל המסכים (`.html`) |
 
-**Precedence rule:** if the same `api_name` appears in both files, the in-flight version wins (it's the most recent design intent).
+כל גנרטור מקבל מסמך אפיון בכל פורמט ומפיק את הפלט ב-4 קריאות API מחוברות.
 
-## Naming Conventions (enforced by the agent)
+---
 
-| Component | Convention | Example |
-|-----------|-----------|---------|
-| Objects | Hebrew + `__c` | `רישיון_רכב__c` |
-| Fields | Hebrew + `__c` | `תאריך_פקיעה__c` |
-| Flows | English `{Object}_{Trigger}_{Purpose}` | `VehiclePermit_BeforeSave_CalculateSLA` |
-| Validation Rules | `VR_{Object}_{Purpose}` | `VR_VehiclePermit_RequireExpiry` |
-| Permission Sets | `PS_{Role}_{Scope}` | `PS_Permits_Manager` |
-| Named Credentials | `NC_{SystemName}` | `NC_Police_API` |
-| Apex Classes | `{Object}Service` | `VehiclePermitService` |
+### ⚡ Salesforce Killer — סוכן ארכיטקט
+**קובץ:** `sf-agent.html`
 
-## Admin Screen
+סוכן ארכיטקט Salesforce שמקבל אפיון פונקציונלי (FSD), מצליב מול המצב הקיים ב-org, ומפיק TSD ארכיטקטוני מלא.
 
-`admin.html` — separate page protected by an email gate (`shalevya@mot.gov.il` for now). Shows aggregated approved specs, all designed objects/fields/automations across all sessions, and lets you export a merged `in-flight.json`.
+**קלט:**
+| קובץ | תיאור |
+|------|--------|
+| `deployed.json` | מצב ה-org הנוכחי (אובייקטים, שדות, אוטומציות, הרשאות, אינטגרציות) |
+| `in-flight.json` | אפיונים שאושרו אך טרם פרוסים — מונע כפילויות (אופציונלי) |
+| FSD | מסמך אפיון פונקציונלי (`.docx` או `.pdf`) |
 
-Storage: **localStorage on the browser** (will move to organizational git later — auth and storage will both be upgraded then).
+**פלט — TSD ב-8 קבצים:**
+| קובץ | תוכן |
+|------|-------|
+| `00_executive_summary` | הקשר עסקי, גישה, החלטות מפתח, 3 סיכונים עיקריים |
+| `01_objects` | לכל אובייקט: REUSE / EXTEND / CREATE / CONFLICT |
+| `02_fields` | שמות API בעברית, סוג, נוסחה, FLS, RTL |
+| `03_automations` | Flows, Apex, Validation Rules, Approval Processes |
+| `04_permissions` | Permission Sets, sharing rules, מטריצת FLS |
+| `05_layouts` | Page Layouts, Lightning Pages, LWC, RTL |
+| `06_integrations` | Named Credentials, callout patterns, טיפול בשגיאות |
+| `07_impact_analysis` | קונפליקטים, ADRs, שאלות פתוחות, סיכוני ארכיטקטורה |
 
-## Files
+פלט נוסף: `in-flight-updated.json` — מעודכן עם הרכיבים החדשים, מוכן להרצה הבאה.
 
-| File | Purpose |
-|------|---------|
-| `index.html` | Main app — file uploads, generation flow |
-| `admin.html` / `admin.js` | Admin screen for approved specs |
-| `app.js` | File handling, Gemini calls, chunk orchestration, history save |
-| `prompt.js` | SF Architect Agent system prompt + 3-chunk factory |
-| `styles.css` | Styling |
-| `schema/state-schema.json` | JSON Schema reference for both state files |
-| `prompts/extract-deployed-state.md` | Prompt for Claude Desktop to produce `deployed.json` |
-| `tsd-to-salesforce/` | Separate Next.js app — TSD → SF metadata (next phase) |
+**אופי הסוכן — stateful:**
+- מסווג כל דרישה: ✅ REUSE · 🔧 EXTEND · 🆕 CREATE · ⚠ CONFLICT
+- מזהה קונפליקטים לפני העיצוב
+- מתעד כל החלטה כ-ADR
+- כלל עדיפות: אם אותו `api_name` מופיע ב-deployed וב-in-flight — in-flight גובר
+- Fallback אוטומטי בין מודלים בעת מגבלת quota — ממשיך מאותו chunk, לא מתחיל מחדש
 
-## Libraries (CDN, no npm)
+**קבצים:** `app.js`, `prompt.js`, `claude-prompt.js`
 
-- [mammoth.js](https://github.com/mwilliamson/mammoth.js) — `.docx` → text
-- [pdf.js](https://mozilla.github.io/pdf.js/) — PDF → text
-- [Heebo](https://fonts.google.com/specimen/Heebo) — Hebrew-friendly typography
+---
 
-## Gemini API
+### 🗺 מפת SDLC אינטראקטיבית
+**קובץ:** `SDLCMindMap.html`
 
-- **Model:** `gemini-2.5-flash`
-- **Max output tokens per call:** 65,000
-- **Auth:** API key as query parameter — stored in memory only, never persisted
+תרשים עץ אינטראקטיבי של כל שלבי SDLC — תכנון, אפיון, עיצוב, פיתוח, בדיקות, פריסה ותחזוקה.
+לחיצה על כל צומת מציגה: תיאור השלב, גורמים מעורבים, וקישור לסוכן הרלוונטי.
 
-## Security & Privacy
+**פיצ'רים:**
+- סינון לפי גורם מעורב
+- מצב בהיר/כהה
+- שינוי גודל טקסט
+- צ'אט מובנה עם Gemini לשאלות על המפה
+- כל הקישורים לסוכנים מפנים לדפים המקומיים (agent.html)
 
-- Gemini API key lives in a JS variable for the session — never in `localStorage`, `sessionStorage`, cookies, or logs.
-- All processing is client-side. Only outbound request: directly to the Gemini API.
-- State JSONs are read into memory and sent to Gemini only as part of the prompt.
-- Admin screen uses localStorage on the user's browser only — no server, no sync.
+**קבצים:** `DSLCapp.js`, `DSLCchat.js`, `DSLCstyles.css`, `SDLCMindMap.csv`
+
+---
+
+### ⚙ מסך ניהול
+**קובץ:** `admin.html` / `admin.js`
+
+מסך מרוכז לצפייה בכל האפיונים שאושרו לאורך הסשנים — אובייקטים, שדות ואוטומציות. מאפשר ייצוא `in-flight.json` ממוזג.
+
+אחסון: **localStorage בדפדפן המשתמש בלבד**.
+
+---
+
+## ניווט וממשק
+
+**`nav.js`** — מזריק לכל הדפים:
+- סרגל צד עם רשימת כל הסוכנים וקישורים
+- כותרת עליונה עם שם הסוכן הפעיל, כפתורי +/− גודל טקסט, ומצב בהיר/כהה
+
+**עיצוב אחיד בכל הדפים:**
+- Dark mode כברירת מחדל — `body.light-mode` מפעיל מצב בהיר, ניתן להחלפה בכפתור ☾/☀
+- גודל טקסט מותאם אישית מסונכרן דרך localStorage
+- פלטת צבעים: `#08080f` רקע, `#5b6cf5` electric indigo, כרטיסי סוכנים עם glow על hover
+
+---
+
+## קבצים ותיקיות
+
+```
+├── index.html              דף בית — פורטל הסוכנים
+├── agent.html              ממשק צ'אט אחיד לכל 13 הסוכנים
+├── sf-agent.html           Salesforce Killer
+├── SDLCMindMap.html        מפת SDLC אינטראקטיבית
+├── admin.html              מסך ניהול
+│
+├── nav.js                  סרגל צד + כותרת עליונה משותפים
+├── styles.css              עיצוב גלובלי
+│
+├── agent-chat.js           לוגיקת צ'אט (chunking, download, fallback, גנרטורים)
+├── agents-config.js        הגדרות כל 13 הסוכנים (system prompt, suggestions)
+│
+├── architect-prompt.js          פרומפט גנרטור ארכיטקטורת תוכנה (4 chunks)
+├── platform-architect-prompt.js פרומפט גנרטור ארכיטקטורת פלטפורמות (4 chunks)
+├── outsystems-prompt.js         פרומפט גנרטור TSD ל-OutSystems — O11/ODC/Both (4 chunks)
+├── design-queen-prompt.js       פרומפט גנרטור פרוטוטיפ HTML (4 chunks)
+│
+├── app.js                  לוגיקת SF Killer (קריאות Gemini, uploads, היסטוריה)
+├── prompt.js               פרומפט סוכן הארכיטקט (3 chunks)
+├── claude-prompt.js        פרומפט ל-Claude Desktop להפקת deployed.json
+├── admin.js                לוגיקת מסך הניהול
+│
+├── DSLCapp.js              לוגיקת מפת ה-SDLC (ECharts, CSV, פילטרים)
+├── DSLCchat.js             צ'אט Gemini למפת ה-SDLC
+├── DSLCstyles.css          עיצוב מפת ה-SDLC
+├── SDLCMindMap.csv         נתוני SDLC — שלבים, תת-שלבים, גורמים, סוכנים
+│
+├── schema/
+│   └── state-schema.json   JSON Schema לקבצי deployed/in-flight
+├── prompts/
+│   └── extract-deployed-state.md   פרומפט ל-Claude Desktop
+└── tsd-to-salesforce/      אפליקציית Next.js — המרת TSD למטאדאטה SF (שלב הבא)
+```
+
+---
+
+## טכנולוגיות
+
+| ספרייה | שימוש |
+|--------|--------|
+| [Gemini 2.5 Flash](https://aistudio.google.com) | מודל ראשי — כל הסוכנים |
+| [Gemini 3 Flash Preview](https://ai.google.dev) | מודל fallback ראשון |
+| [Gemini 2.5 Flash Lite](https://ai.google.dev) | מודל fallback שני |
+| [ECharts](https://echarts.apache.org) | תרשים העץ האינטראקטיבי של SDLC |
+| [PapaParse](https://www.papaparse.com) | פרסינג ה-CSV של מפת ה-SDLC |
+| [mammoth.js](https://github.com/mwilliamson/mammoth.js) | חילוץ טקסט מ-.docx |
+| [pdf.js](https://mozilla.github.io/pdf.js) | חילוץ טקסט מ-PDF |
+| [Heebo](https://fonts.google.com/specimen/Heebo) | פונט עברי |
+
+ללא npm, ללא build step — הכל דרך CDN.
+
+---
+
+## מפתח API
+
+כל הסוכנים עובדים עם **Gemini API key** (חינמי ב-[aistudio.google.com/api-keys](https://aistudio.google.com/api-keys)).
+המפתח נשמר ב-localStorage — מתמיד בין סשנים ומשותף לכל הסוכנים.
+
+**Fallback אוטומטי בין מודלים:**
+כאשר מגיעים למגבלת quota היומית, המערכת עוברת אוטומטית:
+`gemini-2.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash-lite`
+
+ב-SF agent: המעבר מתרחש תוך המשך מאותו chunk — ללא צורך בהתחלה מחדש.
+
+---
+
+## אבטחה ופרטיות
+
+- כל העיבוד client-side
+- הבקשה היחידה החוצה: ישירות ל-Gemini API
+- אין שרת ביניים
+- מפתח API נשמר ב-localStorage בלבד (לא נשלח לשום מקום אחר)
+
+---
 
 ## Roadmap
 
-- [ ] Move admin storage from localStorage to organizational git
-- [ ] Real Google OAuth on the admin screen
-- [ ] Snapshot Builder (automated `deployed.json` refresh on a schedule)
-- [ ] Cross-session deduplication when the same component is approved twice
+- [ ] מעבר אחסון ניהול מ-localStorage ל-git ארגוני
+- [ ] OAuth אמיתי למסך הניהול
+- [ ] Snapshot Builder — רענון `deployed.json` אוטומטי מ-Salesforce
+- [ ] streaming responses — הצגת תשובות בזמן אמת תוך כדי קבלה מה-API

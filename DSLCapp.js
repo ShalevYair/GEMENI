@@ -5,23 +5,21 @@ let fontScale = 1;
 const BASE_FONT_SIZES = { root: 18, stage: 15, subStage: 14, minor: 13 };
 
 const AGENT_MAP = {
-    'ארזסטרטור':       { display: 'ארזסטרטור',        url: 'https://gemini.google.com/gem/1wrap8ggsEfWEFnU9m6EH7xbj0Wz5mxr8?usp=sharing' },
-    'סוכן PMO':        { display: 'רכזת הפרויקטים',   url: 'https://gemini.google.com/gem/1TiXnSihCx7aUOvIbMgGClCQLcVCHR7nD?usp=sharing' },
-    'סוכן Make or Buy':{ display: 'לעשות או לקנות',   url: 'https://gemini.google.com/gem/1Q1Mv-H2Df1XRTAxTGp3J0RjPbJRuIdnC?usp=sharing' },
-    'סוכן אפיון':      { display: 'מלך האפיונים',     url: 'https://gemini.google.com/gem/1Wk45NSaOWaYzMdYNRkFziZATwX_l9j2o?usp=sharing' },
-    'סוכן Design':     { display: 'מנתח המוח',        url: 'https://gemini.google.com/gem/1JgpJ9sdy1sczJgE1fFtYMb90URyQY8eT?usp=sharing' },
-    'סוכן UX/UI':      { display: 'מלכת העיצובים',   url: 'https://gemini.google.com/gem/1wuJgfOAb9ZKo3Cy9m2iYaKHCEn7_Y1yW?usp=sharing' },
-    'סוכן פיתוח':      { display: 'אלוף הפיתוחים',   url: 'https://gemini.google.com/gem/1qUYu2ycI4vFPcAWxgixU3Hc7vtxzt7_-?usp=sharing' },
-    'סוכן פלטפורמה':   { display: 'פלטפורמר',         url: 'https://gemini.google.com/gem/1hFvioNaOd28WWayWOjpXAzczeaicaM5c?usp=sharing' },
-    'סוכן בדיקות':     { display: 'הבודק',            url: 'https://gemini.google.com/gem/1koKgxS5PrmQRRPHuTk7Uro8BUOc8yI_N?usp=sharing' },
-    'סוכן Security':   { display: 'המאבטח',           url: 'https://gemini.google.com/gem/1SgIdzjrYiKL1qDs8LZna4WJOBintlRBZ?usp=sharing' },
-    'סוכן Deployment': { display: 'הפורס',            url: 'https://gemini.google.com/gem/1A4ubxJYigEb_uae1IJl73b52PT5yCYpm?usp=sharing' },
-    'סוכן Monitoring': { display: 'הצופה',            url: 'https://gemini.google.com/gem/1sfViXXZyyYPF0yjo5Q4dXp8OEkjFsgLX?usp=sharing' },
-    'סוכן דוקומנטציה': { display: 'המתעד',            url: 'https://gemini.google.com/gem/1s4nP3PEJKavBYYn_i2B3aCIj2w4xYikN?usp=sharing' },
-    'סוכן ספקים':      { display: 'מפעיל הספקים',    url: 'https://gemini.google.com/gem/1M_HZABG7nLvPtg_I7IQNXH2gOp02Vqu6?usp=sharing' }
+    'ארזסטרטור':       { display: 'רכזת הפרויקטים',      url: 'agent.html?id=project-coordinator' },
+    'סוכן PMO':        { display: 'רכזת הפרויקטים',      url: 'agent.html?id=project-coordinator' },
+    'סוכן Make or Buy':{ display: 'ארכיטקט הפלטפורמות',  url: 'agent.html?id=platform-architect' },
+    'סוכן אפיון':      { display: 'מלך האיפיונים',       url: 'agent.html?id=spec-king' },
+    'סוכן Design':     { display: 'ארכיטקט התוכנה',      url: 'agent.html?id=software-architect' },
+    'סוכן UX/UI':      { display: 'מלכת העיצובים',      url: 'agent.html?id=design-queen' },
+    'סוכן פיתוח':      { display: 'אלוף הפיתוחים',      url: 'agent.html?id=dev-champ' },
+    'סוכן פלטפורמה':   { display: 'ארכיטקט הפלטפורמות', url: 'agent.html?id=platform-architect' },
+    'סוכן בדיקות':     { display: 'הבודק',               url: 'agent.html?id=tester' },
+    'סוכן Security':   { display: 'המאבטח',              url: 'agent.html?id=security' },
+    'סוכן Deployment': { display: 'ארכיטקט הפלטפורמות',  url: 'agent.html?id=platform-architect' },
+    'סוכן Monitoring': { display: 'ארכיטקט התוכנה',      url: 'agent.html?id=software-architect' },
+    'סוכן דוקומנטציה': { display: 'מלך האיפיונים',       url: 'agent.html?id=spec-king' },
+    'סוכן ספקים':      { display: 'מנהל הפרויקט',        url: 'agent.html?id=project-manager' }
 };
-
-// ── Font size ──────────────────────────────────────────────────────────────
 
 function changeFontSize(step) {
     const root = document.documentElement;
@@ -30,6 +28,7 @@ function changeFontSize(step) {
     if (next >= 14 && next <= 28) {
         root.style.setProperty('--base-font-size', next + 'px');
         fontScale = next / 16;
+        localStorage.setItem('sdlc-font-size', next);
         updateChartFontSizes();
     }
 }
@@ -38,7 +37,6 @@ function updateChartFontSizes() {
     if (!myChart) return;
     const option = myChart.getOption();
     if (!option || !option.series || !option.series[0]) return;
-
     function walk(node) {
         if (!node) return;
         if (node.label) {
@@ -49,7 +47,6 @@ function updateChartFontSizes() {
         }
         if (node.children) node.children.forEach(walk);
     }
-
     const seriesData = option.series[0].data;
     if (seriesData && seriesData[0]) {
         walk(seriesData[0]);
@@ -57,12 +54,11 @@ function updateChartFontSizes() {
     }
 }
 
-// ── Dark mode ──────────────────────────────────────────────────────────────
-
 function toggleDarkMode() {
     document.body.classList.toggle('light-mode');
     const isLight = document.body.classList.contains('light-mode');
     document.getElementById('dark-mode-btn').innerHTML = isLight ? '&#9790;' : '&#9788;';
+    localStorage.setItem('sdlc-dark-mode', isLight ? 'light' : 'dark');
     updateChartTheme();
 }
 
@@ -76,14 +72,10 @@ function updateChartTheme() {
             borderColor: isLight ? '#e2e8f0' : '#475569'
         },
         series: [{
-            label: {
-                backgroundColor: isLight ? '#fff' : '#1e293b',
-                shadowColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.3)'
-            },
+            label: { backgroundColor: isLight ? '#fff' : '#1e293b', shadowColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.3)' },
             lineStyle: { color: isLight ? '#cbd5e1' : '#475569' }
         }]
     });
-
     const option = myChart.getOption();
     const seriesData = option.series[0].data;
     if (seriesData && seriesData[0]) {
@@ -118,9 +110,7 @@ function updateNodeColors(node, isLight) {
     if (node.children) node.children.forEach(c => updateNodeColors(c, isLight));
 }
 
-// ── CSV & tree ─────────────────────────────────────────────────────────────
-
-const CSV_URL = 'https://raw.githubusercontent.com/ShalevYair/MOTAgents/main/SDLC.csv';
+const CSV_URL = 'SDLCMindMap.csv';
 
 function loadCSV() {
     fetch(CSV_URL)
@@ -150,7 +140,23 @@ function loadCSV() {
         });
 }
 
-document.addEventListener('DOMContentLoaded', loadCSV);
+document.addEventListener('DOMContentLoaded', function() {
+    loadCSV();
+    var savedMode = localStorage.getItem('sdlc-dark-mode');
+    if (savedMode === 'light') {
+        document.body.classList.add('light-mode');
+        var btn = document.getElementById('dark-mode-btn');
+        if (btn) btn.innerHTML = '&#9790;';
+    }
+    var savedSize = parseInt(localStorage.getItem('sdlc-font-size') || '16');
+    if (savedSize !== 16) {
+        document.documentElement.style.setProperty('--base-font-size', savedSize + 'px');
+        fontScale = savedSize / 16;
+    }
+    if (location.hash === '#chat') {
+        setTimeout(function() { if (typeof openChat === 'function') openChat(); }, 800);
+    }
+});
 
 function populateActorsDropdown(data) {
     const actorSet = new Set();
@@ -209,22 +215,12 @@ function buildTreeData(data) {
         itemStyle: { color: '#e2e8f0' },
         label: { fontSize: 18, fontWeight: '800', color: '#e2e8f0' }
     };
-
     let currentStage = null;
     let currentSubStage = null;
-
     data.forEach(row => {
         const type = (row.TYPE || '').trim().toUpperCase();
         if (!type) return;
-
-        const node = {
-            name:     row.TITLE   || 'ללא שם',
-            content:  row.CONTENT || '',
-            actors:   row.ACTORS  || '',
-            agent:    row.AGENT   || '',
-            children: []
-        };
-
+        const node = { name: row.TITLE || 'ללא שם', content: row.CONTENT || '', actors: row.ACTORS || '', agent: row.AGENT || '', children: [] };
         if (type === 'STAGE') {
             node.symbolSize = 16;
             node.itemStyle  = { color: '#2563eb' };
@@ -246,46 +242,22 @@ function buildTreeData(data) {
             else if (currentStage) currentStage.children.push(node);
         }
     });
-
     return root;
 }
-
-// ── Chart ──────────────────────────────────────────────────────────────────
 
 function initChart(data) {
     const chartDom = document.getElementById('chart-area');
     if (myChart) myChart.dispose();
     myChart = echarts.init(chartDom);
-
     myChart.setOption({
-        tooltip: {
-            trigger: 'item',
-            triggerOn: 'mousemove',
-            formatter: '{b}',
-            backgroundColor: 'rgba(30,41,59,0.95)',
-            textStyle: { color: '#e2e8f0', fontFamily: 'Heebo' },
-            borderColor: '#475569',
-            borderWidth: 1,
-            padding: [8, 12]
-        },
+        tooltip: { trigger: 'item', triggerOn: 'mousemove', formatter: '{b}', backgroundColor: 'rgba(30,41,59,0.95)', textStyle: { color: '#e2e8f0', fontFamily: 'Heebo' }, borderColor: '#475569', borderWidth: 1, padding: [8, 12] },
         series: [{
             type: 'tree',
             data: [data],
             orient: 'RL',
             top: '8%', left: '20%', bottom: '8%', right: '15%',
             roam: true,
-            label: {
-                position: 'left',
-                verticalAlign: 'middle',
-                align: 'right',
-                fontFamily: 'Heebo',
-                padding: [5, 10],
-                backgroundColor: '#1e293b',
-                borderRadius: 6,
-                shadowColor: 'rgba(0,0,0,0.3)',
-                shadowBlur: 5,
-                shadowOffsetY: 2
-            },
+            label: { position: 'left', verticalAlign: 'middle', align: 'right', fontFamily: 'Heebo', padding: [5, 10], backgroundColor: '#1e293b', borderRadius: 6, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5, shadowOffsetY: 2 },
             leaves: { label: { position: 'right', verticalAlign: 'middle', align: 'left' } },
             lineStyle: { color: '#475569', width: 2, curveness: 0.6 },
             expandAndCollapse: true,
@@ -293,25 +265,19 @@ function initChart(data) {
             initialTreeDepth: 1
         }]
     });
-
     myChart.on('click', function(params) {
         const d = params.data;
         if (d.content || d.actors) showPanel(d);
         else if (d.name === 'מחזור חיים') hidePanel();
     });
-
     window.addEventListener('resize', () => myChart.resize());
 }
-
-// ── Info panel ─────────────────────────────────────────────────────────────
 
 function showPanel(d) {
     document.getElementById('info-default').style.display = 'none';
     document.getElementById('info-content-view').style.display = 'block';
-
     document.getElementById('info-title').innerText = d.name;
     document.getElementById('info-desc').innerText  = d.content || 'לא קיים פירוט נוסף לשלב זה.';
-
     const actorsDiv = document.getElementById('info-actors');
     if (d.actors) {
         const list = d.actors.split(',').map(a => a.trim()).filter(Boolean);
@@ -319,7 +285,6 @@ function showPanel(d) {
     } else {
         actorsDiv.innerHTML = '<span style="color:var(--text-sub);font-size:0.9rem;">לא צוינו גורמים מעורבים</span>';
     }
-
     const agentsSection = document.getElementById('agents-section');
     const agentsDiv     = document.getElementById('info-agents');
     if (d.agent) {
@@ -327,7 +292,7 @@ function showPanel(d) {
         const names = d.agent.split(',').map(a => a.trim()).filter(Boolean);
         agentsDiv.innerHTML = names.map(name => {
             const info = AGENT_MAP[name];
-            if (info) return `<a class="agent-tag" href="${info.url}" target="_blank" rel="noopener noreferrer">${info.display} ↗</a>`;
+            if (info) return `<a class="agent-tag" href="${info.url}">${info.display}</a>`;
             return `<span class="agent-tag agent-tag-plain">${name}</span>`;
         }).join('');
     } else {

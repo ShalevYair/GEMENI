@@ -1,13 +1,13 @@
 import { getSectionPrompt } from './prompt.js';
 import { CLAUDE_DESKTOP_PROMPT } from './claude-prompt.js';
 
-const GEMINI_ENDPOINT =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const MODEL_CHAIN     = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
 const MAX_OUTPUT_TOKENS = 65000;
-const TOTAL_CHUNKS = 3;
+const TOTAL_CHUNKS    = 3;
 
 // --- State ---
-let apiKey = '';
+let apiKey   = localStorage.getItem('gemini_sf_api_key') || '';
+let modelIdx = 0;
 let fsdText = '';
 let fsdFile = null;
 let deployedState = '';
@@ -192,6 +192,7 @@ function openApiKeyModal() {
         apikeyInput.focus();
         return;
       }
+      localStorage.setItem('gemini_sf_api_key', v);
       cleanup();
       resolve(v);
     };
@@ -352,6 +353,14 @@ function hideDownloadButtons() {
 // ════════════════════════════════════════════════════════════════
 // Run chunks
 // ════════════════════════════════════════════════════════════════
+function isQuotaExceeded(msg) {
+  return /quota|exceeded your current quota|free_tier|generativelanguage.*requests/i.test(msg);
+}
+
+function isHighDemand(msg) {
+  return /503|high demand|overload|temporarily unavailable/i.test(msg);
+}
+
 async function runChunks(startChunk) {
   const labels = [
     'מייצר: סיכום מנהלי, אובייקטים, שדות (1/3)...',
@@ -362,12 +371,29 @@ async function runChunks(startChunk) {
     if (chunkResults[chunk - 1] !== null) continue;
     showProgress(((chunk - 1) / TOTAL_CHUNKS) * 100);
     progressText.textContent = labels[chunk - 1];
-    try {
-      chunkResults[chunk - 1] = await callGemini(chunk);
-    } catch (err) {
-      retryBtn.dataset.failedChunk = chunk;
-      retryBtn.hidden = false;
-      throw new Error(`חלק ${chunk}: ${err.message}`);
+
+    while (true) {
+      try {
+        chunkResults[chunk - 1] = await callGemini(chunk);
+        break;
+      } catch (err) {
+        if ((isQuotaExceeded(err.message) || isHighDemand(err.message)) && modelIdx < MODEL_CHAIN.length - 1) {
+          const from = MODEL_CHAIN[modelIdx++];
+          const reason = isHighDemand(err.message) ? 'עומס גבוה' : 'מגבלת שימוש';
+          showWarning(`⚠️ ${reason} ב-${from}. עובר ל-${MODEL_CHAIN[modelIdx]} וממשיך מחלק ${chunk}...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        retryBtn.dataset.failedChunk = chunk;
+        retryBtn.hidden = false;
+        if (isQuotaExceeded(err.message)) {
+          throw new Error(`הגעת למגבלת השימוש היומית בכל המודלים הזמינים. נסה שוב מחר.`);
+        }
+        if (isHighDemand(err.message)) {
+          throw new Error(`כל המודלים הזמינים עמוסים כרגע. נסה שוב מאוחר יותר.`);
+        }
+        throw new Error(`חלק ${chunk}: ${err.message}`);
+      }
     }
   }
   showProgress(100);
@@ -411,7 +437,7 @@ async function callGemini(chunkNumber) {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
   };
-  const url = `${GEMINI_ENDPOINT}?key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[modelIdx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   let response;
   try {
@@ -432,6 +458,7 @@ async function callGemini(chunkNumber) {
     } catch {}
     if (response.status === 400 || response.status === 403) {
       apiKey = '';
+      localStorage.removeItem('gemini_sf_api_key');
       msg += ' — ייתכן שמפתח ה-API שגוי. נסה שוב.';
     }
     throw new Error(msg);

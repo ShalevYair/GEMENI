@@ -4,6 +4,7 @@ import { getArchitectPrompt } from './architect-prompt.js';
 import { getPlatformArchitectPrompt } from './platform-architect-prompt.js';
 import { getOutSystemsPrompt } from './outsystems-prompt.js';
 import { getDesignQueenPrompt } from './design-queen-prompt.js';
+import { getSpecKingClarificationPrompt, getSpecKingChunkPrompt, CHECKLIST_ITEMS } from './spec-king-prompt.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
 const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
@@ -35,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (agentId === 'platform-architect') injectPlatformArchitectModal();
   if (agentId === 'outsystems') injectOutSystemsModal();
   if (agentId === 'design-queen') injectDesignQueenModal();
+  if (agentId === 'spec-king') injectSpecKingModal();
   if (apiKey) showChatReady();
   bindEvents();
 });
@@ -143,6 +145,9 @@ function renderEmptyState() {
         : ''}
       ${agentId === 'design-queen'
         ? `<button class="chip chip--generate" onclick="window.openDesignQueenModal()">צור מסכי HTML מאפיון — קבל פרוטוטייפ אינטראקטיבי מלא</button>`
+        : ''}
+      ${agentId === 'spec-king'
+        ? `<button class="chip chip--generate" onclick="window.openSpecKingModal()">👑 צור אפיון / שאלות הבהרה מקבצי דרישות</button>`
         : ''}
     </div>`;
   msgs.appendChild(empty);
@@ -1645,3 +1650,360 @@ async function callGeminiForBacklog(promptText, mIdx) {
   }
   return candidate.content.parts.map(p => p.text).join('');
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SPEC-KING MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SK_STORAGE_KEY = 'spec-king-checklist-v1';
+let specKingFiles = []; // Array of { file, text } objects
+
+function skGetSavedChecked() {
+  try {
+    const saved = localStorage.getItem(SK_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return CHECKLIST_ITEMS.filter(i => i.defaultOn).map(i => i.id);
+}
+
+function skSaveChecked(ids) {
+  try { localStorage.setItem(SK_STORAGE_KEY, JSON.stringify(ids)); } catch {}
+}
+
+function skGetCheckedIds() {
+  return CHECKLIST_ITEMS
+    .filter(item => {
+      const cb = document.getElementById(`sk-check-${item.id}`);
+      return cb && cb.checked;
+    })
+    .map(item => item.id);
+}
+
+function injectSpecKingModal() {
+  const savedChecked = skGetSavedChecked();
+
+  const checklistHtml = CHECKLIST_ITEMS.map((item, idx) => {
+    const isChecked = savedChecked.includes(item.id);
+    const isDefault = item.defaultOn;
+    return `
+      <label style="display:flex;align-items:center;gap:.45rem;cursor:pointer;padding:.25rem .35rem;border-radius:6px;transition:background .15s;font-size:.82rem;" onmouseenter="this.style.background='#f1f5f9'" onmouseleave="this.style.background=''">
+        <input type="checkbox" id="sk-check-${escHtml(item.id)}" ${isChecked ? 'checked' : ''} style="accent-color:#7c3aed;width:14px;height:14px;flex-shrink:0;">
+        <span style="color:${isDefault ? '#1e293b' : '#475569'}">${escHtml(item.label)}</span>
+      </label>`;
+  }).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'spec-king-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:flex-start;justify-content:center;overflow-y:auto;padding:2rem 1rem;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:2rem;max-width:560px;width:100%;direction:rtl;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Heebo,sans-serif;margin:auto;">
+      <h3 style="margin:0 0 .35rem;font-size:1.15rem;display:flex;align-items:center;gap:.5rem;">👑 מלך האיפיונים — יצירת מסמך</h3>
+      <p style="margin:0 0 1.35rem;color:#6b7a99;font-size:.88rem;">העלה עד 10 קבצי דרישות, אפיון, פרוטוקולים או הבהרות — וקבל מה שאתה בוחר.</p>
+
+      <!-- ── Multi-file upload ── -->
+      <div style="margin-bottom:1.25rem;">
+        <div style="font-weight:600;font-size:.9rem;margin-bottom:.5rem;">קבצי מקור (עד 10 קבצים):</div>
+        <label id="sk-dropzone" for="sk-file-input"
+          style="display:block;border:2px dashed #c8d0e0;border-radius:10px;padding:1.25rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;"
+          ondragover="event.preventDefault();this.style.borderColor='#7c3aed';this.style.background='#faf5ff';"
+          ondragleave="this.style.borderColor='#c8d0e0';this.style.background='';"
+          ondrop="event.preventDefault();this.style.borderColor='#c8d0e0';this.style.background='';window.skHandleDrop(event);">
+          <div style="font-size:1.6rem;margin-bottom:.3rem;">📂</div>
+          <div style="color:#6b7a99;font-size:.88rem;">לחץ לבחירת קבצים או גרור לכאן<br><span style="font-size:.78rem;">.docx · .txt · .md · .pdf (מקסימום 10 קבצים, 10MB כל אחד)</span></div>
+          <input id="sk-file-input" type="file" accept=".docx,.txt,.md,.pdf" multiple style="display:none;" onchange="window.skFilesSelected(this.files)">
+        </label>
+        <div id="sk-files-list" style="margin-top:.6rem;display:flex;flex-direction:column;gap:.3rem;"></div>
+      </div>
+
+      <!-- ── Mode ── -->
+      <div style="margin-bottom:1.1rem;">
+        <div style="font-weight:600;font-size:.9rem;margin-bottom:.5rem;">מה תרצה לקבל?</div>
+        <label style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.5rem;cursor:pointer;">
+          <input type="radio" name="sk-mode" value="spec" checked style="margin-top:.2rem;" onchange="window.skModeChanged()">
+          <span><strong>אפיון מפורט</strong> <span style="color:#6b7a99;font-size:.82rem;">— מסמך FSD מובנה ומלא (3 חלקים)</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;">
+          <input type="radio" name="sk-mode" value="questions" style="margin-top:.2rem;" onchange="window.skModeChanged()">
+          <span><strong>שאלות הבהרה</strong> <span style="color:#6b7a99;font-size:.82rem;">— רשימת שאלות ממוקדות לפני האפיון</span></span>
+        </label>
+      </div>
+
+      <!-- ── Language (spec mode only) ── -->
+      <div id="sk-lang-section" style="margin-bottom:1.1rem;">
+        <div style="font-weight:600;font-size:.9rem;margin-bottom:.5rem;">שפת הפלט:</div>
+        <label style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;cursor:pointer;">
+          <input type="radio" name="sk-lang" value="en" checked>
+          <span><strong>English</strong> <span style="color:#6b7a99;font-size:.82rem;">— מפורט ועמוק יותר (מומלץ, חוסך טוקנים)</span></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+          <input type="radio" name="sk-lang" value="he">
+          <span><strong>עברית</strong></span>
+        </label>
+      </div>
+
+      <!-- ── Checklist (spec mode only) ── -->
+      <div id="sk-checklist-section" style="margin-bottom:1.35rem;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;">
+          <div style="font-weight:600;font-size:.9rem;">מה לכלול באפיון:</div>
+          <div style="display:flex;gap:.4rem;">
+            <button onclick="window.skSelectAll()" style="font-size:.75rem;padding:.2rem .55rem;border:1px solid #c8d0e0;border-radius:5px;background:#fff;cursor:pointer;">בחר הכל</button>
+            <button onclick="window.skSelectDefaults()" style="font-size:.75rem;padding:.2rem .55rem;border:1px solid #c8d0e0;border-radius:5px;background:#fff;cursor:pointer;">ברירת מחדל</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.1rem;border:1px solid #e2e8f0;border-radius:8px;padding:.5rem;">
+          ${checklistHtml}
+        </div>
+        <p style="margin:.5rem 0 0;font-size:.76rem;color:#94a3b8;">פריטים לא מסומנים = הארכיטקטים האחרים. ברירת מחדל = מה שמלך האיפיונים עושה בלעדית.</p>
+      </div>
+
+      <!-- ── Buttons ── -->
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button onclick="window.closeSpecKingModal()" style="padding:.55rem 1.1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.9rem;font-family:Heebo,sans-serif;">ביטול</button>
+        <button id="sk-generate-btn" onclick="window.generateSpecKing()" style="padding:.55rem 1.35rem;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(124,58,237,.35);">👑 צור מסמך</button>
+      </div>
+    </div>`;
+
+  modal.addEventListener('click', e => { if (e.target === modal) window.closeSpecKingModal(); });
+  document.body.appendChild(modal);
+}
+
+window.openSpecKingModal = function () {
+  if (isLoading) return;
+  const modal = document.getElementById('spec-king-modal');
+  if (!modal) return;
+  specKingFiles = [];
+  skRenderFilesList();
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+};
+
+window.closeSpecKingModal = function () {
+  const modal = document.getElementById('spec-king-modal');
+  if (!modal) return;
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+  specKingFiles = [];
+  const fi = document.getElementById('sk-file-input');
+  if (fi) fi.value = '';
+};
+
+window.skModeChanged = function () {
+  const mode = document.querySelector('input[name="sk-mode"]:checked')?.value;
+  const langSection = document.getElementById('sk-lang-section');
+  const checkSection = document.getElementById('sk-checklist-section');
+  if (langSection) langSection.style.display = mode === 'spec' ? '' : 'none';
+  if (checkSection) checkSection.style.display = mode === 'spec' ? '' : 'none';
+};
+
+window.skSelectAll = function () {
+  CHECKLIST_ITEMS.forEach(item => {
+    const cb = document.getElementById(`sk-check-${item.id}`);
+    if (cb) cb.checked = true;
+  });
+};
+
+window.skSelectDefaults = function () {
+  CHECKLIST_ITEMS.forEach(item => {
+    const cb = document.getElementById(`sk-check-${item.id}`);
+    if (cb) cb.checked = item.defaultOn;
+  });
+};
+
+window.skHandleDrop = function (event) {
+  const files = Array.from(event.dataTransfer.files || []);
+  skAddFiles(files);
+};
+
+window.skFilesSelected = function (fileList) {
+  const files = Array.from(fileList || []);
+  skAddFiles(files);
+  const fi = document.getElementById('sk-file-input');
+  if (fi) fi.value = '';
+};
+
+function skAddFiles(files) {
+  const allowed = ['.docx', '.txt', '.md', '.pdf'];
+  for (const f of files) {
+    if (specKingFiles.length >= 10) break;
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
+    if (!allowed.includes(ext)) continue;
+    if (f.size > 10 * 1024 * 1024) continue;
+    if (specKingFiles.find(x => x.name === f.name)) continue;
+    specKingFiles.push(f);
+  }
+  skRenderFilesList();
+}
+
+function skRenderFilesList() {
+  const list = document.getElementById('sk-files-list');
+  if (!list) return;
+  if (specKingFiles.length === 0) {
+    list.innerHTML = '';
+    return;
+  }
+  list.innerHTML = specKingFiles.map((f, idx) => `
+    <div style="display:flex;align-items:center;gap:.5rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:.4rem .65rem;font-size:.82rem;">
+      <span style="color:#7c3aed;">📄</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(f.name)}</span>
+      <span style="color:#94a3b8;white-space:nowrap;">${(f.size / 1024).toFixed(0)} KB</span>
+      <button onclick="window.skRemoveFile(${idx})" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.9rem;padding:0 .15rem;line-height:1;" title="הסר">✕</button>
+    </div>`).join('');
+}
+
+window.skRemoveFile = function (idx) {
+  specKingFiles.splice(idx, 1);
+  skRenderFilesList();
+};
+
+window.generateSpecKing = async function () {
+  if (specKingFiles.length === 0) {
+    const dz = document.getElementById('sk-dropzone');
+    if (dz) { dz.style.borderColor = '#e53e3e'; setTimeout(() => { dz.style.borderColor = '#c8d0e0'; }, 2000); }
+    return;
+  }
+  if (!apiKey) {
+    window.closeSpecKingModal();
+    document.getElementById('api-banner').hidden = false;
+    document.getElementById('api-key-input').focus();
+    return;
+  }
+
+  const mode = document.querySelector('input[name="sk-mode"]:checked')?.value || 'spec';
+  const lang = document.querySelector('input[name="sk-lang"]:checked')?.value || 'en';
+  const checkedIds = mode === 'spec' ? skGetCheckedIds() : [];
+  skSaveChecked(checkedIds);
+
+  window.closeSpecKingModal();
+  hideEmpty();
+  setLoading(true);
+  const progressId = appendTyping();
+
+  // Read all files
+  let combinedText = '';
+  try {
+    for (const file of specKingFiles) {
+      updateTyping(progressId, `קורא קובץ: ${file.name}…`);
+      const fileData = await readFile(file);
+      const content = fileData.isInline ? `[קובץ PDF — תוכן נשלח כתמונה ל-AI]` : (fileData.text || '');
+      combinedText += `\n\n${'═'.repeat(60)}\nמסמך: ${file.name}\n${'═'.repeat(60)}\n\n${content}`;
+    }
+  } catch (e) {
+    removeTyping(progressId);
+    setLoading(false);
+    appendMessage('error', 'שגיאה בקריאת קבצים: ' + e.message);
+    return;
+  }
+
+  const fileNames = specKingFiles.map(f => f.name).join(', ');
+  const results = [];
+  let skModelIdx = modelIdx;
+
+  if (mode === 'questions') {
+    // ── Mode A: single chunk ──
+    updateTyping(progressId, 'מנתח את המסמכים ומייצר שאלות הבהרה…');
+    const prompt = getSpecKingClarificationPrompt(combinedText);
+    let done = false;
+    while (!done) {
+      try {
+        results.push(await callGeminiForArchitectSpec(prompt, skModelIdx));
+        done = true;
+      } catch (err) {
+        const quota = isQuotaExceeded(err.message);
+        const busy  = /503|high demand|overload|temporarily/i.test(err.message);
+        if ((quota || busy) && skModelIdx < MODEL_CHAIN.length - 1) {
+          skModelIdx++;
+          appendMessage('error', `⚠️ עובר למודל ${MODEL_CHAIN[skModelIdx]}… 🔄`);
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          removeTyping(progressId);
+          setLoading(false);
+          appendMessage('error', 'שגיאה: ' + err.message);
+          return;
+        }
+      }
+    }
+  } else {
+    // ── Mode B: 3 chunks ──
+    const chunkLabels = {
+      he: ['מבוא ורקע', 'דרישות פונקציונליות', 'אינטגרציות, החלטות ומונחים'],
+      en: ['Introduction & Context', 'Functional Requirements', 'Integrations, Decisions & Glossary'],
+    };
+    const labels = chunkLabels[lang] || chunkLabels.en;
+
+    for (let chunk = 1; chunk <= 3; chunk++) {
+      const prompt = getSpecKingChunkPrompt(combinedText, chunk, lang, checkedIds);
+      if (!prompt) continue; // no sections selected for this chunk
+
+      updateTyping(progressId, `מייצר חלק ${chunk} מתוך 3… (${labels[chunk - 1]})`);
+
+      let done = false;
+      while (!done) {
+        try {
+          results.push(await callGeminiForArchitectSpec(prompt, skModelIdx));
+          done = true;
+        } catch (err) {
+          const quota = isQuotaExceeded(err.message);
+          const busy  = /503|high demand|overload|temporarily/i.test(err.message);
+          if ((quota || busy) && skModelIdx < MODEL_CHAIN.length - 1) {
+            skModelIdx++;
+            appendMessage('error', `⚠️ עובר למודל ${MODEL_CHAIN[skModelIdx]} (חלק ${chunk})… 🔄`);
+            await new Promise(r => setTimeout(r, 2000));
+          } else {
+            removeTyping(progressId);
+            setLoading(false);
+            appendMessage('error', `שגיאה בחלק ${chunk}: ${err.message}`);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  removeTyping(progressId);
+  setLoading(false);
+
+  if (results.length === 0) {
+    appendMessage('error', 'לא נבחרו סעיפים לייצור. אנא סמן לפחות סעיף אחד בצ\'קליסט.');
+    return;
+  }
+
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const isQuestions = mode === 'questions';
+  const header = isQuestions
+    ? `<!-- Clarification Questions — מלך האיפיונים | ${timestamp} | Sources: ${fileNames} -->\n\n# שאלות הבהרה לפני כתיבת האפיון\n\n`
+    : `<!-- FSD — מלך האיפיונים | ${lang.toUpperCase()} | ${timestamp} | Sources: ${fileNames} -->\n\n`;
+  const combined = header + results.join('\n\n---\n\n');
+  const suffix = isQuestions ? 'clarification-questions' : `fsd-${lang}`;
+  const filename = `spec-king-${suffix}-${timestamp}.md`;
+
+  const blob = new Blob([combined], { type: 'text/markdown;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  const summaryLines = isQuestions
+    ? [
+        `✅ שאלות ההבהרה נוצרו והורדו כ-\`${filename}\``,
+        '',
+        `**מסמכי מקור שנותחו (${specKingFiles.length}):** ${fileNames}`,
+        '',
+        'השאלות מאורגנות לפי קטגוריות ומתועדפות (BLOCKER / IMPORTANT / NICE TO KNOW).',
+        'ענה עליהן, הוסף את התשובות לקובץ, והעלה שוב לקבלת האפיון המפורט.',
+      ]
+    : [
+        `✅ האפיון הפונקציונלי נוצר והורד כ-\`${filename}\``,
+        '',
+        `**שפה:** ${lang === 'en' ? 'English' : 'עברית'} · **מסמכי מקור (${specKingFiles.length}):** ${fileNames}`,
+        '',
+        `**חלקים שנוצרו:** ${results.length} מתוך 3`,
+        '',
+        'לאחר עיון ואישור האפיון, ניתן להעביר אותו לסוכן ארכיטקט התוכנה או ארכיטקט הפלטפורמות.',
+      ];
+
+  appendMessage('assistant', summaryLines.join('\n'));
+};

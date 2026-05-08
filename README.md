@@ -47,6 +47,17 @@
 - מגבלת פלט: עד 65,000 טוקנים לתשובה
 - Fallback אוטומטי בין מודלים בעת מגבלת quota
 
+**גנרטורי מסמכים — 4 חלקים:**
+
+| סוכן | כפתור | פלט |
+|------|--------|-----|
+| 🏗️ ארכיטקט התוכנה | "הפק מסמך ארכיטקטורה" | Technical Architecture Document (`.md`) |
+| ⚙️ ארכיטקט הפלטפורמות | "הפק מסמך פלטפורמה" | Platform Architecture Document (`.md`) |
+| 🔷 OutSystems Expert | "הפק TSD מלא" | Technical Solution Design ל-O11 / ODC / שניהם (`.md`) |
+| 🎨 מלכת העיצובים | "הפק Mockup HTML" | פרוטוטיפ HTML אינטראקטיבי עם כל המסכים (`.html`) |
+
+כל גנרטור מקבל מסמך אפיון בכל פורמט ומפיק את הפלט ב-4 קריאות API מחוברות.
+
 ---
 
 ### ⚡ Salesforce Killer — סוכן ארכיטקט
@@ -119,9 +130,9 @@
 - כותרת עליונה עם שם הסוכן הפעיל, כפתורי +/− גודל טקסט, ומצב בהיר/כהה
 
 **עיצוב אחיד בכל הדפים:**
-- Dark mode מסונכרן דרך localStorage — בחירה שמתפשטת לכל הסוכנים
-- גודל טקסט מותאם אישית מסונכרן באותו אופן
-- ללא גרדיאנטים סגול/כחול — עיצוב נקי ואחיד
+- Dark mode כברירת מחדל — `body.light-mode` מפעיל מצב בהיר, ניתן להחלפה בכפתור ☾/☀
+- גודל טקסט מותאם אישית מסונכרן דרך localStorage
+- פלטת צבעים: `#08080f` רקע, `#5b6cf5` electric indigo, כרטיסי סוכנים עם glow על hover
 
 ---
 
@@ -137,8 +148,13 @@
 ├── nav.js                  סרגל צד + כותרת עליונה משותפים
 ├── styles.css              עיצוב גלובלי
 │
-├── agent-chat.js           לוגיקת צ'אט (chunking, download, fallback)
+├── agent-chat.js           לוגיקת צ'אט (chunking, download, fallback, גנרטורים)
 ├── agents-config.js        הגדרות כל 13 הסוכנים (system prompt, suggestions)
+│
+├── architect-prompt.js          פרומפט גנרטור ארכיטקטורת תוכנה (4 chunks)
+├── platform-architect-prompt.js פרומפט גנרטור ארכיטקטורת פלטפורמות (4 chunks)
+├── outsystems-prompt.js         פרומפט גנרטור TSD ל-OutSystems — O11/ODC/Both (4 chunks)
+├── design-queen-prompt.js       פרומפט גנרטור פרוטוטיפ HTML (4 chunks)
 │
 ├── app.js                  לוגיקת SF Killer (קריאות Gemini, uploads, היסטוריה)
 ├── prompt.js               פרומפט סוכן הארכיטקט (3 chunks)

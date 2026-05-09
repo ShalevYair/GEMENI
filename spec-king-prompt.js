@@ -31,7 +31,20 @@ HARD RULES — DO NOT VIOLATE
 
 6. CONTINUITY BETWEEN CHUNKS: You are producing one section of a larger document.
    Begin directly with the section content — no preamble, no "here is the spec", no meta-commentary.
-   End each chunk cleanly; do not summarize what comes next.`;
+   End each chunk cleanly; do not summarize what comes next.
+
+7. EXCEL TABLE FORMAT: Some sections require data output as a structured JSON array — NOT as a
+   markdown table. These sections are marked with [EXCEL TABLE].
+   For each such section, output EXACTLY this structure:
+   <excel-table name="Sheet Name">
+   [{"column1": "value", "column2": "value"}, {"column1": "value", "column2": "value"}]
+   </excel-table>
+   Rules:
+   - Output valid JSON only inside the tags (no trailing commas, no comments)
+   - Every row object MUST include ALL column keys, even if the value is an empty string ""
+   - All values must be strings — no numbers, no null, no booleans
+   - Do NOT also output the same data as a markdown table
+   - The document will automatically show: 📊 [Sheet Name — see Excel file]`;
 
 // ─── CHECKLIST ITEMS (shared between prompt builder and UI) ─────────────────
 export const CHECKLIST_ITEMS = [
@@ -175,15 +188,19 @@ export function getSpecKingChunkPrompt(combinedText, chunkNum, lang, checkedIds)
 
     'stakeholders': lang === 'he'
       ? `## בעלי עניין ותפקידים
-| תפקיד | שם / קבוצה | תחום אחריות | רמת מעורבות |
-|---|---|---|---|
-
-רמות מעורבות: מחליט / מאשר / מייעץ / מיודע`
+[EXCEL TABLE — name: "בעלי עניין"]
+עמודות: תפקיד, שם / קבוצה, תחום אחריות, רמת מעורבות
+ערכים לשדה "רמת מעורבות": מחליט / מאשר / מייעץ / מיודע
+<excel-table name="בעלי עניין">
+[{"תפקיד":"","שם / קבוצה":"","תחום אחריות":"","רמת מעורבות":""}]
+</excel-table>`
       : `## Stakeholders & Roles
-| Role | Name / Group | Responsibility | Involvement Level |
-|---|---|---|---|
-
-Involvement levels: Decision-Maker / Approver / Consultant / Informed`,
+[EXCEL TABLE — name: "Stakeholders"]
+Columns: Role, Name / Group, Responsibility, Involvement Level
+Values for "Involvement Level": Decision-Maker / Approver / Consultant / Informed
+<excel-table name="Stakeholders">
+[{"Role":"","Name / Group":"","Responsibility":"","Involvement Level":""}]
+</excel-table>`,
 
     'assumptions': lang === 'he'
       ? `## הנחות יסוד ואילוצים
@@ -205,11 +222,17 @@ Involvement levels: Decision-Maker / Approver / Consultant / Informed`,
 
     'dependencies': lang === 'he'
       ? `## תלויות ומערכות חיצוניות
-| מערכת / גורם | סוג תלות | מה תלוי בה | סיכון עיכוב |
-|---|---|---|---|`
+[EXCEL TABLE — name: "תלויות"]
+עמודות: מערכת / גורם, סוג תלות, מה תלוי בה, סיכון עיכוב
+<excel-table name="תלויות">
+[{"מערכת / גורם":"","סוג תלות":"","מה תלוי בה":"","סיכון עיכוב":""}]
+</excel-table>`
       : `## External Dependencies & Systems
-| System / Party | Dependency Type | What Depends On It | Delay Risk |
-|---|---|---|---|`,
+[EXCEL TABLE — name: "Dependencies"]
+Columns: System / Party, Dependency Type, What Depends On It, Delay Risk
+<excel-table name="Dependencies">
+[{"System / Party":"","Dependency Type":"","What Depends On It":"","Delay Risk":""}]
+</excel-table>`,
 
     'functional-reqs': lang === 'he'
       ? `## דרישות פונקציונליות
@@ -251,10 +274,13 @@ For each functional domain, define requirements using this structure:
 | ישות | תיאור | ישויות קשורות |
 |---|---|---|
 
-### פירוט שדות לכל ישות
-#### [שם ישות]
-| שם שדה | סוג | חובה | ערכים / טווח | תיאור |
-|---|---|---|---|---|
+### כל השדות — טבלה מאוחדת
+[EXCEL TABLE — name: "שדות"]
+עמודות: ישות, שם שדה, סוג, חובה, ערכים / טווח, תיאור
+כלול שורה אחת לכל שדה של כל ישות. ציין את שם הישות בכל שורה.
+<excel-table name="שדות">
+[{"ישות":"","שם שדה":"","סוג":"","חובה":"","ערכים / טווח":"","תיאור":""}]
+</excel-table>
 
 ### קשרים בין ישויות
 - [ישות א] ←→ [ישות ב]: [1:1 / 1:N / N:M] — [תיאור הקשר]`
@@ -263,10 +289,13 @@ For each functional domain, define requirements using this structure:
 | Entity | Description | Related Entities |
 |---|---|---|
 
-### Field Details per Entity
-#### [Entity Name]
-| Field Name | Type | Required | Values / Range | Description |
-|---|---|---|---|---|
+### All Fields — Unified Table
+[EXCEL TABLE — name: "Fields"]
+Columns: Entity, Field Name, Type, Required, Values / Range, Description
+Include one row per field across all entities. Repeat the entity name on each row.
+<excel-table name="Fields">
+[{"Entity":"","Field Name":"","Type":"","Required":"","Values / Range":"","Description":""}]
+</excel-table>
 
 ### Entity Relationships
 - [Entity A] ←→ [Entity B]: [1:1 / 1:N / N:M] — [relationship description]`,
@@ -305,45 +334,45 @@ For each major process:
 
     'integrations': lang === 'he'
       ? `## נקודות אינטגרציה חיצוניות
-| מערכת חיצונית | כיוון | מטרה | נתונים שעוברים | תדירות | בעל מידע |
-|---|---|---|---|---|---|
+[EXCEL TABLE — name: "אינטגרציות"]
+עמודות: מערכת חיצונית, כיוון, מטרה, נתונים שעוברים, תדירות, בעל מידע
+ערכים לשדה "כיוון": כניסה / יציאה / דו-כיווני
+ערכים לשדה "תדירות": ריאל-טיים / אצווה / לפי דרישה
+<excel-table name="אינטגרציות">
+[{"מערכת חיצונית":"","כיוון":"","מטרה":"","נתונים שעוברים":"","תדירות":"","בעל מידע":""}]
+</excel-table>
 
 ### פירוט לכל אינטגרציה
+לכל אינטגרציה שצוינה בטבלה, הוסף:
 #### [שם האינטגרציה]
-- **כיוון**: [כניסה / יציאה / דו-כיווני]
-- **מטרה עסקית**: [מה מניע את הצורך בחיבור]
-- **נתונים**: [אילו נתונים עוברים, באיזה פורמט]
-- **תדירות**: [ריאל-טיים / אצווה / לפי דרישה]
 - **שגיאות**: [מה קורה אם האינטגרציה נכשלת]`
       : `## External Integration Points
-| External System | Direction | Purpose | Data Exchanged | Frequency | Data Owner |
-|---|---|---|---|---|---|
+[EXCEL TABLE — name: "Integrations"]
+Columns: External System, Direction, Purpose, Data Exchanged, Frequency, Data Owner
+Values for "Direction": Inbound / Outbound / Bidirectional
+Values for "Frequency": Real-time / Batch / On-demand
+<excel-table name="Integrations">
+[{"External System":"","Direction":"","Purpose":"","Data Exchanged":"","Frequency":"","Data Owner":""}]
+</excel-table>
 
 ### Detail per Integration
+For each integration listed in the table, add:
 #### [Integration Name]
-- **Direction**: [Inbound / Outbound / Bidirectional]
-- **Business purpose**: [what drives the need for this connection]
-- **Data**: [what data flows, in what format]
-- **Frequency**: [Real-time / Batch / On-demand]
 - **Failure handling**: [what happens if the integration fails]`,
 
     'decision-log': lang === 'he'
       ? `## לוג החלטות פתוחות
-| # | נושא | אפשרויות | מי מחליט | תאריך יעד | השפעה על האפיון |
-|---|---|---|---|---|---|
-
-**DECISION-001**: [נושא]
-- אפשרות א: [יתרונות / חסרונות]
-- אפשרות ב: [יתרונות / חסרונות]
-- ⚠ ממתין להחלטה — חסום עד לקבלת תשובה`
+[EXCEL TABLE — name: "החלטות פתוחות"]
+עמודות: #, נושא, אפשרויות, מי מחליט, תאריך יעד, השפעה על האפיון
+<excel-table name="החלטות פתוחות">
+[{"#":"DECISION-001","נושא":"","אפשרויות":"","מי מחליט":"","תאריך יעד":"","השפעה על האפיון":""}]
+</excel-table>`
       : `## Open Decisions Log
-| # | Topic | Options | Decision Owner | Target Date | Impact on Spec |
-|---|---|---|---|---|---|
-
-**DECISION-001**: [topic]
-- Option A: [pros / cons]
-- Option B: [pros / cons]
-- ⚠ Pending decision — spec is blocked until resolved`,
+[EXCEL TABLE — name: "Open Decisions"]
+Columns: #, Topic, Options, Decision Owner, Target Date, Impact on Spec
+<excel-table name="Open Decisions">
+[{"#":"DECISION-001","Topic":"","Options":"","Decision Owner":"","Target Date":"","Impact on Spec":""}]
+</excel-table>`,
 
     'glossary': lang === 'he'
       ? `## גלוסרי ומונחים
@@ -378,14 +407,16 @@ Include: business terms, acronyms, system names, system-specific role names.`,
 ### [שם המסע] — [שם פרסונה]
 **מטרה**: [מה המשתמש מנסה להשיג]
 
-| שלב | פעולת משתמש | תגובת מערכת | רגש / נקודת כאב |
-|---|---|---|---|`
+<excel-table name="מסעות משתמש">
+[{"שלב":"","פעולת משתמש":"","תגובת מערכת":"","רגש / נקודת כאב":""}]
+</excel-table>`
       : `## User Journeys
 ### [Journey Name] — [Persona Name]
 **Goal**: [what the user is trying to achieve]
 
-| Stage | User Action | System Response | Emotion / Pain Point |
-|---|---|---|---|`,
+<excel-table name="User Journeys">
+[{"Stage":"","User Action":"","System Response":"","Emotion / Pain Point":""}]
+</excel-table>`,
 
     'user-stories': lang === 'he'
       ? `## User Stories עם Acceptance Criteria
@@ -403,19 +434,13 @@ Include: business terms, acronyms, system names, system-specific role names.`,
 
     'performance': lang === 'he'
       ? `## דרישות ביצועים ו-Scalability
-| מדד | ערך יעד | תרחיש | בסיס המדידה |
-|---|---|---|---|
-| זמן תגובה | | | |
-| עומס משתמשים בו-זמניים | | | |
-| נפח נתונים | | | |
-| זמינות (Uptime) | | | |`
+<excel-table name="דרישות ביצועים">
+[{"מדד":"זמן תגובה","ערך יעד":"","תרחיש":"","בסיס המדידה":""},{"מדד":"עומס משתמשים בו-זמניים","ערך יעד":"","תרחיש":"","בסיס המדידה":""},{"מדד":"נפח נתונים","ערך יעד":"","תרחיש":"","בסיס המדידה":""},{"מדד":"זמינות (Uptime)","ערך יעד":"","תרחיש":"","בסיס המדידה":""}]
+</excel-table>`
       : `## Performance & Scalability Requirements
-| Metric | Target Value | Scenario | Measurement Basis |
-|---|---|---|---|
-| Response time | | | |
-| Concurrent users | | | |
-| Data volume | | | |
-| Availability (Uptime) | | | |`,
+<excel-table name="Performance Requirements">
+[{"Metric":"Response time","Target Value":"","Scenario":"","Measurement Basis":""},{"Metric":"Concurrent users","Target Value":"","Scenario":"","Measurement Basis":""},{"Metric":"Data volume","Target Value":"","Scenario":"","Measurement Basis":""},{"Metric":"Availability (Uptime)","Target Value":"","Scenario":"","Measurement Basis":""}]
+</excel-table>`,
 
     'security': lang === 'he'
       ? `## אבטחה ותאימות

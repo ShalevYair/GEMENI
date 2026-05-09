@@ -1865,6 +1865,43 @@ window.skRemoveFile = function (idx) {
   skRenderFilesList();
 };
 
+// ── Excel helpers for spec-king ──
+function extractExcelTables(text) {
+  const tables = [];
+  const cleanedText = text.replace(/<excel-table name="([^"]+)">([\s\S]*?)<\/excel-table>/g, (match, name, json) => {
+    try {
+      const rows = JSON.parse(json.trim());
+      if (Array.isArray(rows) && rows.length > 0) tables.push({ name, rows });
+    } catch (e) { /* malformed — skip */ }
+    const label = name;
+    return `\n> 📊 **${label}** — ראה גיליון Excel המצורף\n`;
+  });
+  return { cleanedText, tables };
+}
+
+async function loadSheetJS() {
+  if (window.XLSX) return window.XLSX;
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js';
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = () => reject(new Error('נכשל טעינת SheetJS'));
+    document.head.appendChild(s);
+  });
+}
+
+async function downloadExcelWorkbook(tables, filename) {
+  const XLSX = await loadSheetJS();
+  const wb = XLSX.utils.book_new();
+  for (const { name, rows } of tables) {
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const keys = Object.keys(rows[0] || {});
+    ws['!cols'] = keys.map(k => ({ wch: Math.max(k.length + 2, 18) }));
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+  }
+  XLSX.writeFile(wb, filename);
+}
+
 window.generateSpecKing = async function () {
   if (specKingFiles.length === 0) {
     const dz = document.getElementById('sk-dropzone');
@@ -1982,9 +2019,17 @@ window.generateSpecKing = async function () {
   const header = isQuestions
     ? `<!-- Clarification Questions — מלך האיפיונים | ${timestamp} | Sources: ${fileNames} -->\n\n# שאלות הבהרה לפני כתיבת האפיון\n\n`
     : `<!-- FSD — מלך האיפיונים | ${lang.toUpperCase()} | ${timestamp} | Sources: ${fileNames} -->\n\n`;
-  const combined = header + results.join('\n\n---\n\n');
+  let combined = header + results.join('\n\n---\n\n');
   const suffix = isQuestions ? 'clarification-questions' : `fsd-${lang}`;
   const filename = `spec-king-${suffix}-${timestamp}.md`;
+
+  // Extract Excel tables (spec mode only — questions have no tables)
+  let excelTables = [];
+  if (!isQuestions) {
+    const extracted = extractExcelTables(combined);
+    combined = extracted.cleanedText;
+    excelTables = extracted.tables;
+  }
 
   const blob = new Blob([combined], { type: 'text/markdown;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
@@ -1993,6 +2038,16 @@ window.generateSpecKing = async function () {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+
+  // Download Excel workbook 500ms later (separate download)
+  const xlsxFilename = `spec-king-tables-${lang}-${timestamp}.xlsx`;
+  if (excelTables.length > 0) {
+    setTimeout(() => {
+      downloadExcelWorkbook(excelTables, xlsxFilename).catch(e => {
+        appendMessage('error', 'שגיאה בייצוא Excel: ' + e.message);
+      });
+    }, 500);
+  }
 
   const summaryLines = isQuestions
     ? [
@@ -2005,6 +2060,7 @@ window.generateSpecKing = async function () {
       ]
     : [
         `✅ האפיון הפונקציונלי נוצר והורד כ-\`${filename}\``,
+        ...(excelTables.length > 0 ? [`✅ טבלאות Excel (${excelTables.length} גיליונות) נוצרו והורדו כ-\`${xlsxFilename}\``] : []),
         '',
         `**שפה:** ${lang === 'en' ? 'English' : 'עברית'} · **מסמכי מקור (${specKingFiles.length}):** ${fileNames}`,
         '',

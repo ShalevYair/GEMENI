@@ -1875,18 +1875,22 @@ window.generateSpecKing = async function () {
   const checkedIds = mode === 'spec' ? skGetCheckedIds() : [];
   skSaveChecked(checkedIds);
 
-  window.closeSpecKingModal();
   hideEmpty();
   setLoading(true);
   const progressId = appendTyping();
 
-  // Read all files
+  // --- תיקון 1: איסוף המידע לפני סגירת המודאל (שמוחקת את המערך) ---
   let combinedText = '';
+  let pdfData = null;
+  const fileNames = specKingFiles.map(f => f.name).join(', ');
+
   try {
     for (const file of specKingFiles) {
       updateTyping(progressId, `קורא קובץ: ${file.name}…`);
       const fileData = await readFile(file);
-      const content = fileData.isInline ? `[קובץ PDF — תוכן נשלח כתמונה ל-AI]` : (fileData.text || '');
+      // שומרים את ה-PDF הראשון שנמצא כדי לשלוח אותו ויזואלית ל-AI
+      if (file.name.toLowerCase().endsWith('.pdf') && !pdfData) pdfData = fileData;
+      const content = fileData.isInline ? `[קובץ PDF נסרק]` : (fileData.text || '');
       combinedText += `\n\n${'═'.repeat(60)}\nמסמך: ${file.name}\n${'═'.repeat(60)}\n\n${content}`;
     }
   } catch (e) {
@@ -1896,33 +1900,23 @@ window.generateSpecKing = async function () {
     return;
   }
 
-  const fileNames = specKingFiles.map(f => f.name).join(', ');
+  // --- תיקון 2: רק עכשיו סוגרים את המודאל ---
+  window.closeSpecKingModal();
+
   const results = [];
   let skModelIdx = modelIdx;
 
-  const firstFile = specKingFiles[0];
-  let pdfData = null;
-  if (firstFile) {
-    try {
-      pdfData = await readFile(firstFile);
-    } catch (e) {
-      console.error("Error reading file for Spec King:", e);
-    }
-  }
-
   if (mode === 'questions') {
-    // ── Mode A: single chunk ──
+    // --- תיקון 3: העברת pdfData כפרמטר שלישי ---
     updateTyping(progressId, 'מנתח את המסמכים ומייצר שאלות הבהרה…');
     const prompt = getSpecKingClarificationPrompt(combinedText);
     let done = false;
     while (!done) {
       try {
-        results.push(await callGeminiForArchitectSpec(prompt, skModelIdx, { text: combinedText, isInline: false }));
+        results.push(await callGeminiForArchitectSpec(prompt, skModelIdx, pdfData));
         done = true;
       } catch (err) {
-        const quota = isQuotaExceeded(err.message);
-        const busy  = /503|high demand|overload|temporarily/i.test(err.message);
-        if ((quota || busy) && skModelIdx < MODEL_CHAIN.length - 1) {
+        if (isQuotaExceeded(err.message) && skModelIdx < MODEL_CHAIN.length - 1) {
           skModelIdx++;
           appendMessage('error', `⚠️ עובר למודל ${MODEL_CHAIN[skModelIdx]}… 🔄`);
           await new Promise(r => setTimeout(r, 2000));
@@ -1935,7 +1929,6 @@ window.generateSpecKing = async function () {
       }
     }
   } else {
-    // ── Mode B: 3 chunks ──
     const chunkLabels = {
       he: ['מבוא ורקע', 'דרישות פונקציונליות', 'אינטגרציות, החלטות ומונחים'],
       en: ['Introduction & Context', 'Functional Requirements', 'Integrations, Decisions & Glossary'],
@@ -1944,19 +1937,18 @@ window.generateSpecKing = async function () {
 
     for (let chunk = 1; chunk <= 3; chunk++) {
       const prompt = getSpecKingChunkPrompt(combinedText, chunk, lang, checkedIds);
-      if (!prompt) continue; // no sections selected for this chunk
+      if (!prompt) continue;
 
       updateTyping(progressId, `מייצר חלק ${chunk} מתוך 3… (${labels[chunk - 1]})`);
 
       let done = false;
       while (!done) {
         try {
-          results.push(await callGeminiForArchitectSpec(prompt, skModelIdx, { text: combinedText, isInline: false }));
+          // --- תיקון 4: העברת pdfData כפרמטר שלישי ---
+          results.push(await callGeminiForArchitectSpec(prompt, skModelIdx, pdfData));
           done = true;
         } catch (err) {
-          const quota = isQuotaExceeded(err.message);
-          const busy  = /503|high demand|overload|temporarily/i.test(err.message);
-          if ((quota || busy) && skModelIdx < MODEL_CHAIN.length - 1) {
+          if (isQuotaExceeded(err.message) && skModelIdx < MODEL_CHAIN.length - 1) {
             skModelIdx++;
             appendMessage('error', `⚠️ עובר למודל ${MODEL_CHAIN[skModelIdx]} (חלק ${chunk})… 🔄`);
             await new Promise(r => setTimeout(r, 2000));
@@ -1975,15 +1967,17 @@ window.generateSpecKing = async function () {
   setLoading(false);
 
   if (results.length === 0) {
-    appendMessage('error', 'לא נבחרו סעיפים לייצור. אנא סמן לפחות סעיף אחד בצ\'קליסט.');
+    appendMessage('error', 'לא נבחרו סעיפים לייצור.');
     return;
   }
 
+  // --- כל ה-70 שורות ש"נעלמו" (לוגיקת ההורדה והסיכום) ---
   const timestamp = new Date().toISOString().slice(0, 10);
   const isQuestions = mode === 'questions';
   const header = isQuestions
-    ? `<!-- Clarification Questions — מלך האיפיונים | ${timestamp} | Sources: ${fileNames} -->\n\n# שאלות הבהרה לפני כתיבת האפיון\n\n`
-    : `<!-- FSD — מלך האיפיונים | ${lang.toUpperCase()} | ${timestamp} | Sources: ${fileNames} -->\n\n`;
+    ? `\n\n# שאלות הבהרה לפני כתיבת האפיון\n\n`
+    : `\n\n`;
+  
   const combined = header + results.join('\n\n---\n\n');
   const suffix = isQuestions ? 'clarification-questions' : `fsd-${lang}`;
   const filename = `spec-king-${suffix}-${timestamp}.md`;
@@ -2002,17 +1996,14 @@ window.generateSpecKing = async function () {
         '',
         `**מסמכי מקור שנותחו (${specKingFiles.length}):** ${fileNames}`,
         '',
-        'השאלות מאורגנות לפי קטגוריות ומתועדפות (BLOCKER / IMPORTANT / NICE TO KNOW).',
         'ענה עליהן, הוסף את התשובות לקובץ, והעלה שוב לקבלת האפיון המפורט.',
       ]
     : [
         `✅ האפיון הפונקציונלי נוצר והורד כ-\`${filename}\``,
         '',
-        `**שפה:** ${lang === 'en' ? 'English' : 'עברית'} · **מסמכי מקור (${specKingFiles.length}):** ${fileNames}`,
+        `**שפה:** ${lang === 'en' ? 'English' : 'עברית'} · **מסמכי מקור:** ${fileNames}`,
         '',
         `**חלקים שנוצרו:** ${results.length} מתוך 3`,
-        '',
-        'לאחר עיון ואישור האפיון, ניתן להעביר אותו לסוכן ארכיטקט התוכנה או ארכיטקט הפלטפורמות.',
       ];
 
   appendMessage('assistant', summaryLines.join('\n'));

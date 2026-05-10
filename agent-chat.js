@@ -1948,27 +1948,77 @@ window.generateSpecKing = async function () {
     return;
   }
 
-  // --- חלק 3: יצירת הקובץ והורדה (מה שהיה חסר מקודם) ---
+// --- חלק 3: עיבוד והורדת קבצים (הפרדת אקסל) ---
   const timestamp = new Date().toISOString().slice(0, 10);
   const isQuestions = mode === 'questions';
-  const header = isQuestions
-    ? `\n\n# שאלות הבהרה\n\n`
-    : `\n\n`;
-  
+  const header = isQuestions ? `\n\n# שאלות הבהרה\n\n` : `\n\n`;
   const combined = header + results.join('\n\n---\n\n');
-  const filename = `spec-king-${isQuestions ? 'questions' : 'fsd'}-${timestamp}.md`;
+  const fileBaseName = `spec-king-${isQuestions ? 'questions' : 'fsd'}-${timestamp}`;
 
-  const blob = new Blob([combined], { type: 'text/markdown;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+  let finalMarkdown = combined;
+  let csvContent = "\ufeff"; // BOM לתמיכה בעברית באקסל
+  let tableCount = 0;
 
-  // הודעת סיכום למשתמש
-  appendMessage('assistant', 
-    `✅ המסמך הורד בהצלחה: \`${filename}\`\n\n` +
-    `**מקורות שנותחו:** ${fileNames}\n` +
-    (isQuestions ? "ענה על השאלות והעלה אותן שוב כדי לקבל אפיון מדויק." : "האפיון מוכן! תוכל להעביר אותו לארכיטקט התוכנה להמשך עבודה."));
+  // Regex לאיתור תגיות האקסל בתוך הפלט של הסוכן
+  const excelRegex = /<excel-table name="(.*?)">([\s\S]*?)<\/excel-table>/g;
+  let match;
+
+  while ((match = excelRegex.exec(combined)) !== null) {
+    const tableName = match[1];
+    const jsonData = match[2].trim();
+    
+    try {
+      const data = JSON.parse(jsonData);
+      if (Array.isArray(data) && data.length > 0) {
+        tableCount++;
+        csvContent += `\n--- TABLE: ${tableName} ---\n`;
+        const headers = Object.keys(data[0]);
+        csvContent += headers.join(",") + "\n";
+        
+        data.forEach(row => {
+          const rowValues = headers.map(h => {
+            let val = String(row[h] || "");
+            return `"${val.replace(/"/g, '""')}"`;
+          });
+          csvContent += rowValues.join(",") + "\n";
+        });
+
+        // הסרת ה-JSON הגולמי מהאפיון והחלפה בהערה נקייה
+        const placeholder = lang === 'he' 
+          ? `\n> 📊 **טבלה: ${tableName}**\n> הנתונים המלאים מופיעים בקובץ הנתונים (CSV) המצורף.\n`
+          : `\n> 📊 **Table: ${tableName}**\n> Full data available in the attached CSV file.\n`;
+        
+        finalMarkdown = finalMarkdown.replace(match[0], placeholder);
+      }
+    } catch (e) {
+      console.warn("Failed to parse JSON for: " + tableName, e);
+    }
+  }
+
+  // הורדת האפיון (Markdown)
+  const mdBlob = new Blob([finalMarkdown], { type: 'text/markdown;charset=utf-8' });
+  const mdUrl = URL.createObjectURL(mdBlob);
+  const mdLink = document.createElement('a');
+  mdLink.href = mdUrl;
+  mdLink.download = `${fileBaseName}.md`;
+  mdLink.click();
+  URL.revokeObjectURL(mdUrl);
+
+  // הורדת הטבלאות (CSV) - אם קיימות
+  if (tableCount > 0) {
+    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+    const csvLink = document.createElement('a');
+    csvLink.href = URL.createObjectURL(csvBlob);
+    csvLink.download = `${fileBaseName}.csv`;
+    csvLink.click();
+  }
+
+  // הודעת סיכום סופית
+  const msg = lang === 'he'
+    ? `✅ האפיון מוכן! הורדתי לך את האפיון הנקי (\`.md\`) ואת קובץ הטבלאות המרוכז (\`.csv\`).`
+    : `✅ Specification ready! Clean doc (\`.md\`) and data file (\`.csv\`) have been downloaded.`;
+
+  appendMessage('assistant', msg + `\n\n**מקורות שנותחו:** ${fileNames}`);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

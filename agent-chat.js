@@ -1907,7 +1907,7 @@ window.generateSpecKing = async function () {
     let done = false;
     while (!done) {
       try {
-        results.push(await callGeminiForArchitectSpec(prompt, skModelIdx));
+        results.push(await callGeminiForArchitectSpec(prompt, skModelIdx, { text: combinedText, isInline: false }));
         done = true;
       } catch (err) {
         const quota = isQuotaExceeded(err.message);
@@ -1941,7 +1941,7 @@ window.generateSpecKing = async function () {
       let done = false;
       while (!done) {
         try {
-          results.push(await callGeminiForArchitectSpec(prompt, skModelIdx));
+          results.push(await callGeminiForArchitectSpec(prompt, skModelIdx, { text: combinedText, isInline: false }));
           done = true;
         } catch (err) {
           const quota = isQuotaExceeded(err.message);

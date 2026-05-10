@@ -1900,6 +1900,16 @@ window.generateSpecKing = async function () {
   const results = [];
   let skModelIdx = modelIdx;
 
+  const firstFile = specKingFiles[0];
+  let pdfData = null;
+  if (firstFile) {
+    try {
+      pdfData = await readFile(firstFile);
+    } catch (e) {
+      console.error("Error reading file for Spec King:", e);
+    }
+  }
+
   if (mode === 'questions') {
     // ── Mode A: single chunk ──
     updateTyping(progressId, 'מנתח את המסמכים ומייצר שאלות הבהרה…');

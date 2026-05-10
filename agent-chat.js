@@ -1948,7 +1948,7 @@ window.generateSpecKing = async function () {
     return;
   }
 
-// --- חלק 3: עיבוד והורדת קבצים (הפרדת אקסל) ---
+// --- חלק 3: עיבוד והורדת קבצים (הפרדת אקסל לגיליונות נפרדים) ---
   const timestamp = new Date().toISOString().slice(0, 10);
   const isQuestions = mode === 'questions';
   const header = isQuestions ? `\n\n# שאלות הבהרה\n\n` : `\n\n`;
@@ -1956,10 +1956,12 @@ window.generateSpecKing = async function () {
   const fileBaseName = `spec-king-${isQuestions ? 'questions' : 'fsd'}-${timestamp}`;
 
   let finalMarkdown = combined;
-  let csvContent = "\ufeff"; // BOM לתמיכה בעברית באקסל
+  
+  // יצירת Workbook (קובץ אקסל) חדש בזיכרון [ידע כללי]
+  const wb = XLSX.utils.book_new();
   let tableCount = 0;
 
-  // Regex לאיתור תגיות האקסל בתוך הפלט של הסוכן
+  // Regex לחיפוש כל הטבלאות שה-AI ייצר בפורמט <excel-table>
   const excelRegex = /<excel-table name="(.*?)">([\s\S]*?)<\/excel-table>/g;
   let match;
 
@@ -1971,31 +1973,29 @@ window.generateSpecKing = async function () {
       const data = JSON.parse(jsonData);
       if (Array.isArray(data) && data.length > 0) {
         tableCount++;
-        csvContent += `\n--- TABLE: ${tableName} ---\n`;
-        const headers = Object.keys(data[0]);
-        csvContent += headers.join(",") + "\n";
         
-        data.forEach(row => {
-          const rowValues = headers.map(h => {
-            let val = String(row[h] || "");
-            return `"${val.replace(/"/g, '""')}"`;
-          });
-          csvContent += rowValues.join(",") + "\n";
-        });
+        // המרת נתוני ה-JSON לגיליון אקסל [ידע כללי]
+        const ws = XLSX.utils.json_to_sheet(data);
+        
+        // ניקוי שם הגיליון (אקסל מגביל ל-31 תווים ואוסר תווים מיוחדים) [ידע כללי]
+        let sheetName = tableName.replace(/[\\*?:\[\]\/]/g, '').substring(0, 31) || `Sheet ${tableCount}`;
+        
+        // הוספת הגיליון כחוצץ נפרד לקובץ [ידע כללי]
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
-        // הסרת ה-JSON הגולמי מהאפיון והחלפה בהערה נקייה
+        // החלפת גוש ה-JSON המכוער באפיון בהפניה מעוצבת
         const placeholder = lang === 'he' 
-          ? `\n> 📊 **טבלה: ${tableName}**\n> הנתונים המלאים מופיעים בקובץ הנתונים (CSV) המצורף.\n`
-          : `\n> 📊 **Table: ${tableName}**\n> Full data available in the attached CSV file.\n`;
+          ? `\n> 📊 **טבלה: ${tableName}**\n> הנתונים המלאים מופיעים בגיליון נפרד בקובץ האקסל המצורף.\n`
+          : `\n> 📊 **Table: ${tableName}**\n> Full data and columns available in a separate sheet in the attached Excel file.\n`;
         
         finalMarkdown = finalMarkdown.replace(match[0], placeholder);
       }
     } catch (e) {
-      console.warn("Failed to parse JSON for: " + tableName, e);
+      console.error("שגיאה בעיבוד טבלה: " + tableName, e);
     }
   }
 
-  // הורדת האפיון (Markdown)
+  // 1. הורדת קובץ האפיון (Markdown)
   const mdBlob = new Blob([finalMarkdown], { type: 'text/markdown;charset=utf-8' });
   const mdUrl = URL.createObjectURL(mdBlob);
   const mdLink = document.createElement('a');
@@ -2004,21 +2004,17 @@ window.generateSpecKing = async function () {
   mdLink.click();
   URL.revokeObjectURL(mdUrl);
 
-  // הורדת הטבלאות (CSV) - אם קיימות
+  // 2. הורדת קובץ האקסל המרובה-גיליונות (.xlsx) [ידע כללי]
   if (tableCount > 0) {
-    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
-    const csvLink = document.createElement('a');
-    csvLink.href = URL.createObjectURL(csvBlob);
-    csvLink.download = `${fileBaseName}.csv`;
-    csvLink.click();
+    XLSX.writeFile(wb, `${fileBaseName}.xlsx`);
   }
 
-  // הודעת סיכום סופית
-  const msg = lang === 'he'
-    ? `✅ האפיון מוכן! הורדתי לך את האפיון הנקי (\`.md\`) ואת קובץ הטבלאות המרוכז (\`.csv\`).`
-    : `✅ Specification ready! Clean doc (\`.md\`) and data file (\`.csv\`) have been downloaded.`;
+  // 3. הודעת סיכום למשתמש
+  const successMsg = lang === 'he'
+    ? `✅ האפיון מוכן! הורדתי לך מסמך (\`.md\`) וקובץ אקסל עם ${tableCount} גיליונות (\`.xlsx\`).`
+    : `✅ Specification ready! Downloaded doc (\`.md\`) and Excel with ${tableCount} sheets (\`.xlsx\`).`;
 
-  appendMessage('assistant', msg + `\n\n**מקורות שנותחו:** ${fileNames}`);
+  appendMessage('assistant', successMsg + `\n\n**מקורות שנותחו:** ${fileNames}`);
 };
 
 // ═══════════════════════════════════════════════════════════════════════════

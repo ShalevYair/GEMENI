@@ -104,8 +104,8 @@
     .scr-btn { padding: .48rem .8rem; font-size: .81rem; font-weight: 500; font-family: Heebo, sans-serif; text-align: right; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); color: var(--text2); cursor: pointer; transition: all .15s; width: 100%; }
     .scr-btn:hover { border-color: var(--accent); color: var(--text); }
     .scr-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .scr-frame-wrap { flex: 1; background: #fff; border-radius: var(--r); overflow: hidden; border: 1px solid var(--border); }
-    .scr-frame-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
+    .scr-frame-wrap { flex: 1; background: #fff; border-radius: var(--r); overflow: hidden; border: 1px solid var(--border); min-height: 75vh; }
+    .scr-frame-wrap iframe { width: 100%; height: 100%; min-height: 75vh; border: none; display: block; }
     .scr-full-iframe { width: 100%; flex: 1; border: none; border-radius: var(--r); min-height: calc(100vh - 170px); }
   </style>
 </head>
@@ -213,10 +213,23 @@
       if (meta.flavor) document.getElementById('hd-badge').textContent = meta.flavor;
     }
 
+    // ── Mermaid sanitizer ────────────────────────────────────────────────────
+    function sanitizeMermaid(code) {
+      // Fix backslash-escaped quotes inside ERD string descriptors (e.g. "חומ\"ס" → "חומ'ס")
+      code = code.replace(/\\"/g, "'");
+      // Fix flowchart node labels [text with (parens) or apostrophes] → ["text"]
+      // Mermaid v10 interprets ( inside [...] as a stadium shape start
+      code = code.replace(/\[([^\[\]]*[\(\)'][^\[\]]*)\]/g, (match, inner) => {
+        if (inner.startsWith('"') && inner.endsWith('"')) return match;
+        return '["' + inner.replace(/"/g, '\\"') + '"]';
+      });
+      return code;
+    }
+
     // ── Mermaid renderer (programmatic) ─────────────────────────────────────
     async function renderMermaidEl(code, wrapEl, uid) {
       try {
-        const { svg } = await mermaid.render('mr-' + uid, code);
+        const { svg } = await mermaid.render('mr-' + uid, sanitizeMermaid(code));
         wrapEl.innerHTML = svg;
         const s = wrapEl.querySelector('svg');
         if (s) { s.style.maxWidth = '100%'; s.style.height = 'auto'; }

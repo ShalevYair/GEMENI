@@ -419,12 +419,38 @@ window.generateSpecKing = async function () {
     : flavor === 'outsystems' ? `OutSystems ${osVer.toUpperCase()}`
     : 'כללי';
 
+  // Extract mermaid diagrams from raw markdown
+  const mermaidDiagrams = [];
+  const mmRx = /```mermaid\n([\s\S]*?)```/g;
+  let mm;
+  while ((mm = mmRx.exec(combined)) !== null) {
+    const before     = combined.slice(0, mm.index);
+    const headMatch  = before.match(/#{1,4}\s+(.+)\s*$/);
+    mermaidDiagrams.push({
+      title: headMatch ? headMatch[1].trim() : `תרשים ${mermaidDiagrams.length + 1}`,
+      code:  mm[1].trim(),
+    });
+  }
+
+  // Download diagrams.html
+  if (mermaidDiagrams.length > 0) {
+    const diagHtml = sk2BuildDiagramsHtml(mermaidDiagrams, baseName);
+    sk2DownloadText(diagHtml, `${baseName}-diagrams.html`);
+  }
+
+  // Download screens.html
+  if (viewerScreens.length > 0) {
+    const scrHtml = sk2BuildScreensHtml(viewerScreens, baseName);
+    sk2DownloadText(scrHtml, `${baseName}-screens.html`);
+  }
+
   // Open spec-viewer with full data
   try {
     localStorage.setItem('spec-viewer-data', JSON.stringify({
       markdown: combined,
       tables: viewerTables,
       screens: viewerScreens,
+      mermaidDiagrams,
       meta: {
         flavor: flavorLabel,
         timestamp: new Date().toISOString(),
@@ -434,7 +460,7 @@ window.generateSpecKing = async function () {
     }));
     try { new BroadcastChannel('spec-viewer').postMessage('update'); } catch {}
     window.open('spec-viewer.html', 'spec-viewer');
-  } catch { /* localStorage unavailable — viewer won't open */ }
+  } catch { /* localStorage unavailable */ }
 
   deps.appendMessage('assistant',
     isQuestions
@@ -442,6 +468,96 @@ window.generateSpecKing = async function () {
       : `✅ מסמך האפיון הורד כ-\`${baseName}.md\`${tableCount > 0 ? ` + \`${baseName}.xlsx\` (${tableCount} גיליונות)` : ''}\n\n**טעם:** ${flavorLabel} · **מקורות:** ${fileNames}`
   );
 };
+
+// ── HTML file builders ────────────────────────────────────────────────────
+
+function sk2DownloadText(content, filename) {
+  const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function sk2BuildDiagramsHtml(diagrams, title) {
+  const cards = diagrams.map((d, i) => `
+  <div class="card">
+    <div class="card-title">${d.title.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+    <div class="mermaid">${d.code}</div>
+  </div>`).join('');
+
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<title>תרשימים — ${title}</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"><\/script>
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'base',
+  themeVariables: {
+    primaryColor: '#e3f2fd', primaryTextColor: '#0d47a1',
+    primaryBorderColor: '#2196f3', lineColor: '#64748b',
+    secondaryColor: '#fff3e0', tertiaryColor: '#f3e5f5'
+  }
+});
+<\/script>
+<style>
+body{font-family:Arial,sans-serif;padding:24px;background:#f8fafc;direction:rtl;color:#1e293b}
+h1{font-size:1.25rem;margin-bottom:20px;color:#1e293b}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.card-title{font-weight:700;color:#374151;margin-bottom:14px;font-size:.92rem;padding-bottom:8px;border-bottom:1px solid #f1f5f9}
+.mermaid{text-align:center}
+</style>
+</head>
+<body>
+<h1>🔀 תרשימים — ${title}</h1>
+${cards}
+</body>
+</html>`;
+}
+
+function sk2BuildScreensHtml(screens, title) {
+  const screensJson = JSON.stringify(screens.map(s => ({ name: s.name, html: s.html })));
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<title>מסכים — ${title}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;display:flex;height:100vh;overflow:hidden;direction:rtl}
+.nav{width:210px;background:#1e293b;padding:12px;display:flex;flex-direction:column;gap:5px;flex-shrink:0;overflow-y:auto}
+.nav h2{color:#64748b;font-size:.7rem;text-transform:uppercase;padding:4px 8px;margin-bottom:4px;letter-spacing:.05em}
+.nav-btn{background:none;border:none;color:#94a3b8;padding:8px 12px;border-radius:6px;cursor:pointer;text-align:right;font-family:inherit;font-size:.83rem;transition:all .15s;width:100%}
+.nav-btn:hover{background:rgba(255,255,255,.08);color:#e2e8f0}
+.nav-btn.active{background:#7c3aed;color:#fff}
+.frame-wrap{flex:1;background:#fff}
+iframe{width:100%;height:100%;border:none;display:block}
+</style>
+</head>
+<body>
+<div class="nav">
+  <h2>🖥️ מסכים</h2>
+  <div id="nav"></div>
+</div>
+<div class="frame-wrap"><iframe id="frame"></iframe></div>
+<script>
+const screens=${screensJson};
+const nav=document.getElementById('nav'),frame=document.getElementById('frame');
+screens.forEach((s,i)=>{
+  const btn=document.createElement('button');
+  btn.className='nav-btn'+(i===0?' active':'');
+  btn.textContent=s.name;
+  btn.onclick=()=>{document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');frame.srcdoc=s.html;};
+  nav.appendChild(btn);
+});
+if(screens.length>0)frame.srcdoc=screens[0].html;
+<\/script>
+</body>
+</html>`;
+}
 
 // ── Internal: Gemini call with model fallback ─────────────────────────────
 async function callWithFallback(prompt, startModelIdx) {

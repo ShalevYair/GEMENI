@@ -3,180 +3,179 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>צופן האפיון</title>
+  <title>מציג האפיונים</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --surface2: #22263a;
-      --border: #2e3248;
-      --accent: #7c3aed;
-      --text: #e2e8f0;
-      --text2: #94a3b8;
-      --text3: #64748b;
-      --radius: 10px;
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+      --border: #2e3248; --accent: #7c3aed; --text: #e2e8f0;
+      --text2: #94a3b8; --text3: #64748b; --r: 10px;
     }
-
     body { font-family: Heebo, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
 
     /* Header */
-    .sv-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .85rem 1.5rem; display: flex; align-items: center; gap: 1rem; flex-shrink: 0; }
-    .sv-logo { font-size: 1.4rem; }
-    .sv-title-block { flex: 1; min-width: 0; }
-    .sv-title { font-size: 1.1rem; font-weight: 700; }
-    .sv-meta { font-size: .78rem; color: var(--text3); margin-top: .1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .sv-badge { font-size: .72rem; font-weight: 600; padding: .25rem .6rem; border-radius: 20px; background: var(--accent); color: #fff; flex-shrink: 0; }
+    .hd { background: var(--surface); border-bottom: 1px solid var(--border); padding: .8rem 1.4rem; display: flex; align-items: center; gap: .9rem; flex-shrink: 0; }
+    .hd-logo { font-size: 1.35rem; }
+    .hd-info { flex: 1; min-width: 0; }
+    .hd-title { font-size: 1.05rem; font-weight: 700; }
+    .hd-meta { font-size: .76rem; color: var(--text3); margin-top: .1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hd-badge { font-size: .71rem; font-weight: 600; padding: .22rem .55rem; border-radius: 20px; background: var(--accent); color: #fff; flex-shrink: 0; }
+    .hd-upload-btn { padding: .4rem .9rem; background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 7px; cursor: pointer; font-size: .82rem; font-family: Heebo, sans-serif; transition: all .15s; flex-shrink: 0; }
+    .hd-upload-btn:hover { border-color: var(--accent); color: var(--text); }
 
     /* Tabs */
-    .sv-tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; overflow-x: auto; }
-    .sv-tab { padding: .75rem 1.4rem; font-size: .88rem; font-weight: 500; font-family: Heebo, sans-serif; color: var(--text2); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; }
-    .sv-tab:hover { color: var(--text); }
-    .sv-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-    .sv-tab-count { display: inline-flex; align-items: center; justify-content: center; background: var(--surface2); color: var(--text3); font-size: .68rem; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; margin-right: .35rem; vertical-align: middle; }
-    .sv-tab.active .sv-tab-count { background: var(--accent); color: #fff; }
+    .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; overflow-x: auto; }
+    .tab { padding: .7rem 1.3rem; font-size: .87rem; font-weight: 500; font-family: Heebo, sans-serif; color: var(--text2); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    .tab-cnt { display: inline-flex; align-items: center; justify-content: center; background: var(--surface2); color: var(--text3); font-size: .65rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 4px; margin-right: .3rem; vertical-align: middle; }
+    .tab.active .tab-cnt { background: var(--accent); color: #fff; }
 
     /* Panels */
-    .sv-content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-    .sv-panel { display: none; flex: 1; overflow-y: auto; padding: 1.5rem; }
-    .sv-panel.active { display: flex; flex-direction: column; }
+    .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .panel { display: none; flex: 1; overflow-y: auto; padding: 1.4rem; }
+    .panel.active { display: flex; flex-direction: column; }
 
-    /* Empty / Coming soon */
-    .sv-empty, .sv-coming-soon { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text3); text-align: center; gap: .75rem; }
-    .sv-empty-icon, .sv-coming-icon { font-size: 3rem; }
-    .sv-empty-title, .sv-coming-title { font-size: 1rem; font-weight: 600; color: var(--text2); }
-    .sv-empty-sub { font-size: .84rem; max-width: 340px; line-height: 1.5; }
-    .sv-coming-list { list-style: none; display: flex; flex-direction: column; gap: .4rem; font-size: .84rem; color: var(--text2); text-align: right; }
-    .sv-coming-list li::before { content: '◦ '; color: var(--accent); }
+    /* Upload landing */
+    .upload-landing { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.25rem; text-align: center; }
+    .upload-zone { border: 2px dashed var(--border); border-radius: 14px; padding: 2.5rem 3rem; cursor: pointer; transition: border-color .2s, background .2s; max-width: 520px; width: 100%; }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(124,58,237,.06); }
+    .upload-zone-icon { font-size: 2.8rem; margin-bottom: .6rem; }
+    .upload-zone-title { font-size: 1rem; font-weight: 700; color: var(--text); margin-bottom: .4rem; }
+    .upload-zone-sub { font-size: .82rem; color: var(--text3); line-height: 1.5; }
+    .upload-hint { font-size: .78rem; color: var(--text3); }
+    .upload-hint span { color: var(--accent); }
+    #file-input { display: none; }
 
-    /* ── Markdown ── */
-    .sv-markdown { max-width: 860px; width: 100%; margin: 0 auto; line-height: 1.75; font-size: .95rem; }
-    .sv-markdown h1 { font-size: 1.6rem; font-weight: 800; margin: 1.5rem 0 .75rem; border-bottom: 2px solid var(--accent); padding-bottom: .4rem; }
-    .sv-markdown h2 { font-size: 1.25rem; font-weight: 700; margin: 1.5rem 0 .5rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
-    .sv-markdown h3 { font-size: 1.05rem; font-weight: 600; color: #a78bfa; margin: 1.2rem 0 .4rem; }
-    .sv-markdown h4 { font-size: .95rem; font-weight: 600; color: var(--text2); margin: 1rem 0 .3rem; }
-    .sv-markdown p { margin: .5rem 0; }
-    .sv-markdown ul, .sv-markdown ol { padding-right: 1.5rem; margin: .5rem 0; }
-    .sv-markdown li { margin: .25rem 0; }
-    .sv-markdown code { background: var(--surface2); color: #f472b6; padding: .1rem .4rem; border-radius: 4px; font-size: .85em; font-family: monospace; }
-    .sv-markdown pre { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; overflow-x: auto; margin: .75rem 0; }
-    .sv-markdown pre code { background: none; color: var(--text); padding: 0; }
-    .sv-markdown blockquote { border-right: 3px solid var(--accent); padding: .5rem 1rem; background: var(--surface2); border-radius: 0 var(--radius) var(--radius) 0; margin: .75rem 0; color: var(--text2); }
-    .sv-markdown table { width: 100%; border-collapse: collapse; margin: .75rem 0; font-size: .88rem; }
-    .sv-markdown th { background: var(--surface2); color: var(--accent); padding: .5rem .75rem; text-align: right; font-weight: 600; border: 1px solid var(--border); }
-    .sv-markdown td { padding: .45rem .75rem; border: 1px solid var(--border); vertical-align: top; }
-    .sv-markdown tr:nth-child(even) td { background: rgba(255,255,255,.02); }
-    .sv-markdown hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
-    /* Mermaid inside markdown */
-    .sv-markdown .mermaid { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin: .75rem 0; text-align: center; overflow-x: auto; }
+    /* Markdown */
+    .md { max-width: 860px; width: 100%; margin: 0 auto; line-height: 1.75; font-size: .94rem; }
+    .md h1 { font-size: 1.55rem; font-weight: 800; margin: 1.5rem 0 .7rem; border-bottom: 2px solid var(--accent); padding-bottom: .35rem; }
+    .md h2 { font-size: 1.2rem; font-weight: 700; margin: 1.4rem 0 .45rem; border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
+    .md h3 { font-size: 1rem; font-weight: 600; color: #a78bfa; margin: 1.1rem 0 .35rem; }
+    .md h4 { font-size: .92rem; font-weight: 600; color: var(--text2); margin: .9rem 0 .3rem; }
+    .md p { margin: .45rem 0; }
+    .md ul, .md ol { padding-right: 1.4rem; margin: .45rem 0; }
+    .md li { margin: .2rem 0; }
+    .md code { background: var(--surface2); color: #f472b6; padding: .1rem .38rem; border-radius: 4px; font-size: .84em; font-family: monospace; }
+    .md pre { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: .9rem; overflow-x: auto; margin: .7rem 0; }
+    .md pre code { background: none; color: var(--text); padding: 0; }
+    .md blockquote { border-right: 3px solid var(--accent); padding: .45rem .9rem; background: var(--surface2); border-radius: 0 var(--r) var(--r) 0; margin: .7rem 0; color: var(--text2); }
+    .md table { width: 100%; border-collapse: collapse; margin: .7rem 0; font-size: .87rem; }
+    .md th { background: var(--surface2); color: var(--accent); padding: .48rem .7rem; text-align: right; font-weight: 600; border: 1px solid var(--border); }
+    .md td { padding: .42rem .7rem; border: 1px solid var(--border); vertical-align: top; }
+    .md tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+    .md hr { border: none; border-top: 1px solid var(--border); margin: 1.4rem 0; }
+    .md .mermaid-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 1.25rem; margin: .7rem 0; text-align: center; overflow-x: auto; }
+    .md .mermaid-wrap svg { max-width: 100%; height: auto; }
+    .md .mermaid-err { color: var(--text3); font-size: .8rem; padding: .5rem; }
 
-    /* ── Excel ── */
-    .sv-excel-tabs { display: flex; gap: .35rem; flex-wrap: wrap; margin-bottom: 1rem; flex-shrink: 0; }
-    .sv-sheet-tab { padding: .35rem .85rem; font-size: .8rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); cursor: pointer; font-family: Heebo, sans-serif; transition: all .15s; }
-    .sv-sheet-tab:hover { border-color: var(--accent); color: var(--text); }
-    .sv-sheet-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .sv-sheet-panel { display: none; flex: 1; overflow: auto; }
-    .sv-sheet-panel.active { display: block; }
-    .sv-excel-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
-    .sv-excel-table th { background: var(--surface2); color: var(--accent); font-weight: 600; padding: .5rem .7rem; text-align: right; border: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
-    .sv-excel-table td { padding: .4rem .7rem; border: 1px solid var(--border); vertical-align: top; }
-    .sv-excel-table tr:nth-child(even) td { background: rgba(255,255,255,.02); }
-    .sv-excel-table tr:hover td { background: rgba(124,58,237,.08); }
-    .sv-row-count { font-size: .75rem; color: var(--text3); margin-top: .5rem; }
+    /* Excel */
+    .sheet-tabs { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .9rem; flex-shrink: 0; }
+    .sheet-tab { padding: .32rem .8rem; font-size: .78rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); cursor: pointer; font-family: Heebo, sans-serif; transition: all .15s; }
+    .sheet-tab:hover { border-color: var(--accent); color: var(--text); }
+    .sheet-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .sheet-panel { display: none; overflow: auto; }
+    .sheet-panel.active { display: block; }
+    .xtbl { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    .xtbl th { background: var(--surface2); color: var(--accent); font-weight: 600; padding: .48rem .65rem; text-align: right; border: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+    .xtbl td { padding: .38rem .65rem; border: 1px solid var(--border); vertical-align: top; }
+    .xtbl tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+    .xtbl tr:hover td { background: rgba(124,58,237,.08); }
+    .row-cnt { font-size: .73rem; color: var(--text3); margin-top: .45rem; }
 
-    /* ── Diagrams ── */
-    .sv-diagrams-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.25rem; width: 100%; }
-    .sv-diagram-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    .sv-diagram-title { padding: .65rem 1rem; font-size: .85rem; font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--border); background: var(--surface2); }
-    .sv-diagram-body { padding: 1rem; overflow-x: auto; text-align: center; }
-    .sv-diagram-body svg { max-width: 100%; height: auto; }
+    /* Diagrams */
+    .diag-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.1rem; width: 100%; }
+    .diag-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+    .diag-title { padding: .6rem 1rem; font-size: .83rem; font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--border); background: var(--surface2); }
+    .diag-body { padding: 1rem; text-align: center; overflow-x: auto; }
+    .diag-body svg { max-width: 100%; height: auto; }
+    .diag-err { color: var(--text3); font-size: .78rem; padding: .5rem; }
+    .diag-iframe { width: 100%; flex: 1; border: none; border-radius: var(--r); min-height: calc(100vh - 170px); }
 
-    /* ── Screens ── */
-    .sv-screens-layout { display: flex; flex: 1; gap: 1rem; overflow: hidden; min-height: 0; }
-    .sv-screens-nav { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: .35rem; overflow-y: auto; }
-    .sv-screen-btn { padding: .5rem .85rem; font-size: .82rem; font-weight: 500; font-family: Heebo, sans-serif; text-align: right; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); color: var(--text2); cursor: pointer; transition: all .15s; }
-    .sv-screen-btn:hover { border-color: var(--accent); color: var(--text); }
-    .sv-screen-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .sv-screens-frame-wrap { flex: 1; background: #fff; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
-    .sv-screens-frame-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
+    /* Screens */
+    .scr-layout { display: flex; flex: 1; gap: .9rem; overflow: hidden; min-height: 0; }
+    .scr-nav { width: 195px; flex-shrink: 0; display: flex; flex-direction: column; gap: .3rem; overflow-y: auto; }
+    .scr-btn { padding: .48rem .8rem; font-size: .81rem; font-weight: 500; font-family: Heebo, sans-serif; text-align: right; border: 1px solid var(--border); border-radius: 7px; background: var(--surface2); color: var(--text2); cursor: pointer; transition: all .15s; width: 100%; }
+    .scr-btn:hover { border-color: var(--accent); color: var(--text); }
+    .scr-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .scr-frame-wrap { flex: 1; background: #fff; border-radius: var(--r); overflow: hidden; border: 1px solid var(--border); }
+    .scr-frame-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
+    .scr-full-iframe { width: 100%; flex: 1; border: none; border-radius: var(--r); min-height: calc(100vh - 170px); }
   </style>
 </head>
 <body>
 
-  <header class="sv-header">
-    <div class="sv-logo">👑</div>
-    <div class="sv-title-block">
-      <div class="sv-title" id="sv-doc-title">צופן האפיון</div>
-      <div class="sv-meta" id="sv-doc-meta">טוען נתונים…</div>
+  <header class="hd">
+    <div class="hd-logo">📋</div>
+    <div class="hd-info">
+      <div class="hd-title" id="hd-title">מציג האפיונים</div>
+      <div class="hd-meta" id="hd-meta">טוען נתונים…</div>
     </div>
-    <div class="sv-badge" id="sv-flavor-badge">מלך האפיונים</div>
+    <div class="hd-badge" id="hd-badge">מלך האפיונים</div>
+    <button class="hd-upload-btn" onclick="document.getElementById('file-input').click()">📂 טען קבצים</button>
+    <input id="file-input" type="file" multiple accept=".md,.xlsx,.html" onchange="handleFileInput(this.files)">
   </header>
 
-  <nav class="sv-tabs">
-    <button class="sv-tab active" onclick="switchTab('doc',this)">📄 מסמך</button>
-    <button class="sv-tab" onclick="switchTab('excel',this)">📊 טבלאות <span class="sv-tab-count" id="cnt-excel">0</span></button>
-    <button class="sv-tab" onclick="switchTab('diagrams',this)">🔀 תרשימים <span class="sv-tab-count" id="cnt-diagrams">0</span></button>
-    <button class="sv-tab" onclick="switchTab('screens',this)">🖥️ מסכים <span class="sv-tab-count" id="cnt-screens">0</span></button>
+  <nav class="tabs">
+    <button class="tab active" onclick="switchTab('doc',this)">📄 מסמך</button>
+    <button class="tab" onclick="switchTab('excel',this)">📊 טבלאות <span class="tab-cnt" id="cnt-excel">0</span></button>
+    <button class="tab" onclick="switchTab('diagrams',this)">🔀 תרשימים <span class="tab-cnt" id="cnt-diagrams">0</span></button>
+    <button class="tab" onclick="switchTab('screens',this)">🖥️ מסכים <span class="tab-cnt" id="cnt-screens">0</span></button>
   </nav>
 
-  <main class="sv-content">
-
-    <!-- Tab 1: Document -->
-    <div class="sv-panel active" id="panel-doc">
-      <div class="sv-empty" id="doc-empty">
-        <div class="sv-empty-icon">📄</div>
-        <div class="sv-empty-title">אין מסמך לטעינה</div>
-        <div class="sv-empty-sub">צור אפיון במלך האפיונים — הצופן ייפתח אוטומטית.</div>
+  <main class="content">
+    <div class="panel active" id="panel-doc">
+      <div class="upload-landing" id="doc-upload">
+        <div class="upload-zone" id="drop-zone"
+          ondragover="event.preventDefault();this.classList.add('dragover')"
+          ondragleave="this.classList.remove('dragover')"
+          ondrop="event.preventDefault();this.classList.remove('dragover');handleFileInput(event.dataTransfer.files)"
+          onclick="document.getElementById('file-input').click()">
+          <div class="upload-zone-icon">📋</div>
+          <div class="upload-zone-title">טען קבצי אפיון</div>
+          <div class="upload-zone-sub">גרור לכאן או לחץ לבחירת קבצים<br><span style="font-size:.76rem;color:var(--text3);">.md · .xlsx · -diagrams.html · -screens.html</span></div>
+        </div>
+        <div class="upload-hint">האפיון נוצר על ידי <span>מלך האפיונים</span> ונפתח כאן אוטומטית</div>
       </div>
-      <div class="sv-markdown" id="doc-content" style="display:none;"></div>
+      <div class="md" id="doc-content" style="display:none;"></div>
     </div>
 
-    <!-- Tab 2: Excel -->
-    <div class="sv-panel" id="panel-excel">
-      <div class="sv-empty" id="excel-empty">
-        <div class="sv-empty-icon">📊</div>
-        <div class="sv-empty-title">אין טבלאות</div>
-        <div class="sv-empty-sub">הטבלאות יוצגו כאן לאחר יצירת האפיון.</div>
+    <div class="panel" id="panel-excel">
+      <div class="upload-landing" id="excel-upload" style="display:none;">
+        <div style="color:var(--text3);font-size:.9rem;">אין טבלאות — טען קובץ .xlsx</div>
       </div>
       <div id="excel-content" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
-        <div class="sv-excel-tabs" id="excel-sheet-tabs"></div>
-        <div id="excel-sheets"></div>
+        <div class="sheet-tabs" id="sheet-tabs"></div>
+        <div id="sheet-panels"></div>
       </div>
     </div>
 
-    <!-- Tab 3: Diagrams -->
-    <div class="sv-panel" id="panel-diagrams">
-      <div class="sv-empty" id="diagrams-empty">
-        <div class="sv-empty-icon">🔀</div>
-        <div class="sv-empty-title">אין תרשימים</div>
-        <div class="sv-empty-sub">תרשימי ERD וזרימה מופקים אוטומטית כאשר האפיון כולל פרקי מודל נתונים ותהליכים.</div>
+    <div class="panel" id="panel-diagrams">
+      <div class="upload-landing" id="diagrams-upload" style="display:none;">
+        <div style="color:var(--text3);font-size:.9rem;">אין תרשימים — טען קובץ -diagrams.html</div>
       </div>
-      <div id="diagrams-content" style="display:none;" class="sv-diagrams-grid"></div>
+      <div id="diagrams-inline" style="display:none;" class="diag-grid"></div>
+      <iframe id="diagrams-iframe" class="diag-iframe" style="display:none;" sandbox="allow-scripts allow-same-origin"></iframe>
     </div>
 
-    <!-- Tab 4: Screens -->
-    <div class="sv-panel" id="panel-screens">
-      <div class="sv-empty" id="screens-empty">
-        <div class="sv-empty-icon">🖥️</div>
-        <div class="sv-empty-title">אין מסכים</div>
-        <div class="sv-empty-sub">פרוטוטייפ מסכים מופק כאשר האפיון כולל את פרק "מסכים ועיצוב".</div>
+    <div class="panel" id="panel-screens">
+      <div class="upload-landing" id="screens-upload" style="display:none;">
+        <div style="color:var(--text3);font-size:.9rem;">אין מסכים — טען קובץ -screens.html</div>
       </div>
-      <div id="screens-content" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
-        <div class="sv-screens-layout">
-          <div class="sv-screens-nav" id="screens-nav"></div>
-          <div class="sv-screens-frame-wrap">
-            <iframe id="screens-frame" sandbox="allow-same-origin"></iframe>
-          </div>
+      <div id="screens-inline" style="display:none;flex:1;flex-direction:column;">
+        <div class="scr-layout">
+          <div class="scr-nav" id="scr-nav"></div>
+          <div class="scr-frame-wrap"><iframe id="scr-frame" sandbox="allow-same-origin"></iframe></div>
         </div>
       </div>
+      <iframe id="screens-iframe" class="scr-full-iframe" style="display:none;" sandbox="allow-scripts allow-same-origin"></iframe>
     </div>
-
   </main>
 
   <script>
@@ -185,211 +184,255 @@
       startOnLoad: false,
       theme: 'dark',
       themeVariables: {
-        primaryColor: '#7c3aed',
-        primaryTextColor: '#e2e8f0',
-        primaryBorderColor: '#5b21b6',
-        lineColor: '#94a3b8',
-        background: '#1a1d27',
-        mainBkg: '#22263a',
-        nodeBorder: '#5b21b6',
-        edgeLabelBackground: '#1a1d27',
+        primaryColor: '#7c3aed', primaryTextColor: '#e2e8f0',
+        primaryBorderColor: '#5b21b6', lineColor: '#94a3b8',
+        background: '#1a1d27', mainBkg: '#22263a', nodeBorder: '#5b21b6',
+        edgeLabelBackground: '#1a1d27', titleColor: '#e2e8f0',
         attributeBackgroundColorEven: '#1a1d27',
         attributeBackgroundColorOdd: '#22263a',
-        titleColor: '#e2e8f0',
       },
-      er: { useMaxWidth: true, diagramPadding: 20 },
-      flowchart: { useMaxWidth: true, htmlLabels: true },
     });
 
-    // ── Tab switching ────────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     function switchTab(name, btn) {
-      document.querySelectorAll('.sv-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.sv-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       document.getElementById('panel-' + name).classList.add('active');
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    function escHtml(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
-
-    // ── Load data ────────────────────────────────────────────────────────────
-    function loadData() {
-      let raw;
-      try { raw = localStorage.getItem('spec-viewer-data'); } catch(e) {}
-      if (!raw) return;
-      let data;
-      try { data = JSON.parse(raw); } catch(e) { return; }
-
-      const meta = data.meta || {};
-      document.getElementById('sv-doc-title').textContent =
-        meta.fileNames ? 'אפיון: ' + meta.fileNames : 'מסמך אפיון';
+    function updateHeader(meta) {
+      if (meta.fileNames) document.getElementById('hd-title').textContent = 'אפיון: ' + meta.fileNames;
       const ts = meta.timestamp ? new Date(meta.timestamp).toLocaleString('he-IL') : '';
-      document.getElementById('sv-doc-meta').textContent =
-        [meta.flavor, ts, meta.mode === 'questions' ? 'שאלות הבהרה' : 'אפיון מלא'].filter(Boolean).join(' · ');
-      if (meta.flavor) document.getElementById('sv-flavor-badge').textContent = meta.flavor;
-
-      if (data.markdown) renderMarkdown(data.markdown);
-      if (data.tables?.length)  renderExcel(data.tables);
-      renderDiagrams(data.markdown || '');
-      if (data.screens?.length) renderScreens(data.screens);
+      document.getElementById('hd-meta').textContent =
+        [meta.flavor, ts, meta.mode === 'questions' ? 'שאלות הבהרה' : null].filter(Boolean).join(' · ');
+      if (meta.flavor) document.getElementById('hd-badge').textContent = meta.flavor;
     }
 
-    // ── Tab 1: Markdown ──────────────────────────────────────────────────────
-    function renderMarkdown(md) {
-      // Custom mermaid renderer: turn ```mermaid blocks into <div class="mermaid">
-      const renderer = new marked.Renderer();
-      renderer.code = function(code, lang) {
-        if (lang === 'mermaid') {
-          return `<div class="mermaid">${escHtml(code)}</div>`;
-        }
-        return `<pre><code>${escHtml(code)}</code></pre>`;
-      };
-      marked.use({ renderer });
-
-      // Strip raw excel-table and html-screen blocks before parse
-      const cleaned = md
-        .replace(/<excel-table[\s\S]*?<\/excel-table>/g, '')
-        .replace(/<html-screen[\s\S]*?<\/html-screen>/g, '');
-
-      const html = marked.parse(cleaned, { gfm: true, breaks: true });
-
-      const el = document.getElementById('doc-content');
-      el.innerHTML = html;
-      el.style.display = '';
-      document.getElementById('doc-empty').style.display = 'none';
-
-      // Run mermaid on blocks inside markdown tab
-      const mermaidEls = el.querySelectorAll('.mermaid');
-      if (mermaidEls.length > 0) {
-        mermaid.run({ nodes: mermaidEls }).catch(() => {});
+    // ── Mermaid renderer (programmatic) ─────────────────────────────────────
+    async function renderMermaidEl(code, wrapEl, uid) {
+      try {
+        const { svg } = await mermaid.render('mr-' + uid, code);
+        wrapEl.innerHTML = svg;
+        const s = wrapEl.querySelector('svg');
+        if (s) { s.style.maxWidth = '100%'; s.style.height = 'auto'; }
+      } catch(e) {
+        wrapEl.innerHTML = `<div class="diag-err">שגיאה בתרשים: ${esc(e.message)}</div>`;
       }
     }
 
-    // ── Tab 2: Excel ─────────────────────────────────────────────────────────
-    function renderExcel(tables) {
-      document.getElementById('excel-empty').style.display = 'none';
-      const container = document.getElementById('excel-content');
-      container.style.display = 'flex';
-      document.getElementById('cnt-excel').textContent = tables.length;
+    // ── Tab 1: Markdown ──────────────────────────────────────────────────────
+    async function renderMarkdown(mdText) {
+      // Remove raw spec blocks before rendering
+      const cleaned = mdText
+        .replace(/<excel-table[\s\S]*?<\/excel-table>/g, '')
+        .replace(/<html-screen[\s\S]*?<\/html-screen>/g, '');
 
-      const tabsEl   = document.getElementById('excel-sheet-tabs');
-      const sheetsEl = document.getElementById('excel-sheets');
+      // Custom renderer: wrap mermaid blocks in a div we'll process manually
+      const renderer = new marked.Renderer();
+      let mermaidIdx = 0;
+      renderer.code = (code, lang) => {
+        if (lang === 'mermaid') {
+          const id = 'mm-inline-' + (mermaidIdx++);
+          return `<div class="mermaid-wrap" id="${id}-wrap"><div id="${id}" style="display:none">${esc(code)}</div><div id="${id}-svg"></div></div>`;
+        }
+        return `<pre><code>${esc(code)}</code></pre>`;
+      };
+      marked.use({ renderer });
+
+      const el = document.getElementById('doc-content');
+      el.innerHTML = marked.parse(cleaned, { gfm: true, breaks: true });
+      el.style.display = '';
+      document.getElementById('doc-upload').style.display = 'none';
+
+      // Render inline mermaid blocks
+      const inlineBlocks = el.querySelectorAll('[id^="mm-inline-"][id$="-svg"]');
+      for (const svgEl of inlineBlocks) {
+        const baseId = svgEl.id.replace('-svg', '');
+        const codeEl = document.getElementById(baseId);
+        if (codeEl) await renderMermaidEl(codeEl.textContent, svgEl, baseId);
+      }
+    }
+
+    // ── Tab 2: Excel (from data or .xlsx file) ───────────────────────────────
+    function renderExcel(tables) {
+      if (!tables || tables.length === 0) {
+        document.getElementById('excel-upload').style.display = 'flex';
+        return;
+      }
+      document.getElementById('cnt-excel').textContent = tables.length;
+      document.getElementById('excel-content').style.display = 'flex';
+
+      const tabsEl   = document.getElementById('sheet-tabs');
+      const panelsEl = document.getElementById('sheet-panels');
+      tabsEl.innerHTML = ''; panelsEl.innerHTML = '';
 
       tables.forEach((tbl, idx) => {
         const btn = document.createElement('button');
-        btn.className = 'sv-sheet-tab' + (idx === 0 ? ' active' : '');
+        btn.className = 'sheet-tab' + (idx === 0 ? ' active' : '');
         btn.textContent = tbl.name || ('גיליון ' + (idx + 1));
         btn.onclick = () => {
-          document.querySelectorAll('.sv-sheet-tab').forEach(b => b.classList.remove('active'));
-          document.querySelectorAll('.sv-sheet-panel').forEach(p => p.classList.remove('active'));
+          tabsEl.querySelectorAll('.sheet-tab').forEach(b => b.classList.remove('active'));
+          panelsEl.querySelectorAll('.sheet-panel').forEach(p => p.classList.remove('active'));
           btn.classList.add('active');
-          document.getElementById('sheet-' + idx).classList.add('active');
+          document.getElementById('sp-' + idx).classList.add('active');
         };
         tabsEl.appendChild(btn);
 
         const panel = document.createElement('div');
-        panel.className = 'sv-sheet-panel' + (idx === 0 ? ' active' : '');
-        panel.id = 'sheet-' + idx;
+        panel.className = 'sheet-panel' + (idx === 0 ? ' active' : '');
+        panel.id = 'sp-' + idx;
 
         if (!Array.isArray(tbl.data) || tbl.data.length === 0) {
           panel.innerHTML = '<p style="color:var(--text3);padding:.75rem;">הגיליון ריק.</p>';
         } else {
           const keys = Object.keys(tbl.data[0]);
           const rows = tbl.data.map(row =>
-            '<tr>' + keys.map(k => `<td>${escHtml(String(row[k] ?? ''))}</td>`).join('') + '</tr>'
+            '<tr>' + keys.map(k => `<td>${esc(String(row[k] ?? ''))}</td>`).join('') + '</tr>'
           ).join('');
           panel.innerHTML = `
             <div style="overflow:auto;max-height:calc(100vh - 220px);">
-              <table class="sv-excel-table">
-                <thead><tr>${keys.map(k => `<th>${escHtml(k)}</th>`).join('')}</tr></thead>
+              <table class="xtbl">
+                <thead><tr>${keys.map(k => `<th>${esc(k)}</th>`).join('')}</tr></thead>
                 <tbody>${rows}</tbody>
               </table>
             </div>
-            <div class="sv-row-count">${tbl.data.length} שורות</div>`;
+            <div class="row-cnt">${tbl.data.length} שורות</div>`;
         }
-        sheetsEl.appendChild(panel);
+        panelsEl.appendChild(panel);
       });
     }
 
-    // ── Tab 3: Diagrams ──────────────────────────────────────────────────────
-    function renderDiagrams(md) {
-      const diagrams = [];
-      // Extract ```mermaid blocks with optional preceding heading
-      const regex = /(?:(?:^|\n)#{1,4}\s+(.+)\n[\s\S]{0,200}?)```mermaid\n([\s\S]*?)```/g;
-      let m;
-      while ((m = regex.exec(md)) !== null) {
-        diagrams.push({ title: m[1]?.trim() || ('תרשים ' + (diagrams.length + 1)), code: m[2].trim() });
+    // ── Tab 3: Diagrams (inline or iframe) ───────────────────────────────────
+    async function renderDiagramsInline(diagrams) {
+      if (!diagrams || diagrams.length === 0) {
+        document.getElementById('diagrams-upload').style.display = 'flex';
+        return;
       }
-      // Fallback: plain ```mermaid blocks without heading context
-      if (diagrams.length === 0) {
-        const plain = /```mermaid\n([\s\S]*?)```/g;
-        while ((m = plain.exec(md)) !== null) {
-          diagrams.push({ title: 'תרשים ' + (diagrams.length + 1), code: m[1].trim() });
-        }
-      }
-
-      if (diagrams.length === 0) return;
-
       document.getElementById('cnt-diagrams').textContent = diagrams.length;
-      document.getElementById('diagrams-empty').style.display = 'none';
-      const grid = document.getElementById('diagrams-content');
+      const grid = document.getElementById('diagrams-inline');
       grid.style.display = 'grid';
+      grid.innerHTML = '';
 
-      diagrams.forEach((d, i) => {
+      for (const [i, d] of diagrams.entries()) {
         const card = document.createElement('div');
-        card.className = 'sv-diagram-card';
-        const bodyId = 'mermaid-d-' + i;
-        card.innerHTML = `
-          <div class="sv-diagram-title">${escHtml(d.title)}</div>
-          <div class="sv-diagram-body">
-            <div class="mermaid" id="${bodyId}">${escHtml(d.code)}</div>
-          </div>`;
+        card.className = 'diag-card';
+        const titleEl = document.createElement('div');
+        titleEl.className = 'diag-title';
+        titleEl.textContent = d.title;
+        const bodyEl = document.createElement('div');
+        bodyEl.className = 'diag-body';
+        card.appendChild(titleEl);
+        card.appendChild(bodyEl);
         grid.appendChild(card);
-      });
-
-      mermaid.run({ nodes: document.querySelectorAll('#diagrams-content .mermaid') })
-        .catch(() => {});
+        await renderMermaidEl(d.code, bodyEl, 'g' + i);
+      }
     }
 
-    // ── Tab 4: Screens ───────────────────────────────────────────────────────
-    function renderScreens(screens) {
-      if (!screens || screens.length === 0) return;
+    function showDiagramsIframe(src) {
+      document.getElementById('cnt-diagrams').textContent = '✓';
+      document.getElementById('diagrams-upload').style.display = 'none';
+      const iframe = document.getElementById('diagrams-iframe');
+      iframe.src = src;
+      iframe.style.display = 'block';
+    }
 
+    // ── Tab 4: Screens (inline or iframe) ────────────────────────────────────
+    function renderScreensInline(screens) {
+      if (!screens || screens.length === 0) {
+        document.getElementById('screens-upload').style.display = 'flex';
+        return;
+      }
       document.getElementById('cnt-screens').textContent = screens.length;
-      document.getElementById('screens-empty').style.display = 'none';
-      const wrapper = document.getElementById('screens-content');
+      const wrapper = document.getElementById('screens-inline');
       wrapper.style.display = 'flex';
 
-      const nav   = document.getElementById('screens-nav');
-      const frame = document.getElementById('screens-frame');
+      const nav   = document.getElementById('scr-nav');
+      const frame = document.getElementById('scr-frame');
+      nav.innerHTML = '';
 
-      function showScreen(screen) {
-        frame.srcdoc = screen.html;
-        document.querySelectorAll('.sv-screen-btn').forEach(b => b.classList.remove('active'));
-        nav.querySelector(`[data-idx="${screens.indexOf(screen)}"]`).classList.add('active');
-      }
-
-      screens.forEach((screen, idx) => {
+      screens.forEach((s, idx) => {
         const btn = document.createElement('button');
-        btn.className = 'sv-screen-btn' + (idx === 0 ? ' active' : '');
-        btn.textContent = screen.name;
-        btn.dataset.idx = idx;
-        btn.onclick = () => showScreen(screen);
+        btn.className = 'scr-btn' + (idx === 0 ? ' active' : '');
+        btn.textContent = s.name;
+        btn.onclick = () => {
+          nav.querySelectorAll('.scr-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          frame.srcdoc = s.html;
+        };
         nav.appendChild(btn);
       });
+      if (screens.length > 0) frame.srcdoc = screens[0].html;
+    }
 
-      showScreen(screens[0]);
+    function showScreensIframe(src) {
+      document.getElementById('cnt-screens').textContent = '✓';
+      document.getElementById('screens-upload').style.display = 'none';
+      const iframe = document.getElementById('screens-iframe');
+      iframe.src = src;
+      iframe.style.display = 'block';
+    }
+
+    // ── Load from localStorage ───────────────────────────────────────────────
+    async function loadFromStorage() {
+      let data;
+      try { data = JSON.parse(localStorage.getItem('spec-viewer-data') || 'null'); } catch(e) {}
+      if (!data) {
+        // Show upload UI in all tabs
+        document.getElementById('doc-upload').style.display = 'flex';
+        document.getElementById('excel-upload').style.display = 'flex';
+        document.getElementById('diagrams-upload').style.display = 'flex';
+        document.getElementById('screens-upload').style.display = 'flex';
+        document.getElementById('hd-meta').textContent = 'טען קבצים או צור אפיון במלך האפיונים';
+        return;
+      }
+      if (data.meta) updateHeader(data.meta);
+      if (data.markdown)       await renderMarkdown(data.markdown);
+      renderExcel(data.tables);
+      await renderDiagramsInline(data.mermaidDiagrams);
+      renderScreensInline(data.screens);
+    }
+
+    // ── Load from uploaded files ─────────────────────────────────────────────
+    async function handleFileInput(files) {
+      for (const file of [...files]) {
+        const name = file.name.toLowerCase();
+        if (name.endsWith('.md')) {
+          const text = await file.text();
+          await renderMarkdown(text);
+          document.getElementById('hd-title').textContent = file.name;
+          document.getElementById('hd-meta').textContent = 'טעון מקובץ';
+        } else if (name.endsWith('.xlsx')) {
+          const buf  = await file.arrayBuffer();
+          const wb   = XLSX.read(buf);
+          const tbls = wb.SheetNames
+            .map(sn => ({ name: sn, data: XLSX.utils.sheet_to_json(wb.Sheets[sn]) }))
+            .filter(t => t.data.length > 0);
+          renderExcel(tbls);
+        } else if (name.endsWith('.html')) {
+          const text = await file.text();
+          const url  = URL.createObjectURL(file);
+          // Detect: mermaid diagrams vs screens
+          if (text.includes('class="mermaid"') || text.includes('erDiagram') ||
+              text.includes('flowchart') || name.includes('diagram')) {
+            showDiagramsIframe(url);
+          } else {
+            showScreensIframe(url);
+          }
+        }
+      }
     }
 
     // ── Init ─────────────────────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', loadData);
+    document.addEventListener('DOMContentLoaded', loadFromStorage);
 
     try {
       const bc = new BroadcastChannel('spec-viewer');
-      bc.onmessage = () => loadData();
+      bc.onmessage = () => loadFromStorage();
     } catch(e) {}
   </script>
 </body>

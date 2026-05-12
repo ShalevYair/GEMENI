@@ -373,6 +373,16 @@ window.generateSpecKing = async function () {
   const wb = XLSX.utils.book_new();
   let tableCount = 0;
   const viewerTables = [];
+  const viewerScreens = [];
+
+  // Extract html-screen blocks first (before excel processing)
+  finalMarkdown = finalMarkdown.replace(
+    /<html-screen name="(.*?)">([\s\S]*?)<\/html-screen>/g,
+    (_, name, html) => {
+      viewerScreens.push({ name: name.trim(), html: html.trim() });
+      return `\n> 🖥️ **מסך: ${name.trim()}** — מוצג בצופן האפיון.\n`;
+    }
+  );
 
   const excelRegex = /<excel-table name="(.*?)">([\s\S]*?)<\/excel-table>/g;
   let match;
@@ -414,6 +424,7 @@ window.generateSpecKing = async function () {
     localStorage.setItem('spec-viewer-data', JSON.stringify({
       markdown: combined,
       tables: viewerTables,
+      screens: viewerScreens,
       meta: {
         flavor: flavorLabel,
         timestamp: new Date().toISOString(),

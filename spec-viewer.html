@@ -260,25 +260,23 @@
 
     // ── Mermaid sanitizer ────────────────────────────────────────────────────
     function sanitizeMermaid(code) {
-      // ERD: backslash-escaped quotes inside string descriptors → apostrophe
+      // ERD: backslash-escaped quotes → apostrophe
       code = code.replace(/\\"/g, "'");
 
-      // Flowchart [...] node labels with ( ) or ' → wrap in double quotes
-      code = code.replace(/\[([^\[\]]*[\(\)'][^\[\]]*)\]/g, (m, inner) => {
+      // Rectangle labels [...] — single-line only (exclude \n) to skip ERD-adjacent text
+      code = code.replace(/\[([^\[\]\n]*[\(\)'][^\[\]\n]*)\]/g, (m, inner) => {
         if (inner.startsWith('"') && inner.endsWith('"')) return m;
         return '["' + inner.replace(/"/g, '\\"') + '"]';
       });
 
-      // Flowchart {...} diamond labels with ( ) or ' → wrap in double quotes
-      code = code.replace(/\{([^\{\}]*[\(\)'][^\{\}]*)\}/g, (m, inner) => {
+      // Diamond labels {...} — single-line ONLY (exclude \n) so multi-line ERD blocks are never touched
+      code = code.replace(/\{([^\{\}\n]*[\(\)'][^\{\}\n]*)\}/g, (m, inner) => {
         if (inner.startsWith('"') && inner.endsWith('"')) return m;
         return '{"' + inner.replace(/"/g, '\\"') + '"}';
       });
 
-      // Edge labels |text (parens)| → strip the parens (edge labels can't be quoted)
-      code = code.replace(/\|([^|]*[\(\)'][^|]*)\|/g, (m, inner) =>
-        '|' + inner.replace(/\(/g, '').replace(/\)/g, '').replace(/'/g, '') + '|'
-      );
+      // Edge labels |text| — strip ALL ( ) from inside any single-line |...|
+      code = code.replace(/\|[^|\n]+\|/g, m => m.replace(/[()]/g, ''));
 
       return code;
     }

@@ -65,105 +65,117 @@ function injectSpecKingModal() {
   modal.id = 'spec-king-modal';
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:flex-start;justify-content:center;overflow-y:auto;padding:2rem 1rem;';
+  modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:center;justify-content:center;';
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:2rem;max-width:600px;width:100%;direction:rtl;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Heebo,sans-serif;margin:auto;">
-      <h3 style="margin:0 0 .35rem;font-size:1.2rem;display:flex;align-items:center;gap:.5rem;">👑 מלך האפיונים — יצירת מסמך</h3>
-      <p style="margin:0 0 1.35rem;color:#6b7a99;font-size:.88rem;">העלה עד 10 קבצי דרישות, אפיון או פרוטוקולים — וקבל מסמך אפיון מלא בעברית.</p>
+    <div style="background:#fff;border-radius:16px;max-width:940px;width:calc(100% - 2rem);max-height:90vh;direction:rtl;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Heebo,sans-serif;display:flex;flex-direction:column;overflow:hidden;">
 
-      <!-- ── Multi-file upload ── -->
-      <div style="margin-bottom:1.25rem;">
-        <div style="font-weight:600;font-size:.9rem;margin-bottom:.5rem;">קבצי מקור (עד 10 קבצים):</div>
-        <label id="sk2-dropzone" for="sk2-file-input"
-          style="display:block;border:2px dashed #c8d0e0;border-radius:10px;padding:1.25rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;"
-          ondragover="event.preventDefault();this.style.borderColor='#7c3aed';this.style.background='#faf5ff';"
-          ondragleave="this.style.borderColor='#c8d0e0';this.style.background='';"
-          ondrop="event.preventDefault();this.style.borderColor='#c8d0e0';this.style.background='';window.sk2HandleDrop(event);">
-          <div style="font-size:1.6rem;margin-bottom:.3rem;">📂</div>
-          <div style="color:#6b7a99;font-size:.88rem;">לחץ לבחירת קבצים או גרור לכאן<br><span style="font-size:.78rem;">.docx · .txt · .md · .pdf (מקסימום 10 קבצים, 10MB כל אחד)</span></div>
-          <input id="sk2-file-input" type="file" accept=".docx,.txt,.md,.pdf" multiple style="display:none;" onchange="window.sk2FilesSelected(this.files)">
-        </label>
-        <div id="sk2-files-list" style="margin-top:.6rem;display:flex;flex-direction:column;gap:.3rem;"></div>
+      <!-- ── Header ── -->
+      <div style="padding:1.25rem 1.5rem .9rem;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
+        <h3 style="margin:0 0 .2rem;font-size:1.15rem;display:flex;align-items:center;gap:.5rem;color:#1e293b;">👑 מלך האפיונים — יצירת מסמך</h3>
+        <p style="margin:0;color:#64748b;font-size:.84rem;">העלה עד 10 קבצי דרישות, אפיון או פרוטוקולים — וקבל מסמך אפיון מלא.</p>
       </div>
 
-      <!-- ── Flavor ── -->
-      <div style="margin-bottom:1.1rem;">
-        <div style="font-weight:600;font-size:.9rem;margin-bottom:.5rem;">טעם האפיון:</div>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-          <label style="cursor:pointer;flex:1;min-width:120px;">
-            <input type="radio" name="sk2-flavor" value="general" checked style="display:none;" onchange="window.sk2FlavorChanged()">
-            <div class="sk2-flavor-card" data-flavor="general"
-              style="border:2px solid #7c3aed;border-radius:9px;padding:.6rem .9rem;text-align:center;background:linear-gradient(135deg,#faf5ff,#ede9fe);transition:all .2s;cursor:pointer;"
-              onclick="this.previousElementSibling.checked=true;window.sk2FlavorChanged()">
-              <div style="font-size:1.2rem;">📋</div>
-              <div style="font-weight:700;font-size:.82rem;color:#5b21b6;margin-top:.2rem;">כללי</div>
-            </div>
-          </label>
-          <label style="cursor:pointer;flex:1;min-width:120px;">
-            <input type="radio" name="sk2-flavor" value="salesforce" style="display:none;" onchange="window.sk2FlavorChanged()">
-            <div class="sk2-flavor-card" data-flavor="salesforce"
-              style="border:2px solid #e2e8f0;border-radius:9px;padding:.6rem .9rem;text-align:center;background:#fff;transition:all .2s;cursor:pointer;"
-              onclick="this.previousElementSibling.checked=true;window.sk2FlavorChanged()">
-              <div style="font-size:1.2rem;">☁️</div>
-              <div style="font-weight:700;font-size:.82rem;color:#032d60;margin-top:.2rem;">Salesforce</div>
-            </div>
-          </label>
-          <label style="cursor:pointer;flex:1;min-width:120px;">
-            <input type="radio" name="sk2-flavor" value="outsystems" style="display:none;" onchange="window.sk2FlavorChanged()">
-            <div class="sk2-flavor-card" data-flavor="outsystems"
-              style="border:2px solid #e2e8f0;border-radius:9px;padding:.6rem .9rem;text-align:center;background:#fff;transition:all .2s;cursor:pointer;"
-              onclick="this.previousElementSibling.checked=true;window.sk2FlavorChanged()">
-              <div style="font-size:1.2rem;">🔴</div>
-              <div style="font-weight:700;font-size:.82rem;color:#cc1e00;margin-top:.2rem;">OutSystems</div>
-            </div>
-          </label>
-        </div>
+      <!-- ── Body: two columns ── -->
+      <div style="display:flex;flex:1;overflow:hidden;">
 
-        <!-- OutSystems version sub-selection -->
-        <div id="sk2-os-version" style="display:none;margin-top:.65rem;padding:.65rem .85rem;background:#fff5f5;border:1px solid #fecaca;border-radius:8px;">
-          <div style="font-size:.82rem;font-weight:600;color:#991b1b;margin-bottom:.4rem;">גרסת OutSystems:</div>
-          <label style="display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem;cursor:pointer;font-size:.85rem;">
-            <input type="radio" name="sk2-os-ver" value="o11" checked>
-            <span><strong>O11</strong> — <span style="color:#6b7a99;">4-Layer Canvas</span></span>
-          </label>
-          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-size:.85rem;">
-            <input type="radio" name="sk2-os-ver" value="odc">
-            <span><strong>ODC</strong> — <span style="color:#6b7a99;">OutSystems Developer Cloud</span></span>
-          </label>
-        </div>
-      </div>
+        <!-- Left column: upload / flavor / mode -->
+        <div style="flex:0 0 360px;padding:1.1rem 1.4rem;overflow-y:auto;border-left:1px solid #f1f5f9;">
 
-      <!-- ── Mode ── -->
-      <div style="margin-bottom:1.1rem;">
-        <div style="font-weight:600;font-size:.9rem;margin-bottom:.5rem;">מה תרצה לקבל?</div>
-        <label style="display:flex;align-items:flex-start;gap:.5rem;margin-bottom:.5rem;cursor:pointer;">
-          <input type="radio" name="sk2-mode" value="spec" checked style="margin-top:.2rem;" onchange="window.sk2ModeChanged()">
-          <span><strong>אפיון מלא</strong> <span style="color:#6b7a99;font-size:.82rem;">— מסמך אפיון מובנה לפי הפרקים שבחרת (3 קריאות API)</span></span>
-        </label>
-        <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;">
-          <input type="radio" name="sk2-mode" value="questions" style="margin-top:.2rem;" onchange="window.sk2ModeChanged()">
-          <span><strong>שאלות הבהרה</strong> <span style="color:#6b7a99;font-size:.82rem;">— רשימת שאלות ממוקדות לפני האפיון (קריאה אחת)</span></span>
-        </label>
-      </div>
+          <!-- Multi-file upload -->
+          <div style="margin-bottom:.9rem;">
+            <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.4rem;">קבצי מקור (עד 10 קבצים):</div>
+            <label id="sk2-dropzone" for="sk2-file-input"
+              style="display:block;border:2px dashed #c8d0e0;border-radius:9px;padding:.9rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;"
+              ondragover="event.preventDefault();this.style.borderColor='#7c3aed';this.style.background='#faf5ff';"
+              ondragleave="this.style.borderColor='#c8d0e0';this.style.background='';"
+              ondrop="event.preventDefault();this.style.borderColor='#c8d0e0';this.style.background='';window.sk2HandleDrop(event);">
+              <div style="font-size:1.4rem;margin-bottom:.2rem;">📂</div>
+              <div style="color:#64748b;font-size:.82rem;">לחץ לבחירת קבצים או גרור לכאן<br><span style="font-size:.75rem;">.docx · .txt · .md · .pdf (עד 10 קבצים, 10MB כל אחד)</span></div>
+              <input id="sk2-file-input" type="file" accept=".docx,.txt,.md,.pdf" multiple style="display:none;" onchange="window.sk2FilesSelected(this.files)">
+            </label>
+            <div id="sk2-files-list" style="margin-top:.45rem;display:flex;flex-direction:column;gap:.25rem;"></div>
+          </div>
 
-      <!-- ── Checklist (spec mode only) ── -->
-      <div id="sk2-checklist-section" style="margin-bottom:1.25rem;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem;">
-          <div style="font-weight:600;font-size:.9rem;">פרקים לכלול באפיון:</div>
-          <div style="display:flex;gap:.4rem;">
-            <button onclick="window.sk2SelectAll()" style="font-size:.75rem;padding:.2rem .55rem;border:1px solid #c8d0e0;border-radius:5px;background:#fff;cursor:pointer;font-family:Heebo,sans-serif;">בחר הכל</button>
-            <button onclick="window.sk2SelectDefaults()" style="font-size:.75rem;padding:.2rem .55rem;border:1px solid #c8d0e0;border-radius:5px;background:#fff;cursor:pointer;font-family:Heebo,sans-serif;">ברירת מחדל</button>
+          <!-- Flavor -->
+          <div style="margin-bottom:.85rem;">
+            <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.4rem;">טעם האפיון:</div>
+            <div style="display:flex;gap:.4rem;">
+              <label style="cursor:pointer;flex:1;">
+                <input type="radio" name="sk2-flavor" value="general" checked style="display:none;" onchange="window.sk2FlavorChanged()">
+                <div class="sk2-flavor-card" data-flavor="general"
+                  style="border:2px solid #7c3aed;border-radius:8px;padding:.5rem .5rem;text-align:center;background:linear-gradient(135deg,#faf5ff,#ede9fe);transition:all .2s;cursor:pointer;"
+                  onclick="this.previousElementSibling.checked=true;window.sk2FlavorChanged()">
+                  <div style="font-size:1.1rem;">📋</div>
+                  <div style="font-weight:700;font-size:.78rem;color:#5b21b6;margin-top:.15rem;">כללי</div>
+                </div>
+              </label>
+              <label style="cursor:pointer;flex:1;">
+                <input type="radio" name="sk2-flavor" value="salesforce" style="display:none;" onchange="window.sk2FlavorChanged()">
+                <div class="sk2-flavor-card" data-flavor="salesforce"
+                  style="border:2px solid #e2e8f0;border-radius:8px;padding:.5rem .5rem;text-align:center;background:#fff;transition:all .2s;cursor:pointer;"
+                  onclick="this.previousElementSibling.checked=true;window.sk2FlavorChanged()">
+                  <div style="font-size:1.1rem;">☁️</div>
+                  <div style="font-weight:700;font-size:.78rem;color:#032d60;margin-top:.15rem;">Salesforce</div>
+                </div>
+              </label>
+              <label style="cursor:pointer;flex:1;">
+                <input type="radio" name="sk2-flavor" value="outsystems" style="display:none;" onchange="window.sk2FlavorChanged()">
+                <div class="sk2-flavor-card" data-flavor="outsystems"
+                  style="border:2px solid #e2e8f0;border-radius:8px;padding:.5rem .5rem;text-align:center;background:#fff;transition:all .2s;cursor:pointer;"
+                  onclick="this.previousElementSibling.checked=true;window.sk2FlavorChanged()">
+                  <div style="font-size:1.1rem;">🔴</div>
+                  <div style="font-weight:700;font-size:.78rem;color:#cc1e00;margin-top:.15rem;">OutSystems</div>
+                </div>
+              </label>
+            </div>
+
+            <!-- OutSystems version sub-selection -->
+            <div id="sk2-os-version" style="display:none;margin-top:.5rem;padding:.55rem .7rem;background:#fff5f5;border:1px solid #fecaca;border-radius:7px;">
+              <div style="font-size:.8rem;font-weight:600;color:#991b1b;margin-bottom:.3rem;">גרסת OutSystems:</div>
+              <label style="display:flex;align-items:center;gap:.35rem;margin-bottom:.25rem;cursor:pointer;font-size:.82rem;">
+                <input type="radio" name="sk2-os-ver" value="o11" checked>
+                <span style="color:#1e293b;"><strong>O11</strong> — <span style="color:#64748b;">4-Layer Canvas</span></span>
+              </label>
+              <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.82rem;">
+                <input type="radio" name="sk2-os-ver" value="odc">
+                <span style="color:#1e293b;"><strong>ODC</strong> — <span style="color:#64748b;">Developer Cloud</span></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Mode -->
+          <div>
+            <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.4rem;">מה תרצה לקבל?</div>
+            <label style="display:flex;align-items:flex-start;gap:.45rem;margin-bottom:.4rem;cursor:pointer;">
+              <input type="radio" name="sk2-mode" value="spec" checked style="margin-top:.15rem;" onchange="window.sk2ModeChanged()">
+              <span style="font-size:.84rem;color:#1e293b;"><strong>אפיון מלא</strong> <span style="color:#64748b;font-size:.78rem;">— 3 קריאות API</span></span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:.45rem;cursor:pointer;">
+              <input type="radio" name="sk2-mode" value="questions" style="margin-top:.15rem;" onchange="window.sk2ModeChanged()">
+              <span style="font-size:.84rem;color:#1e293b;"><strong>שאלות הבהרה</strong> <span style="color:#64748b;font-size:.78rem;">— קריאה אחת</span></span>
+            </label>
           </div>
         </div>
-        <div id="sk2-checklist-body" style="border:1px solid #e2e8f0;border-radius:8px;padding:.65rem .5rem;">
-          ${buildChecklistHtml(savedChecked)}
+
+        <!-- Right column: checklist -->
+        <div id="sk2-checklist-section" style="flex:1;padding:1.1rem 1.4rem;overflow-y:auto;display:flex;flex-direction:column;min-width:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.45rem;flex-shrink:0;">
+            <div style="font-weight:600;font-size:.87rem;color:#1e293b;">פרקים לכלול באפיון:</div>
+            <div style="display:flex;gap:.35rem;">
+              <button onclick="window.sk2SelectAll()" style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #c8d0e0;border-radius:5px;background:#fff;cursor:pointer;font-family:Heebo,sans-serif;color:#374151;">בחר הכל</button>
+              <button onclick="window.sk2SelectDefaults()" style="font-size:.72rem;padding:.2rem .5rem;border:1px solid #c8d0e0;border-radius:5px;background:#fff;cursor:pointer;font-family:Heebo,sans-serif;color:#374151;">ברירת מחדל</button>
+            </div>
+          </div>
+          <div id="sk2-checklist-body" style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:.55rem .4rem;overflow-y:auto;">
+            ${buildChecklistHtml(savedChecked)}
+          </div>
         </div>
       </div>
 
-      <!-- ── Buttons ── -->
-      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
-        <button onclick="window.closeSpecKingModal()" style="padding:.55rem 1.1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.9rem;font-family:Heebo,sans-serif;">ביטול</button>
-        <button id="sk2-generate-btn" onclick="window.generateSpecKing()" style="padding:.55rem 1.35rem;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(124,58,237,.35);">👑 צור מסמך</button>
+      <!-- ── Footer: buttons ── -->
+      <div style="padding:.9rem 1.5rem;border-top:1px solid #f1f5f9;display:flex;gap:.75rem;justify-content:flex-end;flex-shrink:0;">
+        <button onclick="window.closeSpecKingModal()" style="padding:.5rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.88rem;font-family:Heebo,sans-serif;color:#374151;">ביטול</button>
+        <button id="sk2-generate-btn" onclick="window.generateSpecKing()" style="padding:.5rem 1.25rem;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(124,58,237,.35);">👑 צור מסמך</button>
       </div>
     </div>`;
 

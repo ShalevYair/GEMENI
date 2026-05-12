@@ -53,6 +53,17 @@
     .upload-hint span { color: var(--accent); }
     #file-input { display: none; }
 
+    /* Doc layout: TOC sidebar + content */
+    .doc-layout { display: flex; gap: 1.2rem; width: 100%; align-items: flex-start; }
+    .doc-toc { width: 200px; flex-shrink: 0; position: sticky; top: 0; max-height: calc(100vh - 160px); overflow-y: auto; }
+    .doc-toc-title { font-size: .7rem; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .5rem; padding: 0 .4rem; }
+    .doc-toc-item { display: block; padding: .28rem .55rem; font-size: .78rem; color: var(--text2); border-radius: 5px; cursor: pointer; transition: all .12s; border: none; background: none; text-align: right; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: Heebo, sans-serif; line-height: 1.35; }
+    .doc-toc-item:hover { background: var(--surface2); color: var(--text); }
+    .doc-toc-item.lv2 { font-weight: 600; }
+    .doc-toc-item.lv3 { padding-right: 1.1rem; font-size: .74rem; color: var(--text3); }
+    .doc-toc-item.active { color: var(--accent) !important; background: rgba(124,58,237,.12); }
+    .doc-main { flex: 1; min-width: 0; }
+
     /* Markdown */
     .md { max-width: 860px; width: 100%; margin: 0 auto; line-height: 1.75; font-size: .94rem; }
     .md h1 { font-size: 1.55rem; font-weight: 800; margin: 1.5rem 0 .7rem; border-bottom: 2px solid var(--accent); padding-bottom: .35rem; }
@@ -89,14 +100,31 @@
     .xtbl tr:hover td { background: rgba(124,58,237,.08); }
     .row-cnt { font-size: .73rem; color: var(--text3); margin-top: .45rem; }
 
-    /* Diagrams */
-    .diag-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.1rem; width: 100%; }
+    /* Diagrams toolbar */
+    .diag-toolbar { display: flex; align-items: center; gap: .5rem; margin-bottom: .9rem; flex-wrap: wrap; }
+    .diag-toolbar-label { font-size: .78rem; color: var(--text3); margin-left: .3rem; }
+    .diag-toggle-btn { padding: .3rem .75rem; font-size: .78rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); cursor: pointer; font-family: Heebo, sans-serif; transition: all .15s; }
+    .diag-toggle-btn:hover { border-color: var(--accent); color: var(--text); }
+    .diag-toggle-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* Diagram grid & cards */
+    .diag-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.1rem; width: 100%; align-content: start; }
     .diag-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
-    .diag-title { padding: .6rem 1rem; font-size: .83rem; font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--border); background: var(--surface2); }
+    .diag-card-title { padding: .5rem .9rem; font-size: .83rem; font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+    .diag-card-title span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .diag-fs-btn { background: none; border: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: .78rem; padding: .18rem .48rem; border-radius: 4px; transition: all .12s; white-space: nowrap; flex-shrink: 0; font-family: Heebo, sans-serif; }
+    .diag-fs-btn:hover { color: var(--text); border-color: var(--text2); }
     .diag-body { padding: 1rem; text-align: center; overflow-x: auto; }
     .diag-body svg { max-width: 100%; height: auto; }
-    .diag-err { color: var(--text3); font-size: .78rem; padding: .5rem; }
+    .diag-err { color: #f87171; font-size: .79rem; padding: .5rem; background: rgba(239,68,68,.08); border-radius: 6px; margin: .5rem; }
     .diag-iframe { width: 100%; flex: 1; border: none; border-radius: var(--r); min-height: calc(100vh - 170px); }
+
+    /* Fullscreen state for diagram card */
+    .diag-card:fullscreen { background: #fff; display: flex; flex-direction: column; overflow: auto; }
+    .diag-card:fullscreen .diag-card-title { background: #f1f5f9; color: #1e40af; border-bottom: 1px solid #e2e8f0; }
+    .diag-card:fullscreen .diag-fs-btn { color: #64748b; border-color: #e2e8f0; }
+    .diag-card:fullscreen .diag-body { flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; }
+    .diag-card:fullscreen .diag-body svg { max-width: 95vw; max-height: 90vh; height: auto; width: auto; }
 
     /* Screens */
     .scr-layout { display: flex; flex: 1; gap: .9rem; overflow: hidden; min-height: 0; }
@@ -130,6 +158,8 @@
   </nav>
 
   <main class="content">
+
+    <!-- Tab 1: Document -->
     <div class="panel active" id="panel-doc">
       <div class="upload-landing" id="doc-upload">
         <div class="upload-zone" id="drop-zone"
@@ -143,9 +173,17 @@
         </div>
         <div class="upload-hint">האפיון נוצר על ידי <span>מלך האפיונים</span> ונפתח כאן אוטומטית</div>
       </div>
-      <div class="md" id="doc-content" style="display:none;"></div>
+      <div class="doc-layout" id="doc-layout" style="display:none;">
+        <nav class="doc-toc" id="doc-toc">
+          <div class="doc-toc-title">תוכן עניינים</div>
+        </nav>
+        <div class="doc-main">
+          <div class="md" id="doc-content"></div>
+        </div>
+      </div>
     </div>
 
+    <!-- Tab 2: Excel -->
     <div class="panel" id="panel-excel">
       <div class="upload-landing" id="excel-upload" style="display:none;">
         <div style="color:var(--text3);font-size:.9rem;">אין טבלאות — טען קובץ .xlsx</div>
@@ -156,14 +194,20 @@
       </div>
     </div>
 
+    <!-- Tab 3: Diagrams -->
     <div class="panel" id="panel-diagrams">
       <div class="upload-landing" id="diagrams-upload" style="display:none;">
         <div style="color:var(--text3);font-size:.9rem;">אין תרשימים — טען קובץ -diagrams.html</div>
+      </div>
+      <div id="diagrams-toolbar" class="diag-toolbar" style="display:none;">
+        <span class="diag-toolbar-label">ERD:</span>
+        <button class="diag-toggle-btn on" id="erd-fields-btn" onclick="toggleErdFields()">הצג שדות</button>
       </div>
       <div id="diagrams-inline" style="display:none;" class="diag-grid"></div>
       <iframe id="diagrams-iframe" class="diag-iframe" style="display:none;" sandbox="allow-scripts allow-same-origin"></iframe>
     </div>
 
+    <!-- Tab 4: Screens -->
     <div class="panel" id="panel-screens">
       <div class="upload-landing" id="screens-upload" style="display:none;">
         <div style="color:var(--text3);font-size:.9rem;">אין מסכים — טען קובץ -screens.html</div>
@@ -176,6 +220,7 @@
       </div>
       <iframe id="screens-iframe" class="scr-full-iframe" style="display:none;" sandbox="allow-scripts allow-same-origin"></iframe>
     </div>
+
   </main>
 
   <script>
@@ -215,14 +260,26 @@
 
     // ── Mermaid sanitizer ────────────────────────────────────────────────────
     function sanitizeMermaid(code) {
-      // Fix backslash-escaped quotes inside ERD string descriptors (e.g. "חומ\"ס" → "חומ'ס")
+      // ERD: backslash-escaped quotes inside string descriptors → apostrophe
       code = code.replace(/\\"/g, "'");
-      // Fix flowchart node labels [text with (parens) or apostrophes] → ["text"]
-      // Mermaid v10 interprets ( inside [...] as a stadium shape start
-      code = code.replace(/\[([^\[\]]*[\(\)'][^\[\]]*)\]/g, (match, inner) => {
-        if (inner.startsWith('"') && inner.endsWith('"')) return match;
+
+      // Flowchart [...] node labels with ( ) or ' → wrap in double quotes
+      code = code.replace(/\[([^\[\]]*[\(\)'][^\[\]]*)\]/g, (m, inner) => {
+        if (inner.startsWith('"') && inner.endsWith('"')) return m;
         return '["' + inner.replace(/"/g, '\\"') + '"]';
       });
+
+      // Flowchart {...} diamond labels with ( ) or ' → wrap in double quotes
+      code = code.replace(/\{([^\{\}]*[\(\)'][^\{\}]*)\}/g, (m, inner) => {
+        if (inner.startsWith('"') && inner.endsWith('"')) return m;
+        return '{"' + inner.replace(/"/g, '\\"') + '"}';
+      });
+
+      // Edge labels |text (parens)| → strip the parens (edge labels can't be quoted)
+      code = code.replace(/\|([^|]*[\(\)'][^|]*)\|/g, (m, inner) =>
+        '|' + inner.replace(/\(/g, '').replace(/\)/g, '').replace(/'/g, '') + '|'
+      );
+
       return code;
     }
 
@@ -238,14 +295,12 @@
       }
     }
 
-    // ── Tab 1: Markdown ──────────────────────────────────────────────────────
+    // ── Tab 1: Markdown + TOC sidebar ───────────────────────────────────────
     async function renderMarkdown(mdText) {
-      // Remove raw spec blocks before rendering
       const cleaned = mdText
         .replace(/<excel-table[\s\S]*?<\/excel-table>/g, '')
         .replace(/<html-screen[\s\S]*?<\/html-screen>/g, '');
 
-      // Custom renderer: wrap mermaid blocks in a div we'll process manually
       const renderer = new marked.Renderer();
       let mermaidIdx = 0;
       renderer.code = (code, lang) => {
@@ -259,8 +314,11 @@
 
       const el = document.getElementById('doc-content');
       el.innerHTML = marked.parse(cleaned, { gfm: true, breaks: true });
-      el.style.display = '';
+
       document.getElementById('doc-upload').style.display = 'none';
+      document.getElementById('doc-layout').style.display = 'flex';
+
+      buildTOC(el);
 
       // Render inline mermaid blocks
       const inlineBlocks = el.querySelectorAll('[id^="mm-inline-"][id$="-svg"]');
@@ -271,7 +329,41 @@
       }
     }
 
-    // ── Tab 2: Excel (from data or .xlsx file) ───────────────────────────────
+    function buildTOC(contentEl) {
+      const toc = document.getElementById('doc-toc');
+      toc.innerHTML = '<div class="doc-toc-title">תוכן עניינים</div>';
+      const headings = contentEl.querySelectorAll('h2, h3');
+      if (headings.length === 0) return;
+
+      const items = [];
+      headings.forEach((h, i) => {
+        const id = 'toc-h-' + i;
+        h.id = id;
+        const btn = document.createElement('button');
+        btn.className = 'doc-toc-item ' + (h.tagName === 'H2' ? 'lv2' : 'lv3');
+        btn.textContent = h.textContent;
+        btn.title = h.textContent;
+        btn.onclick = () => {
+          h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+        toc.appendChild(btn);
+        items.push({ el: h, btn });
+      });
+
+      // Highlight active section on scroll (panel-doc is the scroll container)
+      const panel = document.getElementById('panel-doc');
+      panel.addEventListener('scroll', () => {
+        const scrollTop = panel.scrollTop + 80;
+        let active = items[0];
+        for (const item of items) {
+          if (item.el.offsetTop <= scrollTop) active = item;
+        }
+        items.forEach(it => it.btn.classList.remove('active'));
+        if (active) active.btn.classList.add('active');
+      }, { passive: true });
+    }
+
+    // ── Tab 2: Excel ─────────────────────────────────────────────────────────
     function renderExcel(tables) {
       if (!tables || tables.length === 0) {
         document.getElementById('excel-upload').style.display = 'flex';
@@ -320,13 +412,48 @@
       });
     }
 
-    // ── Tab 3: Diagrams (inline or iframe) ───────────────────────────────────
+    // ── Tab 3: Diagrams ──────────────────────────────────────────────────────
+    let _diagrams = [];
+    let _erdSimplified = false;
+
+    function stripErdFields(code) {
+      // Remove field-definition blocks from erDiagram, keep entity names + relationships
+      return code.replace(/\s*\{[^}]*\}/g, '');
+    }
+
+    function toggleErdFields() {
+      _erdSimplified = !_erdSimplified;
+      const btn = document.getElementById('erd-fields-btn');
+      btn.textContent = _erdSimplified ? 'הסתר שדות' : 'הצג שדות';
+      btn.classList.toggle('on', !_erdSimplified);
+      rerenderDiagrams();
+    }
+
+    async function rerenderDiagrams() {
+      const grid = document.getElementById('diagrams-inline');
+      const cards = grid.querySelectorAll('.diag-card');
+      for (const [i, d] of _diagrams.entries()) {
+        const card = cards[i];
+        if (!card) continue;
+        const bodyEl = card.querySelector('.diag-body');
+        if (!bodyEl) continue;
+        const isErd = d.code.trim().startsWith('erDiagram');
+        const code = (isErd && _erdSimplified) ? stripErdFields(d.code) : d.code;
+        bodyEl.innerHTML = '';
+        await renderMermaidEl(code, bodyEl, 'gr' + Date.now() + i);
+      }
+    }
+
     async function renderDiagramsInline(diagrams) {
       if (!diagrams || diagrams.length === 0) {
         document.getElementById('diagrams-upload').style.display = 'flex';
         return;
       }
+      _diagrams = diagrams;
+      const hasErd = diagrams.some(d => d.code.trim().startsWith('erDiagram'));
       document.getElementById('cnt-diagrams').textContent = diagrams.length;
+      document.getElementById('diagrams-toolbar').style.display = hasErd ? 'flex' : 'none';
+
       const grid = document.getElementById('diagrams-inline');
       grid.style.display = 'grid';
       grid.innerHTML = '';
@@ -334,15 +461,31 @@
       for (const [i, d] of diagrams.entries()) {
         const card = document.createElement('div');
         card.className = 'diag-card';
-        const titleEl = document.createElement('div');
-        titleEl.className = 'diag-title';
-        titleEl.textContent = d.title;
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'diag-card-title';
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = d.title;
+        const fsBtn = document.createElement('button');
+        fsBtn.className = 'diag-fs-btn';
+        fsBtn.textContent = '⛶ מסך מלא';
+        fsBtn.onclick = () => {
+          if (card.requestFullscreen) card.requestFullscreen();
+          else if (card.webkitRequestFullscreen) card.webkitRequestFullscreen();
+        };
+        titleRow.appendChild(titleSpan);
+        titleRow.appendChild(fsBtn);
+
         const bodyEl = document.createElement('div');
         bodyEl.className = 'diag-body';
-        card.appendChild(titleEl);
+
+        card.appendChild(titleRow);
         card.appendChild(bodyEl);
         grid.appendChild(card);
-        await renderMermaidEl(d.code, bodyEl, 'g' + i);
+
+        const isErd = d.code.trim().startsWith('erDiagram');
+        const code = (isErd && _erdSimplified) ? stripErdFields(d.code) : d.code;
+        await renderMermaidEl(code, bodyEl, 'g' + i);
       }
     }
 
@@ -354,7 +497,7 @@
       iframe.style.display = 'block';
     }
 
-    // ── Tab 4: Screens (inline or iframe) ────────────────────────────────────
+    // ── Tab 4: Screens ───────────────────────────────────────────────────────
     function renderScreensInline(screens) {
       if (!screens || screens.length === 0) {
         document.getElementById('screens-upload').style.display = 'flex';
@@ -395,7 +538,6 @@
       let data;
       try { data = JSON.parse(localStorage.getItem('spec-viewer-data') || 'null'); } catch(e) {}
       if (!data) {
-        // Show upload UI in all tabs
         document.getElementById('doc-upload').style.display = 'flex';
         document.getElementById('excel-upload').style.display = 'flex';
         document.getElementById('diagrams-upload').style.display = 'flex';
@@ -429,7 +571,6 @@
         } else if (name.endsWith('.html')) {
           const text = await file.text();
           const url  = URL.createObjectURL(file);
-          // Detect: mermaid diagrams vs screens
           if (text.includes('class="mermaid"') || text.includes('erDiagram') ||
               text.includes('flowchart') || name.includes('diagram')) {
             showDiagramsIframe(url);

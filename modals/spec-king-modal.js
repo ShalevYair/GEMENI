@@ -372,6 +372,7 @@ window.generateSpecKing = async function () {
   let finalMarkdown = combined;
   const wb = XLSX.utils.book_new();
   let tableCount = 0;
+  const viewerTables = [];
 
   const excelRegex = /<excel-table name="(.*?)">([\s\S]*?)<\/excel-table>/g;
   let match;
@@ -382,10 +383,11 @@ window.generateSpecKing = async function () {
       const data = JSON.parse(jsonData);
       if (Array.isArray(data) && data.length > 0) {
         tableCount++;
+        viewerTables.push({ name: tableName, data });
         const ws = XLSX.utils.json_to_sheet(data);
         const sheetName = tableName.replace(/[\\*?:\[\]\/]/g, '').substring(0, 31) || `Sheet ${tableCount}`;
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        const placeholder = `\n> 📊 **טבלה: ${tableName}** — הנתונים המלאים בקובץ האקסל המצורף.\n`;
+        const placeholder = `\n> 📊 **טבלה: ${tableName}** — הנתונים המלאים בצופן האפיון ובקובץ האקסל.\n`;
         finalMarkdown = finalMarkdown.replace(match[0], placeholder);
       }
     } catch { /* skip malformed tables */ }
@@ -406,6 +408,22 @@ window.generateSpecKing = async function () {
   const flavorLabel = flavor === 'salesforce' ? 'Salesforce'
     : flavor === 'outsystems' ? `OutSystems ${osVer.toUpperCase()}`
     : 'כללי';
+
+  // Open spec-viewer with full data
+  try {
+    localStorage.setItem('spec-viewer-data', JSON.stringify({
+      markdown: combined,
+      tables: viewerTables,
+      meta: {
+        flavor: flavorLabel,
+        timestamp: new Date().toISOString(),
+        fileNames,
+        mode,
+      },
+    }));
+    try { new BroadcastChannel('spec-viewer').postMessage('update'); } catch {}
+    window.open('spec-viewer.html', 'spec-viewer');
+  } catch { /* localStorage unavailable — viewer won't open */ }
 
   deps.appendMessage('assistant',
     isQuestions

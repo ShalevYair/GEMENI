@@ -17,7 +17,8 @@
       --border: #2e3248; --accent: #7c3aed; --text: #e2e8f0;
       --text2: #94a3b8; --text3: #64748b; --r: 10px;
     }
-    body { font-family: Heebo, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: Heebo, sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
 
     /* Header */
     .hd { background: var(--surface); border-bottom: 1px solid var(--border); padding: .8rem 1.4rem; display: flex; align-items: center; gap: .9rem; flex-shrink: 0; }
@@ -102,34 +103,28 @@
     .xtbl tr:hover td { background: rgba(124,58,237,.08); }
     .row-cnt { font-size: .73rem; color: var(--text3); margin-top: .45rem; }
 
-    /* Diagrams toolbar */
-    .diag-toolbar { display: flex; align-items: center; gap: .5rem; margin-bottom: .9rem; flex-wrap: wrap; }
-    .diag-toolbar-label { font-size: .78rem; color: var(--text3); margin-left: .3rem; }
-    .diag-toggle-btn { padding: .3rem .75rem; font-size: .78rem; font-weight: 600; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); cursor: pointer; font-family: Heebo, sans-serif; transition: all .15s; }
-    .diag-toggle-btn:hover { border-color: var(--accent); color: var(--text); }
-    .diag-toggle-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-
     /* Diagram grid & cards */
-    .diag-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.1rem; width: 100%; align-content: start; }
+    .diag-grid { display: grid; grid-template-columns: 1fr; gap: 1.1rem; width: 100%; align-content: start; }
     .diag-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
     .diag-card-title { padding: .5rem .9rem; font-size: .83rem; font-weight: 600; color: var(--accent); border-bottom: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
     .diag-card-title span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .diag-fs-btn { background: none; border: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: .78rem; padding: .18rem .48rem; border-radius: 4px; transition: all .12s; white-space: nowrap; flex-shrink: 0; font-family: Heebo, sans-serif; }
-    .diag-fs-btn:hover { color: var(--text); border-color: var(--text2); }
-    .diag-body { padding: 1rem; text-align: center; overflow-x: auto; }
+    .diag-fs-btn, .diag-erd-btn { background: none; border: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: .78rem; padding: .18rem .48rem; border-radius: 4px; transition: all .12s; white-space: nowrap; flex-shrink: 0; font-family: Heebo, sans-serif; }
+    .diag-fs-btn:hover, .diag-erd-btn:hover { color: var(--text); border-color: var(--text2); }
+    .diag-erd-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .diag-body { padding: 1rem; text-align: center; overflow: auto; cursor: default; }
     .diag-body svg { max-width: 100%; height: auto; }
     .diag-err { color: #f87171; font-size: .79rem; padding: .5rem; background: rgba(239,68,68,.08); border-radius: 6px; margin: .5rem; }
     .diag-iframe { width: 100%; flex: 1; border: none; border-radius: var(--r); min-height: calc(100vh - 170px); }
 
     /* Fullscreen state for diagram card */
-    .diag-zoom-btn { background: none; border: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: .9rem; padding: .15rem .5rem; border-radius: 4px; transition: all .12s; font-weight: 600; display: none; }
-    .diag-card:fullscreen .diag-zoom-btn { display: inline-block; }
-    .diag-card:fullscreen { background: #fff; display: flex; flex-direction: column; overflow: hidden; }
+    .diag-zoom-btn { background: none; border: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: .9rem; padding: .15rem .5rem; border-radius: 4px; font-weight: 600; display: none; }
+    .diag-card:fullscreen .diag-zoom-btn { display: inline-block; border-color: #e2e8f0; color: #475569; }
+    .diag-card:fullscreen { background: #fff; display: flex; flex-direction: column; }
     .diag-card:fullscreen .diag-card-title { background: #f1f5f9; color: #1e40af; border-bottom: 1px solid #e2e8f0; }
-    .diag-card:fullscreen .diag-fs-btn { color: #64748b; border-color: #e2e8f0; }
-    .diag-card:fullscreen .diag-zoom-btn { color: #475569; border-color: #e2e8f0; }
-    .diag-card:fullscreen .diag-body { flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; }
-    .diag-card:fullscreen .diag-body svg { height: auto; width: auto; transition: transform .2s; transform-origin: center center; }
+    .diag-card:fullscreen .diag-fs-btn, .diag-card:fullscreen .diag-erd-btn { color: #64748b; border-color: #e2e8f0; }
+    .diag-card:fullscreen .diag-erd-btn.on { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .diag-card:fullscreen .diag-body { flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: flex-start; padding: 1.5rem; background: #fff; }
+    .diag-card:fullscreen .diag-body svg { max-width: none; height: auto; }
 
     /* Screens */
     .scr-layout { display: flex; flex: 1; gap: .9rem; overflow: hidden; min-height: 0; }
@@ -207,10 +202,6 @@
     <div class="panel" id="panel-diagrams">
       <div class="upload-landing" id="diagrams-upload" style="display:none;">
         <div style="color:var(--text3);font-size:.9rem;">אין תרשימים — טען קובץ -diagrams.html</div>
-      </div>
-      <div id="diagrams-toolbar" class="diag-toolbar" style="display:none;">
-        <span class="diag-toolbar-label">ERD:</span>
-        <button class="diag-toggle-btn on" id="erd-fields-btn" onclick="toggleErdFields()">הצג שדות</button>
       </div>
       <div id="diagrams-inline" style="display:none;" class="diag-grid"></div>
       <iframe id="diagrams-iframe" class="diag-iframe" style="display:none;" sandbox="allow-scripts allow-same-origin"></iframe>
@@ -304,13 +295,22 @@
       return code;
     }
 
-    // ── Fullscreen zoom ──────────────────────────────────────────────────────
+    // ── Diagram zoom (resize SVG — no transform clipping) ───────────────────
     function adjustZoom(card, delta) {
-      const current = parseFloat(card.dataset.zoom || '1');
-      const next = Math.max(0.25, Math.min(5, current + delta));
-      card.dataset.zoom = String(next);
       const svg = card.querySelector('.diag-body svg');
-      if (svg) svg.style.transform = `scale(${next})`;
+      if (!svg) return;
+      // Capture natural size once
+      if (!card.dataset.origW) {
+        svg.style.maxWidth = 'none';
+        const r = svg.getBoundingClientRect();
+        card.dataset.origW = String(r.width  || parseInt(svg.getAttribute('width'))  || 800);
+        card.dataset.origH = String(r.height || parseInt(svg.getAttribute('height')) || 600);
+      }
+      const current = parseFloat(card.dataset.zoom || '1');
+      const next = Math.max(0.3, Math.min(6, current + delta));
+      card.dataset.zoom = String(next);
+      svg.style.width  = (parseFloat(card.dataset.origW) * next) + 'px';
+      svg.style.height = (parseFloat(card.dataset.origH) * next) + 'px';
     }
 
     // ── Mermaid renderer (programmatic) ─────────────────────────────────────
@@ -336,12 +336,15 @@
 
       const renderer = new marked.Renderer();
       let mermaidIdx = 0;
-      renderer.code = (code, lang) => {
+      renderer.code = function(tokenOrCode, langArg) {
+        // marked v5+ passes a token object; older versions pass (string, lang)
+        const code = tokenOrCode && typeof tokenOrCode === 'object' ? tokenOrCode.text : tokenOrCode;
+        const lang = tokenOrCode && typeof tokenOrCode === 'object' ? tokenOrCode.lang : langArg;
         if (lang === 'mermaid') {
           const id = 'mm-inline-' + (mermaidIdx++);
           return `<div class="mermaid-wrap" id="${id}-wrap"><div id="${id}" style="display:none">${esc(code)}</div><div id="${id}-svg"></div></div>`;
         }
-        return `<pre><code>${esc(code)}</code></pre>`;
+        return `<pre><code>${esc(typeof code === 'string' ? code : JSON.stringify(code))}</code></pre>`;
       };
       marked.use({ renderer });
 
@@ -446,35 +449,8 @@
     }
 
     // ── Tab 3: Diagrams ──────────────────────────────────────────────────────
-    let _diagrams = [];
-    let _erdSimplified = false;
-
     function stripErdFields(code) {
-      // Remove field-definition blocks from erDiagram, keep entity names + relationships
       return code.replace(/\s*\{[^}]*\}/g, '');
-    }
-
-    function toggleErdFields() {
-      _erdSimplified = !_erdSimplified;
-      const btn = document.getElementById('erd-fields-btn');
-      btn.textContent = _erdSimplified ? 'הסתר שדות' : 'הצג שדות';
-      btn.classList.toggle('on', !_erdSimplified);
-      rerenderDiagrams();
-    }
-
-    async function rerenderDiagrams() {
-      const grid = document.getElementById('diagrams-inline');
-      const cards = grid.querySelectorAll('.diag-card');
-      for (const [i, d] of _diagrams.entries()) {
-        const card = cards[i];
-        if (!card) continue;
-        const bodyEl = card.querySelector('.diag-body');
-        if (!bodyEl) continue;
-        const isErd = d.code.trim().startsWith('erDiagram');
-        const code = (isErd && _erdSimplified) ? stripErdFields(d.code) : d.code;
-        bodyEl.innerHTML = '';
-        await renderMermaidEl(code, bodyEl, 'gr' + Date.now() + i);
-      }
     }
 
     async function renderDiagramsInline(diagrams) {
@@ -482,58 +458,78 @@
         document.getElementById('diagrams-upload').style.display = 'flex';
         return;
       }
-      _diagrams = diagrams;
-      const hasErd = diagrams.some(d => d.code.trim().startsWith('erDiagram'));
       document.getElementById('cnt-diagrams').textContent = diagrams.length;
-      document.getElementById('diagrams-toolbar').style.display = hasErd ? 'flex' : 'none';
-
       const grid = document.getElementById('diagrams-inline');
       grid.style.display = 'grid';
       grid.innerHTML = '';
 
       for (const [i, d] of diagrams.entries()) {
+        const isErd = d.code.trim().startsWith('erDiagram');
         const card = document.createElement('div');
         card.className = 'diag-card';
+        card.dataset.erdSimplified = 'false';
+        card.dataset.rawCode = d.code;
 
         const titleRow = document.createElement('div');
         titleRow.className = 'diag-card-title';
         const titleSpan = document.createElement('span');
         titleSpan.textContent = d.title;
-        const zoomIn = document.createElement('button');
-        zoomIn.className = 'diag-zoom-btn';
-        zoomIn.textContent = '+';
-        zoomIn.title = 'הגדל';
-        zoomIn.onclick = () => adjustZoom(card, 0.25);
+        titleRow.appendChild(titleSpan);
 
+        // ERD toggle — per card, next to fullscreen
+        if (isErd) {
+          const erdBtn = document.createElement('button');
+          erdBtn.className = 'diag-erd-btn on';
+          erdBtn.textContent = 'הצג שדות';
+          erdBtn.onclick = async () => {
+            const simplified = card.dataset.erdSimplified === 'true';
+            card.dataset.erdSimplified = simplified ? 'false' : 'true';
+            erdBtn.textContent = simplified ? 'הצג שדות' : 'הסתר שדות';
+            erdBtn.classList.toggle('on', simplified);
+            const code = simplified ? card.dataset.rawCode : stripErdFields(card.dataset.rawCode);
+            card.dataset.origW = ''; // reset zoom origin
+            bodyEl.innerHTML = '';
+            await renderMermaidEl(code, bodyEl, 'er' + Date.now());
+          };
+          titleRow.appendChild(erdBtn);
+        }
+
+        // Fullscreen zoom buttons (shown only in fullscreen via CSS)
         const zoomOut = document.createElement('button');
         zoomOut.className = 'diag-zoom-btn';
         zoomOut.textContent = '−';
-        zoomOut.title = 'הקטן';
         zoomOut.onclick = () => adjustZoom(card, -0.25);
+        const zoomIn = document.createElement('button');
+        zoomIn.className = 'diag-zoom-btn';
+        zoomIn.textContent = '+';
+        zoomIn.onclick = () => adjustZoom(card, 0.25);
 
         const fsBtn = document.createElement('button');
         fsBtn.className = 'diag-fs-btn';
         fsBtn.textContent = '⛶ מסך מלא';
         fsBtn.onclick = () => {
-          card.dataset.zoom = '1';
+          card.dataset.zoom = '';
+          card.dataset.origW = '';
           if (card.requestFullscreen) card.requestFullscreen();
           else if (card.webkitRequestFullscreen) card.webkitRequestFullscreen();
         };
-        titleRow.appendChild(titleSpan);
         titleRow.appendChild(zoomOut);
         titleRow.appendChild(zoomIn);
         titleRow.appendChild(fsBtn);
 
         const bodyEl = document.createElement('div');
         bodyEl.className = 'diag-body';
+        // Mouse wheel zoom
+        bodyEl.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          adjustZoom(card, e.deltaY < 0 ? 0.15 : -0.15);
+        }, { passive: false });
 
         card.appendChild(titleRow);
         card.appendChild(bodyEl);
         grid.appendChild(card);
 
-        const isErd = d.code.trim().startsWith('erDiagram');
-        const code = (isErd && _erdSimplified) ? stripErdFields(d.code) : d.code;
-        await renderMermaidEl(code, bodyEl, 'g' + i);
+        await renderMermaidEl(d.code, bodyEl, 'g' + i);
       }
     }
 

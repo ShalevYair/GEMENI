@@ -1067,6 +1067,17 @@ a.nav-item:hover {
 
 .nav-item-disabled { opacity: 0.55; cursor: default; }
 
+.sidebar-collapse-btn {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: .35rem .6rem; margin-top: .5rem;
+  background: none; border: none; color: var(--text3);
+  font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  cursor: pointer; font-family: inherit; border-radius: 5px; transition: color .15s, background .15s;
+}
+.sidebar-collapse-btn:hover { color: var(--text2); background: var(--surface2); }
+.sidebar-collapse-arrow { font-size: .65rem; transition: transform .2s; }
+.sidebar-collapse-btn.open .sidebar-collapse-arrow { transform: rotate(90deg); }
+
 .nav-icon {
   font-size: 1.05rem;
   flex-shrink: 0;

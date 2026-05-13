@@ -27,6 +27,8 @@
     .hd-title { font-size: 1.05rem; font-weight: 700; }
     .hd-meta { font-size: .76rem; color: var(--text3); margin-top: .1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hd-badge { font-size: .71rem; font-weight: 600; padding: .22rem .55rem; border-radius: 20px; background: var(--accent); color: #fff; flex-shrink: 0; }
+    .hd-home-btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 7px; border: 1px solid var(--border); color: var(--text2); font-size: 1rem; text-decoration: none; transition: all .15s; flex-shrink: 0; }
+    .hd-home-btn:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
     .hd-upload-btn { padding: .4rem .9rem; background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 7px; cursor: pointer; font-size: .82rem; font-family: Heebo, sans-serif; transition: all .15s; flex-shrink: 0; }
     .hd-upload-btn:hover { border-color: var(--accent); color: var(--text); }
 
@@ -58,7 +60,10 @@
 
     /* Doc layout: two independent scroll columns (row inside column panel-doc) */
     .doc-layout { display: flex; flex-direction: row; flex: 1; min-height: 0; overflow: hidden; width: 100%; }
-    .doc-toc { width: 210px; flex-shrink: 0; overflow-y: auto; padding: 1rem .7rem; border-left: 1px solid var(--border); }
+    .doc-toc { width: 231px; flex-shrink: 0; overflow-y: auto; padding: 1rem .7rem; border-left: 1px solid var(--border); scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .doc-toc::-webkit-scrollbar { width: 4px; }
+    .doc-toc::-webkit-scrollbar-track { background: transparent; }
+    .doc-toc::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
     .doc-toc-title { font-size: .7rem; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .5rem; padding: 0 .4rem; }
     .doc-toc-item { display: block; padding: .28rem .55rem; font-size: .78rem; color: var(--text2); border-radius: 5px; cursor: pointer; transition: all .12s; border: none; background: none; text-align: right; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: Heebo, sans-serif; line-height: 1.35; }
     .doc-toc-item:hover { background: var(--surface2); color: var(--text); }
@@ -85,9 +90,12 @@
     .md td { padding: .42rem .7rem; border: 1px solid var(--border); vertical-align: top; }
     .md tr:nth-child(even) td { background: rgba(255,255,255,.02); }
     .md hr { border: none; border-top: 1px solid var(--border); margin: 1.4rem 0; }
-    .md .mermaid-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 1.25rem; margin: .7rem 0; text-align: center; overflow-x: auto; }
+    .md .mermaid-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: .6rem 1rem 1rem; margin: .7rem 0; text-align: center; overflow: auto; }
     .md .mermaid-wrap svg { max-width: 100%; height: auto; }
     .md .mermaid-err { color: var(--text3); font-size: .8rem; padding: .5rem; }
+    .inline-diag-btns { display: flex; gap: .4rem; justify-content: flex-end; margin-bottom: .5rem; }
+    .mermaid-wrap:fullscreen { background: #fff; display: flex; flex-direction: column; overflow: auto; padding: 1rem; }
+    .mermaid-wrap:fullscreen svg { max-width: none; }
 
     /* Excel */
     .sheet-tabs { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .9rem; flex-shrink: 0; }
@@ -140,6 +148,7 @@
 <body>
 
   <header class="hd">
+    <a href="index.html" class="hd-home-btn" title="אגם הסוכנים">🏠</a>
     <div class="hd-logo">📋</div>
     <div class="hd-info">
       <div class="hd-title" id="hd-title">מציג האפיונים</div>
@@ -236,6 +245,7 @@
         attributeBackgroundColorEven: '#1a1d27',
         attributeBackgroundColorOdd: '#22263a',
       },
+      er: { useMaxWidth: false, minEntityWidth: 200, entityPadding: 20 },
     });
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -356,12 +366,69 @@
 
       buildTOC(el);
 
-      // Render inline mermaid blocks
+      // Render inline mermaid blocks and attach controls
       const inlineBlocks = el.querySelectorAll('[id^="mm-inline-"][id$="-svg"]');
       for (const svgEl of inlineBlocks) {
         const baseId = svgEl.id.replace('-svg', '');
         const codeEl = document.getElementById(baseId);
-        if (codeEl) await renderMermaidEl(codeEl.textContent, svgEl, baseId);
+        if (!codeEl) continue;
+        const rawCode = codeEl.textContent;
+        await renderMermaidEl(rawCode, svgEl, baseId);
+
+        const wrap = document.getElementById(baseId + '-wrap');
+        if (!wrap) continue;
+        const isErd = rawCode.trim().startsWith('erDiagram');
+
+        // Controls bar (ERD toggle + fullscreen)
+        const ctrlBar = document.createElement('div');
+        ctrlBar.className = 'inline-diag-btns';
+
+        if (isErd) {
+          wrap.dataset.erdSimplified = 'false';
+          wrap.dataset.rawCode = rawCode;
+          const erdBtn = document.createElement('button');
+          erdBtn.className = 'diag-erd-btn on';
+          erdBtn.textContent = 'הצג שדות';
+          erdBtn.onclick = async () => {
+            const simplified = wrap.dataset.erdSimplified === 'true';
+            wrap.dataset.erdSimplified = simplified ? 'false' : 'true';
+            erdBtn.textContent = simplified ? 'הצג שדות' : 'הסתר שדות';
+            erdBtn.classList.toggle('on', simplified);
+            const code = simplified ? wrap.dataset.rawCode : stripErdFields(wrap.dataset.rawCode);
+            wrap.dataset.origW = '';
+            svgEl.innerHTML = '';
+            await renderMermaidEl(code, svgEl, 'inerd' + Date.now());
+          };
+          ctrlBar.appendChild(erdBtn);
+        }
+
+        const fsBtn = document.createElement('button');
+        fsBtn.className = 'diag-fs-btn';
+        fsBtn.textContent = '⛶ מסך מלא';
+        fsBtn.onclick = () => {
+          if (wrap.requestFullscreen) wrap.requestFullscreen();
+          else if (wrap.webkitRequestFullscreen) wrap.webkitRequestFullscreen();
+        };
+        ctrlBar.appendChild(fsBtn);
+        wrap.insertBefore(ctrlBar, wrap.firstChild);
+
+        // Mouse wheel zoom on inline diagrams
+        wrap.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const svg = svgEl.querySelector('svg');
+          if (!svg) return;
+          if (!wrap.dataset.origW) {
+            svg.style.maxWidth = 'none';
+            const r = svg.getBoundingClientRect();
+            wrap.dataset.origW = String(r.width || parseInt(svg.getAttribute('width')) || 800);
+            wrap.dataset.origH = String(r.height || parseInt(svg.getAttribute('height')) || 600);
+          }
+          const current = parseFloat(wrap.dataset.zoom || '1');
+          const next = Math.max(0.3, Math.min(6, current + (e.deltaY < 0 ? 0.15 : -0.15)));
+          wrap.dataset.zoom = String(next);
+          svg.style.width  = (parseFloat(wrap.dataset.origW) * next) + 'px';
+          svg.style.height = (parseFloat(wrap.dataset.origH) * next) + 'px';
+        }, { passive: false });
       }
     }
 

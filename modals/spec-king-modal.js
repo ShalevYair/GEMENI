@@ -5,6 +5,9 @@ import {
   buildChunkPrompt,
   buildClarificationPrompt,
   getChunkLabel,
+  CHUNK_MAP_NORMAL,
+  CHUNK_MAP_HIGH,
+  CHUNK_MAP_BASIC,
 } from '../spec-king/index.js';
 
 const SK_STORAGE_KEY = 'spec-king-v2-checklist';
@@ -146,10 +149,31 @@ function injectSpecKingModal() {
           <!-- Mode -->
           <div>
             <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.4rem;">מה תרצה לקבל?</div>
-            <label style="display:flex;align-items:flex-start;gap:.45rem;margin-bottom:.4rem;cursor:pointer;">
+            <label style="display:flex;align-items:flex-start;gap:.45rem;margin-bottom:.35rem;cursor:pointer;">
               <input type="radio" name="sk2-mode" value="spec" checked style="margin-top:.15rem;" onchange="window.sk2ModeChanged()">
-              <span style="font-size:.84rem;color:#1e293b;"><strong>אפיון מלא</strong> <span style="color:#64748b;font-size:.78rem;">— 3 קריאות API</span></span>
+              <span style="font-size:.84rem;color:#1e293b;"><strong>אפיון מלא</strong></span>
             </label>
+
+            <!-- Depth selector — shown only when "אפיון מלא" is selected -->
+            <div id="sk2-depth-section" style="margin-bottom:.35rem;margin-right:1.3rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:.55rem .7rem;">
+              <div style="font-size:.78rem;font-weight:600;color:#374151;margin-bottom:.35rem;">רמת עומק:</div>
+              <label style="display:flex;align-items:center;gap:.35rem;margin-bottom:.25rem;cursor:pointer;font-size:.82rem;">
+                <input type="radio" name="sk2-depth" value="high" style="accent-color:#7c3aed;">
+                <span style="color:#1e293b;"><strong>גבוהה</strong></span>
+                <span style="color:#64748b;font-size:.76rem;">— 6 קריאות API (פרק לכל קריאה)</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:.35rem;margin-bottom:.25rem;cursor:pointer;font-size:.82rem;">
+                <input type="radio" name="sk2-depth" value="normal" checked style="accent-color:#7c3aed;">
+                <span style="color:#1e293b;"><strong>רגילה</strong></span>
+                <span style="color:#64748b;font-size:.76rem;">— 3 קריאות API</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:.35rem;cursor:pointer;font-size:.82rem;">
+                <input type="radio" name="sk2-depth" value="basic" style="accent-color:#7c3aed;">
+                <span style="color:#1e293b;"><strong>בסיסית בלבד</strong></span>
+                <span style="color:#64748b;font-size:.76rem;">— קריאה אחת לכל הפרקים</span>
+              </label>
+            </div>
+
             <label style="display:flex;align-items:flex-start;gap:.45rem;cursor:pointer;">
               <input type="radio" name="sk2-mode" value="questions" style="margin-top:.15rem;" onchange="window.sk2ModeChanged()">
               <span style="font-size:.84rem;color:#1e293b;"><strong>שאלות הבהרה</strong> <span style="color:#64748b;font-size:.78rem;">— קריאה אחת</span></span>
@@ -224,9 +248,11 @@ window.sk2FlavorChanged = function () {
 };
 
 window.sk2ModeChanged = function () {
-  const mode = document.querySelector('input[name="sk2-mode"]:checked')?.value;
-  const sec  = document.getElementById('sk2-checklist-section');
-  if (sec) sec.style.display = mode === 'spec' ? '' : 'none';
+  const mode  = document.querySelector('input[name="sk2-mode"]:checked')?.value;
+  const sec   = document.getElementById('sk2-checklist-section');
+  const depth = document.getElementById('sk2-depth-section');
+  if (sec)   sec.style.display   = mode === 'spec' ? '' : 'none';
+  if (depth) depth.style.display = mode === 'spec' ? '' : 'none';
 };
 
 window.sk2SelectAll = function () {
@@ -302,8 +328,14 @@ window.generateSpecKing = async function () {
   const mode     = document.querySelector('input[name="sk2-mode"]:checked')?.value || 'spec';
   const flavor   = document.querySelector('input[name="sk2-flavor"]:checked')?.value || 'general';
   const osVer    = document.querySelector('input[name="sk2-os-ver"]:checked')?.value || 'o11';
+  const depth    = document.querySelector('input[name="sk2-depth"]:checked')?.value || 'normal';
   const checkedIds = mode === 'spec' ? skGetCheckedIds() : [];
   skSaveChecked(checkedIds);
+
+  const chunkMap = depth === 'high' ? CHUNK_MAP_HIGH
+    : depth === 'basic' ? CHUNK_MAP_BASIC
+    : CHUNK_MAP_NORMAL;
+  const totalChunks = Object.keys(chunkMap).length;
 
   const filesToProcess = [...skFiles];
   const fileNames = filesToProcess.map(f => f.name).join(', ');
@@ -340,10 +372,10 @@ window.generateSpecKing = async function () {
       const prompt = buildClarificationPrompt(combinedText, flavor, osVer);
       results.push(await callWithFallback(prompt, skModelIdx));
     } else {
-      for (let chunkNum = 1; chunkNum <= 3; chunkNum++) {
-        const label = getChunkLabel(chunkNum);
-        deps.updateTyping(progressId, `מייצר חלק ${chunkNum} מתוך 3… (${label})`);
-        const prompt = buildChunkPrompt(combinedText, chunkNum, checkedIds, flavor, osVer);
+      for (let chunkNum = 1; chunkNum <= totalChunks; chunkNum++) {
+        const label = getChunkLabel(chunkNum, chunkMap);
+        deps.updateTyping(progressId, `מייצר חלק ${chunkNum} מתוך ${totalChunks}… (${label})`);
+        const prompt = buildChunkPrompt(combinedText, chunkNum, checkedIds, flavor, osVer, chunkMap);
         if (!prompt) continue;
         results.push(await callWithFallback(prompt, skModelIdx));
       }

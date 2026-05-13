@@ -106,22 +106,37 @@ export function buildClarificationPrompt(combinedText, flavor, osVersion) {
 }
 
 // ── מיפוי פרקים לחלקי עיבוד (chunks) ────────────────────────────────────────
-// מאפשר להריץ פרקים קרובים יחד כדי לחסוך קריאות API
-export const CHUNK_MAP = {
+
+// רגיל: 3 קריאות — זוגות פרקים
+export const CHUNK_MAP_NORMAL = {
   1: ['ch1', 'ch2'],
   2: ['ch3', 'ch4'],
   3: ['ch5', 'ch6'],
 };
 
-export function getChunkLabel(chunkNum) {
-  const chapterIds = CHUNK_MAP[chunkNum] || [];
+// גבוה: 6 קריאות — פרק לכל קריאה
+export const CHUNK_MAP_HIGH = {
+  1: ['ch1'], 2: ['ch2'], 3: ['ch3'],
+  4: ['ch4'], 5: ['ch5'], 6: ['ch6'],
+};
+
+// בסיסי: קריאה אחת — כל הפרקים יחד
+export const CHUNK_MAP_BASIC = {
+  1: ['ch1', 'ch2', 'ch3', 'ch4', 'ch5', 'ch6'],
+};
+
+// backward compat
+export const CHUNK_MAP = CHUNK_MAP_NORMAL;
+
+export function getChunkLabel(chunkNum, chunkMap = CHUNK_MAP_NORMAL) {
+  const chapterIds = chunkMap[chunkNum] || [];
   return chapterIds
     .map(id => CHAPTERS.find(ch => ch.id === id)?.label || '')
     .join(' + ');
 }
 
-export function buildChunkPrompt(combinedText, chunkNum, selectedSectionIds, flavor, osVersion) {
-  const chapterIds = CHUNK_MAP[chunkNum] || [];
+export function buildChunkPrompt(combinedText, chunkNum, selectedSectionIds, flavor, osVersion, chunkMap = CHUNK_MAP_NORMAL) {
+  const chapterIds = chunkMap[chunkNum] || [];
   const prompts = chapterIds
     .map(chId => buildChapterPrompt(combinedText, chId, selectedSectionIds, flavor, osVersion))
     .filter(Boolean);
@@ -129,7 +144,7 @@ export function buildChunkPrompt(combinedText, chunkNum, selectedSectionIds, fla
   if (prompts.length === 0) return null;
   if (prompts.length === 1) return prompts[0];
 
-  // שני פרקים באותו פרומפט
+  // מספר פרקים באותו פרומפט
   const systemPrompt = buildSystemPrompt(flavor, osVersion);
   const chapters = chapterIds
     .map(chId => {

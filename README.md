@@ -1,184 +1,124 @@
 # אגם הסוכנים — AI Agent Platform
 
-פלטפורמת סוכני AI לניהול מחזור חיי פיתוח תוכנה (SDLC) מלא — מאיסוף דרישות ועד אבטחה ופריסה.
+פלטפורמת סוכני AI לניהול מחזור חיי פיתוח תוכנה (SDLC) — ממוקדת כיום בכלי האפיון.
 
 האפליקציה פועלת **לחלוטין בדפדפן** — ללא שרת, ללא התקנה. כל עיבוד מתבצע client-side מול Gemini API ישירות.
 
-### מפת המחשבה — תמונת הכלל
-
-**מפת SDLC** מציגה את מחזור חיי הפיתוח כולו בתצוגת עץ אינטראקטיבית: תכנון, אפיון, עיצוב, פיתוח, בדיקות, פריסה ותחזוקה. בכל שלב ניתן ללחוץ ולקפוץ ישירות לסוכן הרלוונטי — כך שהמפה משמשת גם כמצפן וגם כנקודת כניסה לכל זרימת עבודה.
-
 ### למה דרך API ולא דרך ממשק רגיל?
 
-בממשק המשתמש הרגיל של Gemini, תשובות מוגבלות ל-**2,000–8,000 טוקנים** לתשובה. דרך ה-API ניתן לקבל עד **64,000 טוקנים** — פי 8 עד פי 32 יותר.
+בממשק הרגיל של Gemini, תשובות מוגבלות ל-**2,000–8,000 טוקנים**. דרך ה-API מקבלים עד **64,000 טוקנים** לתשובה.
 
-אגם הסוכנים מרחיק לכת יותר: כל גנרטור מבצע **4 קריאות API** רצופות, כל אחת עם עד 64K טוקן פלט — כך שהמסמך הסופי יכול להכיל **עד 256K טוקנים**. זאת אומרת תשובות גדולות פי **32 עד פי 128** ממה שמתקבל בממשק הרגיל.
-
-בנוסף, כל סוכן בנוי עם system prompt מדויק ביותר — מבנה קבוע, כללים מחייבים ופורמט פלט מוגדר, בדומה ל-Skill מוכן בקלוד. התוצאה: פלט מקצועי ועקבי בכל הרצה.
+אגם הסוכנים מרחיק לכת: כל גנרטור מבצע **4 קריאות API** רצופות, כל אחת עד 64K — כך שמסמך הפלט יכול להכיל עד **256K טוקנים**.
 
 ### Fallback אוטומטי בין מודלים
 
-כאשר מגיעים למגבלת ה-quota היומית של מודל אחד, המערכת עוברת אוטומטית למודל הבא — ממשיכה מאותה נקודה, ללא צורך להתחיל מחדש:
+כאשר מגיעים למגבלת quota היומית, המערכת עוברת אוטומטית:
 
 ```
-gemini-2.5-flash  →  gemini-3-flash-preview  →  gemini-2.5-flash-lite
+gemini-2.5-flash  →  gemini-2.5-flash-preview-04-17  →  gemini-2.5-flash-lite
 ```
 
 ---
 
-## הסוכנים הפעילים
+## 👑 מלך האפיונים — הכלי המרכזי
 
-### 💬 סוכני צ'אט (agent.html)
+**קובץ:** `agent.html?id=spec-king` | **מודל-ייצור:** `modals/spec-king-modal.js` | **פרומפטים:** `spec-king/`
 
-ממשק שיחה אחיד לכל 13 הסוכנים. כל סוכן טוען מתוך `agents-config.js` — system prompt ייעודי, הצעות התחלה, ותיאור תפקיד.
+מלך האפיונים הופך דרישות עסקיות גולמיות לאפיון פונקציונלי מלא (FSD) — ב-4 קריאות API רצופות:
 
-| מזהה | שם הסוכן | תפקיד |
-|------|----------|--------|
+| חלק | תוכן |
+|-----|------|
+| פרק 1 — רקע ועסק | מטרות, בעלי עניין, הנחות, מגבלות |
+| פרק 2 — דרישות | פונקציונליות, ביצועים, אמינות, אבטחה |
+| פרק 3 — מודל ותהליכים | ERD, חוקי עסק, הרשאות, זרימות |
+| פרק 4 — UX | פרסונות, מסעות, User Stories, מסכים + HTML wireframes |
+
+**פלט של כל הרצה:**
+- מסמך Markdown מלא (`.md`) — נפתח אוטומטית במציג האפיונים
+- קובץ Excel עם כל הטבלאות (`.xlsx`)
+- קובץ HTML עם כל תרשימי Mermaid (ERD, flowcharts)
+- קובץ HTML עם כל המסכים (wireframes)
+
+**תצורות מיוחדות:** Salesforce · OutSystems
+
+**פיצ'רים:**
+- שאלות הבהרה לפני האפיון (אופציונלי)
+- בחירת פרקים וסעיפים גמישה
+- Fallback אוטומטי בין מודלים תוך המשך מאותו chunk
+
+---
+
+## 📋 מציג האפיונים
+
+**קובץ:** `spec-viewer.html`
+
+מציג את פלטי מלך האפיונים בממשק נוח — נפתח אוטומטית כשסיום הייצור, או בטעינת קבצים ידנית.
+
+**4 לשוניות:**
+| לשונית | תוכן |
+|--------|------|
+| 📄 מסמך | Markdown עם TOC, תרשימי Mermaid inline, כפתורי טבלה |
+| 📊 טבלאות | גיליונות Excel עם חיפוש ומיון |
+| 🔀 תרשימים | ERD ו-flowcharts עם zoom, מסך מלא, הסתרת שדות |
+| 🖥️ מסכים | HTML wireframes בתוך iframe |
+
+---
+
+## 🗺 פיתוח תוכנה
+
+**קובץ:** `SDLCMindMap.html`
+
+תרשים עץ אינטראקטיבי של כל שלבי SDLC — לחיצה על כל צומת מציגה תיאור, גורמים מעורבים, וקישור לסוכן הרלוונטי.
+
+---
+
+## שאר הסוכנים (נגישים דרך agent.html)
+
+| מזהה | שם | תפקיד |
+|------|----|--------|
 | `requirements` | 📋 אוסף הדרישות | ראיונות מובנים → User Stories → SRS |
 | `project-manager` | 📊 מנהל הפרויקט | ספרינטים, סיכונים, דוחות סטטוס |
 | `project-coordinator` | 🗂️ רכזת הפרויקטים | RACI, תלויות, Deliverables |
-| `spec-king` | 👑 מלך האיפיונים | FSD מלא — מסכים, ERD, זרימות |
 | `software-architect` | 🏗️ ארכיטקט התוכנה | ארכיטקטורת מערכת, patterns, ADR |
 | `platform-architect` | ⚙️ ארכיטקט הפלטפורמות | תשתיות, אינטגרציות, CI/CD |
 | `tender-writer` | 📝 כותב המכרזים | RFP, SLA, KPIs לספקים |
 | `outsystems` | 🔷 OutSystems Expert | Domain Model, Service Actions |
-| `storyteller` | 📖 מספר הסיפורים | User Stories עם Acceptance Criteria, Epics, DoD |
+| `storyteller` | 📖 מספר הסיפורים | User Stories, Epics, DoD |
 | `design-queen` | 🎨 מלכת העיצובים | Design System, Wireframes, UX |
-| `dev-champ` | 💻 אלוף הפיתוחים | Code Review, פתרון בעיות, Best Practices |
-| `tester` | 🔍 הבודק | תרחישי בדיקה, UAT, דוחות ממצאים |
-| `security` | 🔒 המאבטח | OWASP, RBAC, Audit Log, Compliance |
-
-**פיצ'רים של ממשק הצ'אט:**
-- העלאת קבצים: `.docx`, `.pdf`, `.txt`, `.csv`, `.json`, `.md`, תמונות
-- עיבוד קבצי טקסט גדולים (>50K תווים) בחלקים עם progress מובנה
-- תשובות ארוכות (>3,000 תווים) מורדות אוטומטית כקובץ `.md`
-- מגבלת פלט: עד 65,000 טוקנים לתשובה
-- Fallback אוטומטי בין מודלים בעת מגבלת quota
-
-**גנרטורי מסמכים — 4 חלקים:**
-
-| סוכן | כפתור | פלט |
-|------|--------|-----|
-| 🏗️ ארכיטקט התוכנה | "הפק מסמך ארכיטקטורה" | Technical Architecture Document (`.md`) |
-| ⚙️ ארכיטקט הפלטפורמות | "הפק מסמך פלטפורמה" | Platform Architecture Document (`.md`) |
-| 🔷 OutSystems Expert | "הפק TSD מלא" | Technical Solution Design ל-O11 / ODC / שניהם (`.md`) |
-| 🎨 מלכת העיצובים | "הפק Mockup HTML" | פרוטוטיפ HTML אינטראקטיבי עם כל המסכים (`.html`) |
-
-כל גנרטור מקבל מסמך אפיון בכל פורמט ומפיק את הפלט ב-4 קריאות API מחוברות.
-
----
-
-### ⚡ Salesforce Killer — סוכן ארכיטקט
-**קובץ:** `sf-agent.html`
-
-סוכן ארכיטקט Salesforce שמקבל אפיון פונקציונלי (FSD), מצליב מול המצב הקיים ב-org, ומפיק TSD ארכיטקטוני מלא.
-
-**קלט:**
-| קובץ | תיאור |
-|------|--------|
-| `deployed.json` | מצב ה-org הנוכחי (אובייקטים, שדות, אוטומציות, הרשאות, אינטגרציות) |
-| `in-flight.json` | אפיונים שאושרו אך טרם פרוסים — מונע כפילויות (אופציונלי) |
-| FSD | מסמך אפיון פונקציונלי (`.docx` או `.pdf`) |
-
-**פלט — TSD ב-8 קבצים:**
-| קובץ | תוכן |
-|------|-------|
-| `00_executive_summary` | הקשר עסקי, גישה, החלטות מפתח, 3 סיכונים עיקריים |
-| `01_objects` | לכל אובייקט: REUSE / EXTEND / CREATE / CONFLICT |
-| `02_fields` | שמות API בעברית, סוג, נוסחה, FLS, RTL |
-| `03_automations` | Flows, Apex, Validation Rules, Approval Processes |
-| `04_permissions` | Permission Sets, sharing rules, מטריצת FLS |
-| `05_layouts` | Page Layouts, Lightning Pages, LWC, RTL |
-| `06_integrations` | Named Credentials, callout patterns, טיפול בשגיאות |
-| `07_impact_analysis` | קונפליקטים, ADRs, שאלות פתוחות, סיכוני ארכיטקטורה |
-
-פלט נוסף: `in-flight-updated.json` — מעודכן עם הרכיבים החדשים, מוכן להרצה הבאה.
-
-**אופי הסוכן — stateful:**
-- מסווג כל דרישה: ✅ REUSE · 🔧 EXTEND · 🆕 CREATE · ⚠ CONFLICT
-- מזהה קונפליקטים לפני העיצוב
-- מתעד כל החלטה כ-ADR
-- כלל עדיפות: אם אותו `api_name` מופיע ב-deployed וב-in-flight — in-flight גובר
-- Fallback אוטומטי בין מודלים בעת מגבלת quota — ממשיך מאותו chunk, לא מתחיל מחדש
-
-**קבצים:** `app.js`, `prompt.js`, `claude-prompt.js`
-
----
-
-### 🗺 מפת SDLC אינטראקטיבית
-**קובץ:** `SDLCMindMap.html`
-
-תרשים עץ אינטראקטיבי של כל שלבי SDLC — תכנון, אפיון, עיצוב, פיתוח, בדיקות, פריסה ותחזוקה.
-לחיצה על כל צומת מציגה: תיאור השלב, גורמים מעורבים, וקישור לסוכן הרלוונטי.
-
-**פיצ'רים:**
-- סינון לפי גורם מעורב
-- מצב בהיר/כהה
-- שינוי גודל טקסט
-- צ'אט מובנה עם Gemini לשאלות על המפה
-- כל הקישורים לסוכנים מפנים לדפים המקומיים (agent.html)
-
-**קבצים:** `DSLCapp.js`, `DSLCchat.js`, `DSLCstyles.css`, `SDLCMindMap.csv`
-
----
-
-### ⚙ מסך ניהול
-**קובץ:** `admin.html` / `admin.js`
-
-מסך מרוכז לצפייה בכל האפיונים שאושרו לאורך הסשנים — אובייקטים, שדות ואוטומציות. מאפשר ייצוא `in-flight.json` ממוזג.
-
-אחסון: **localStorage בדפדפן המשתמש בלבד**.
-
----
-
-## ניווט וממשק
-
-**`nav.js`** — מזריק לכל הדפים:
-- סרגל צד עם רשימת כל הסוכנים וקישורים
-- כותרת עליונה עם שם הסוכן הפעיל, כפתורי +/− גודל טקסט, ומצב בהיר/כהה
-
-**עיצוב אחיד בכל הדפים:**
-- Dark mode כברירת מחדל — `body.light-mode` מפעיל מצב בהיר, ניתן להחלפה בכפתור ☾/☀
-- גודל טקסט מותאם אישית מסונכרן דרך localStorage
-- פלטת צבעים: `#08080f` רקע, `#5b6cf5` electric indigo, כרטיסי סוכנים עם glow על hover
+| `dev-champ` | 💻 אלוף הפיתוחים | Code Review, פתרון בעיות |
+| `tester` | 🔍 הבודק | תרחישי בדיקה, UAT |
+| `security` | 🔒 המאבטח | OWASP, RBAC, Audit Log |
+| `salesforce` | ⚡ Salesforce Killer | FSD → TSD ארכיטקטוני מלא (sf-agent.html) |
 
 ---
 
 ## קבצים ותיקיות
 
 ```
-├── index.html              דף בית — פורטל הסוכנים
-├── agent.html              ממשק צ'אט אחיד לכל 13 הסוכנים
+├── index.html              דף בית — כניסה לכלים
+├── agent.html              ממשק צ'אט אחיד לכל הסוכנים
+├── spec-viewer.html        מציג האפיונים
 ├── sf-agent.html           Salesforce Killer
-├── SDLCMindMap.html        מפת SDLC אינטראקטיבית
-├── admin.html              מסך ניהול
+├── SDLCMindMap.html        מפת פיתוח תוכנה אינטראקטיבית
 │
 ├── nav.js                  סרגל צד + כותרת עליונה משותפים
 ├── styles.css              עיצוב גלובלי
-│
 ├── agent-chat.js           לוגיקת צ'אט (chunking, download, fallback, גנרטורים)
-├── agents-config.js        הגדרות כל 13 הסוכנים (system prompt, suggestions)
+├── agents-config.js        הגדרות כל הסוכנים (system prompt, suggestions)
 │
-├── architect-prompt.js          פרומפט גנרטור ארכיטקטורת תוכנה (4 chunks)
-├── platform-architect-prompt.js פרומפט גנרטור ארכיטקטורת פלטפורמות (4 chunks)
-├── outsystems-prompt.js         פרומפט גנרטור TSD ל-OutSystems — O11/ODC/Both (4 chunks)
-├── design-queen-prompt.js       פרומפט גנרטור פרוטוטיפ HTML (4 chunks)
+├── spec-king/              פרומפטים וסעיפים של מלך האפיונים
+│   ├── index.js            מאסף כל הפרקים
+│   ├── ch1-background.js   פרק 1 — רקע ועסק
+│   ├── ch2-requirements.js פרק 2 — דרישות
+│   ├── ch3-model.js        פרק 3 — מודל ותהליכים (ERD, שדות, זרימות)
+│   ├── ch4-ux.js           פרק 4 — UX ומסכים
+│   └── ...
+├── modals/
+│   └── spec-king-modal.js  ממשק מלך האפיונים (בחירת פרקים, הפקה, שליחה למציג)
 │
-├── app.js                  לוגיקת SF Killer (קריאות Gemini, uploads, היסטוריה)
-├── prompt.js               פרומפט סוכן הארכיטקט (3 chunks)
-├── claude-prompt.js        פרומפט ל-Claude Desktop להפקת deployed.json
-├── admin.js                לוגיקת מסך הניהול
-│
-├── DSLCapp.js              לוגיקת מפת ה-SDLC (ECharts, CSV, פילטרים)
-├── DSLCchat.js             צ'אט Gemini למפת ה-SDLC
-├── DSLCstyles.css          עיצוב מפת ה-SDLC
-├── SDLCMindMap.csv         נתוני SDLC — שלבים, תת-שלבים, גורמים, סוכנים
-│
-├── schema/
-│   └── state-schema.json   JSON Schema לקבצי deployed/in-flight
-├── prompts/
-│   └── extract-deployed-state.md   פרומפט ל-Claude Desktop
-└── tsd-to-salesforce/      אפליקציית Next.js — המרת TSD למטאדאטה SF (שלב הבא)
+├── app.js / prompt.js      לוגיקה ופרומפטים של SF Killer
+├── DSLCapp.js / DSLCchat.js לוגיקת מפת SDLC
+└── schema/                 JSON Schema לקבצי deployed/in-flight
 ```
 
 ---
@@ -187,14 +127,12 @@ gemini-2.5-flash  →  gemini-3-flash-preview  →  gemini-2.5-flash-lite
 
 | ספרייה | שימוש |
 |--------|--------|
-| [Gemini 2.5 Flash](https://aistudio.google.com) | מודל ראשי — כל הסוכנים |
-| [Gemini 3 Flash Preview](https://ai.google.dev) | מודל fallback ראשון |
-| [Gemini 2.5 Flash Lite](https://ai.google.dev) | מודל fallback שני |
-| [ECharts](https://echarts.apache.org) | תרשים העץ האינטראקטיבי של SDLC |
-| [PapaParse](https://www.papaparse.com) | פרסינג ה-CSV של מפת ה-SDLC |
-| [mammoth.js](https://github.com/mwilliamson/mammoth.js) | חילוץ טקסט מ-.docx |
-| [pdf.js](https://mozilla.github.io/pdf.js) | חילוץ טקסט מ-PDF |
-| [Heebo](https://fonts.google.com/specimen/Heebo) | פונט עברי |
+| Gemini 2.5 Flash (API) | מודל ראשי לכל הסוכנים |
+| marked.js | המרת Markdown לHTML |
+| mermaid.js v10 | תרשימי ERD ו-flowchart |
+| xlsx.js (SheetJS) | ייצוא/ייבוא Excel |
+| ECharts | תרשים עץ SDLC |
+| Heebo (Google Fonts) | פונט עברי |
 
 ללא npm, ללא build step — הכל דרך CDN.
 
@@ -204,27 +142,3 @@ gemini-2.5-flash  →  gemini-3-flash-preview  →  gemini-2.5-flash-lite
 
 כל הסוכנים עובדים עם **Gemini API key** (חינמי ב-[aistudio.google.com/api-keys](https://aistudio.google.com/api-keys)).
 המפתח נשמר ב-localStorage — מתמיד בין סשנים ומשותף לכל הסוכנים.
-
-**Fallback אוטומטי בין מודלים:**
-כאשר מגיעים למגבלת quota היומית, המערכת עוברת אוטומטית:
-`gemini-2.5-flash` → `gemini-3-flash-preview` → `gemini-2.5-flash-lite`
-
-ב-SF agent: המעבר מתרחש תוך המשך מאותו chunk — ללא צורך בהתחלה מחדש.
-
----
-
-## אבטחה ופרטיות
-
-- כל העיבוד client-side
-- הבקשה היחידה החוצה: ישירות ל-Gemini API
-- אין שרת ביניים
-- מפתח API נשמר ב-localStorage בלבד (לא נשלח לשום מקום אחר)
-
----
-
-## Roadmap
-
-- [ ] מעבר אחסון ניהול מ-localStorage ל-git ארגוני
-- [ ] OAuth אמיתי למסך הניהול
-- [ ] Snapshot Builder — רענון `deployed.json` אוטומטי מ-Salesforce
-- [ ] streaming responses — הצגת תשובות בזמן אמת תוך כדי קבלה מה-API

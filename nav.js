@@ -39,28 +39,17 @@ function getActiveId() {
 
 function buildSidebar() {
   const activeId = getActiveId();
-  const toolItems = `
-    <a href="SDLCMindMap.html" class="nav-item ${activeId === 'mindmap' ? 'nav-item-active' : ''}" title="מפת SDLC">
-      <span class="nav-icon">🗺</span>
-      <span class="nav-name">מפת SDLC</span>
-    </a>`;
+  const page = location.pathname.split('/').pop() || 'index.html';
 
-  const agentItems = AGENTS.map(a => {
-    const href   = agentHref(a.id);
-    const active = a.id === activeId;
-    if (href) {
-      return `
-        <a href="${href}" class="nav-item ${active ? 'nav-item-active' : ''}" title="${a.name}">
-          <span class="nav-icon">${a.icon}</span>
-          <span class="nav-name">${a.name}</span>
-        </a>`;
-    }
-    return `
-      <span class="nav-item nav-item-disabled" title="${a.name} — בקרוב">
-        <span class="nav-icon">${a.icon}</span>
-        <span class="nav-name">${a.name}</span>
-      </span>`;
-  }).join('');
+  const toolItems = [
+    { href: 'agent.html?id=spec-king', icon: '👑', name: 'מלך האפיונים', active: activeId === 'spec-king' },
+    { href: 'spec-viewer.html',        icon: '📋', name: 'מציג האפיונים', active: page === 'spec-viewer.html' },
+    { href: 'SDLCMindMap.html',        icon: '🗺', name: 'פיתוח תוכנה',  active: activeId === 'mindmap' },
+  ].map(t => `
+    <a href="${t.href}" class="nav-item ${t.active ? 'nav-item-active' : ''}" title="${t.name}">
+      <span class="nav-icon">${t.icon}</span>
+      <span class="nav-name">${t.name}</span>
+    </a>`).join('');
 
   return `
     <div class="sidebar-inner">
@@ -73,10 +62,6 @@ function buildSidebar() {
       <div class="sidebar-section-label">כלים</div>
       <nav class="sidebar-nav sidebar-nav-tools" aria-label="ניווט כלים">
         ${toolItems}
-      </nav>
-      <div class="sidebar-section-label">סוכנים</div>
-      <nav class="sidebar-nav" aria-label="ניווט סוכנים">
-        ${agentItems}
       </nav>
     </div>`;
 }

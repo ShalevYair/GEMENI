@@ -134,6 +134,18 @@
     .diag-card:fullscreen .diag-body { flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: flex-start; padding: 1.5rem; background: #fff; }
     .diag-card:fullscreen .diag-body svg { max-width: none; height: auto; }
 
+    /* Inline table button in markdown */
+    .inline-tbl-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .75rem; background: var(--surface2); border: 1px solid var(--border); color: var(--accent); border-radius: 6px; font-family: Heebo, sans-serif; font-size: .82rem; font-weight: 600; cursor: pointer; transition: all .15s; margin: .3rem 0; }
+    .inline-tbl-btn:hover { border-color: var(--accent); background: rgba(124,58,237,.12); }
+
+    /* Table modal */
+    .tbl-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 9000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .tbl-modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); max-width: 92vw; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.5); min-width: 340px; }
+    .tbl-modal-hd { display: flex; align-items: center; justify-content: space-between; padding: .75rem 1.1rem; border-bottom: 1px solid var(--border); font-weight: 700; font-size: .95rem; flex-shrink: 0; }
+    .tbl-modal-close { background: none; border: none; color: var(--text3); font-size: 1.2rem; cursor: pointer; padding: .15rem .4rem; border-radius: 4px; line-height: 1; }
+    .tbl-modal-close:hover { color: var(--text); background: var(--surface2); }
+    .tbl-modal-body { overflow: auto; padding: .9rem 1.1rem; flex: 1; }
+
     /* Screens */
     .scr-layout { display: flex; flex: 1; gap: .9rem; overflow: hidden; min-height: 0; }
     .scr-nav { width: 195px; flex-shrink: 0; display: flex; flex-direction: column; gap: .3rem; overflow-y: auto; }
@@ -232,6 +244,17 @@
 
   </main>
 
+  <!-- Inline table modal -->
+  <div id="tbl-modal-overlay" class="tbl-modal-overlay" style="display:none;" onclick="if(event.target===this)closeTblModal()">
+    <div class="tbl-modal">
+      <div class="tbl-modal-hd">
+        <span id="tbl-modal-title">טבלה</span>
+        <button class="tbl-modal-close" onclick="closeTblModal()">✕</button>
+      </div>
+      <div class="tbl-modal-body" id="tbl-modal-body"></div>
+    </div>
+  </div>
+
   <script>
     // ── Mermaid init ─────────────────────────────────────────────────────────
     mermaid.initialize({
@@ -325,20 +348,62 @@
 
     // ── Mermaid renderer (programmatic) ─────────────────────────────────────
     async function renderMermaidEl(code, wrapEl, uid) {
+      const isErd = code.trim().startsWith('erDiagram');
       try {
         const { svg } = await mermaid.render('mr-' + uid, sanitizeMermaid(code));
         wrapEl.innerHTML = svg;
         const s = wrapEl.querySelector('svg');
-        if (s) { s.style.maxWidth = '100%'; s.style.height = 'auto'; }
+        if (s) {
+          if (isErd) {
+            // Don't constrain ERD width — entity columns overlap when compressed
+            s.style.maxWidth = 'none';
+          } else {
+            s.style.maxWidth = '100%';
+            s.style.height = 'auto';
+          }
+        }
       } catch(e) {
         wrapEl.innerHTML = `<div class="diag-err">שגיאה בתרשים: ${esc(e.message)}</div>`;
       }
     }
 
+    // ── Inline table modal ───────────────────────────────────────────────────
+    const _inlineTables = {};
+
+    window.showInlineTable = function(key) {
+      const tbl = _inlineTables[key];
+      if (!tbl) return;
+      document.getElementById('tbl-modal-title').textContent = tbl.name;
+      const body = document.getElementById('tbl-modal-body');
+      if (!Array.isArray(tbl.data) || tbl.data.length === 0) {
+        body.innerHTML = '<p style="color:var(--text3);">אין נתונים</p>';
+      } else {
+        const keys = Object.keys(tbl.data[0]);
+        const rows = tbl.data.map(row =>
+          '<tr>' + keys.map(k => `<td>${esc(String(row[k] ?? ''))}</td>`).join('') + '</tr>'
+        ).join('');
+        body.innerHTML = `<table class="xtbl"><thead><tr>${keys.map(k=>`<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table><div class="row-cnt">${tbl.data.length} שורות</div>`;
+      }
+      document.getElementById('tbl-modal-overlay').style.display = 'flex';
+    };
+
+    window.closeTblModal = function() {
+      document.getElementById('tbl-modal-overlay').style.display = 'none';
+    };
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTblModal(); });
+
     // ── Tab 1: Markdown + TOC sidebar ───────────────────────────────────────
     async function renderMarkdown(mdText) {
-      const cleaned = mdText
-        .replace(/<excel-table[\s\S]*?<\/excel-table>/g, '')
+      // Extract excel-table tags → replace with inline buttons
+      let cleaned = mdText;
+      cleaned = cleaned.replace(/<excel-table name="([^"]*)">([\s\S]*?)<\/excel-table>/g, (m, name, json) => {
+        const key = 'itbl-' + Math.random().toString(36).slice(2);
+        try { _inlineTables[key] = { name, data: JSON.parse(json.trim()) }; }
+        catch(e) { _inlineTables[key] = { name, data: [] }; }
+        return `<button class="inline-tbl-btn" onclick="showInlineTable('${key}')">📊 טבלה: ${name}</button>`;
+      });
+      cleaned = cleaned
         .replace(/<html-screen[\s\S]*?<\/html-screen>/g, '')
         // Strip AI-generated prefix codes like **מט-001**: or הנח-003:
         .replace(/\*\*[א-ת]+-\d+\*\*:\s*/g, '')

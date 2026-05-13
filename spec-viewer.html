@@ -41,8 +41,8 @@
     .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
     .panel { display: none; flex: 1; overflow-y: auto; padding: 1.4rem; }
     .panel.active { display: flex; flex-direction: column; }
-    /* Doc panel overrides: two independent scroll columns */
-    #panel-doc { overflow: hidden; padding: 0; flex-direction: row; }
+    /* Doc panel: no single scroll — two independent columns handle scrolling */
+    #panel-doc { overflow: hidden !important; padding: 0 !important; }
 
     /* Upload landing */
     .upload-landing { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.25rem; text-align: center; }
@@ -55,16 +55,16 @@
     .upload-hint span { color: var(--accent); }
     #file-input { display: none; }
 
-    /* Doc layout: two independent scroll columns */
-    .doc-layout { display: flex; flex: 1; overflow: hidden; width: 100%; }
-    .doc-toc { width: 210px; flex-shrink: 0; overflow-y: auto; height: 100%; padding: 1rem .7rem; border-left: 1px solid var(--border); }
+    /* Doc layout: two independent scroll columns (row inside column panel-doc) */
+    .doc-layout { display: flex; flex-direction: row; flex: 1; min-height: 0; overflow: hidden; width: 100%; }
+    .doc-toc { width: 210px; flex-shrink: 0; overflow-y: auto; padding: 1rem .7rem; border-left: 1px solid var(--border); }
     .doc-toc-title { font-size: .7rem; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .5rem; padding: 0 .4rem; }
     .doc-toc-item { display: block; padding: .28rem .55rem; font-size: .78rem; color: var(--text2); border-radius: 5px; cursor: pointer; transition: all .12s; border: none; background: none; text-align: right; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: Heebo, sans-serif; line-height: 1.35; }
     .doc-toc-item:hover { background: var(--surface2); color: var(--text); }
     .doc-toc-item.lv2 { font-weight: 600; }
     .doc-toc-item.lv3 { padding-right: 1.1rem; font-size: .74rem; color: var(--text3); }
     .doc-toc-item.active { color: var(--accent) !important; background: rgba(124,58,237,.12); }
-    .doc-main { flex: 1; min-width: 0; overflow-y: auto; height: 100%; padding: 1.4rem; }
+    .doc-main { flex: 1; min-width: 0; overflow-y: auto; padding: 1.4rem; }
 
     /* Markdown */
     .md { max-width: 860px; width: 100%; margin: 0 auto; line-height: 1.75; font-size: .94rem; }
@@ -122,11 +122,14 @@
     .diag-iframe { width: 100%; flex: 1; border: none; border-radius: var(--r); min-height: calc(100vh - 170px); }
 
     /* Fullscreen state for diagram card */
-    .diag-card:fullscreen { background: #fff; display: flex; flex-direction: column; overflow: auto; }
+    .diag-zoom-btn { background: none; border: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: .9rem; padding: .15rem .5rem; border-radius: 4px; transition: all .12s; font-weight: 600; display: none; }
+    .diag-card:fullscreen .diag-zoom-btn { display: inline-block; }
+    .diag-card:fullscreen { background: #fff; display: flex; flex-direction: column; overflow: hidden; }
     .diag-card:fullscreen .diag-card-title { background: #f1f5f9; color: #1e40af; border-bottom: 1px solid #e2e8f0; }
     .diag-card:fullscreen .diag-fs-btn { color: #64748b; border-color: #e2e8f0; }
+    .diag-card:fullscreen .diag-zoom-btn { color: #475569; border-color: #e2e8f0; }
     .diag-card:fullscreen .diag-body { flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; }
-    .diag-card:fullscreen .diag-body svg { max-width: 95vw; max-height: 90vh; height: auto; width: auto; }
+    .diag-card:fullscreen .diag-body svg { height: auto; width: auto; transition: transform .2s; transform-origin: center center; }
 
     /* Screens */
     .scr-layout { display: flex; flex: 1; gap: .9rem; overflow: hidden; min-height: 0; }
@@ -269,13 +272,27 @@
       // ERD: backslash-escaped quotes → apostrophe
       code = code.replace(/\\"/g, "'");
 
-      // Rectangle labels [...] — single-line only (exclude \n) to skip ERD-adjacent text
+      // ERD: fix invalid cardinality markers (e.g. --oo-- not valid, use --o{ )
+      if (code.trimStart().startsWith('erDiagram')) {
+        code = code.replace(/\|\|--oo--\|\|/g, '}o--o{');
+        code = code.replace(/--oo--/g, '--o{');
+      }
+
+      // Strip " inside single-line node labels BEFORE quote-wrapping (Hebrew ת"ז causes 'STR' errors)
+      code = code.replace(/\[([^\[\]\n]+)\]/g, (m, inner) =>
+        inner.includes('"') ? '[' + inner.replace(/"/g, "'") + ']' : m
+      );
+      code = code.replace(/\{([^\{\}\n]+)\}/g, (m, inner) =>
+        inner.includes('"') ? '{' + inner.replace(/"/g, "'") + '}' : m
+      );
+
+      // Rectangle labels [...] with ( ) or ' → wrap in double quotes (single-line only)
       code = code.replace(/\[([^\[\]\n]*[\(\)'][^\[\]\n]*)\]/g, (m, inner) => {
         if (inner.startsWith('"') && inner.endsWith('"')) return m;
         return '["' + inner.replace(/"/g, '\\"') + '"]';
       });
 
-      // Diamond labels {...} — single-line ONLY (exclude \n) so multi-line ERD blocks are never touched
+      // Diamond labels {...} with ( ) or ' → wrap in double quotes (single-line only, NOT ERD blocks)
       code = code.replace(/\{([^\{\}\n]*[\(\)'][^\{\}\n]*)\}/g, (m, inner) => {
         if (inner.startsWith('"') && inner.endsWith('"')) return m;
         return '{"' + inner.replace(/"/g, '\\"') + '"}';
@@ -285,6 +302,15 @@
       code = code.replace(/\|[^|\n]+\|/g, m => m.replace(/[()]/g, ''));
 
       return code;
+    }
+
+    // ── Fullscreen zoom ──────────────────────────────────────────────────────
+    function adjustZoom(card, delta) {
+      const current = parseFloat(card.dataset.zoom || '1');
+      const next = Math.max(0.25, Math.min(5, current + delta));
+      card.dataset.zoom = String(next);
+      const svg = card.querySelector('.diag-body svg');
+      if (svg) svg.style.transform = `scale(${next})`;
     }
 
     // ── Mermaid renderer (programmatic) ─────────────────────────────────────
@@ -303,7 +329,10 @@
     async function renderMarkdown(mdText) {
       const cleaned = mdText
         .replace(/<excel-table[\s\S]*?<\/excel-table>/g, '')
-        .replace(/<html-screen[\s\S]*?<\/html-screen>/g, '');
+        .replace(/<html-screen[\s\S]*?<\/html-screen>/g, '')
+        // Strip AI-generated prefix codes like **מט-001**: or הנח-003:
+        .replace(/\*\*[א-ת]+-\d+\*\*:\s*/g, '')
+        .replace(/\b[א-ת]+-\d+:\s*/g, '');
 
       const renderer = new marked.Renderer();
       let mermaidIdx = 0;
@@ -470,14 +499,29 @@
         titleRow.className = 'diag-card-title';
         const titleSpan = document.createElement('span');
         titleSpan.textContent = d.title;
+        const zoomIn = document.createElement('button');
+        zoomIn.className = 'diag-zoom-btn';
+        zoomIn.textContent = '+';
+        zoomIn.title = 'הגדל';
+        zoomIn.onclick = () => adjustZoom(card, 0.25);
+
+        const zoomOut = document.createElement('button');
+        zoomOut.className = 'diag-zoom-btn';
+        zoomOut.textContent = '−';
+        zoomOut.title = 'הקטן';
+        zoomOut.onclick = () => adjustZoom(card, -0.25);
+
         const fsBtn = document.createElement('button');
         fsBtn.className = 'diag-fs-btn';
         fsBtn.textContent = '⛶ מסך מלא';
         fsBtn.onclick = () => {
+          card.dataset.zoom = '1';
           if (card.requestFullscreen) card.requestFullscreen();
           else if (card.webkitRequestFullscreen) card.webkitRequestFullscreen();
         };
         titleRow.appendChild(titleSpan);
+        titleRow.appendChild(zoomOut);
+        titleRow.appendChild(zoomIn);
         titleRow.appendChild(fsBtn);
 
         const bodyEl = document.createElement('div');

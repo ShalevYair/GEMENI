@@ -425,9 +425,10 @@ window.generateSpecKing = async function () {
   let mm;
   while ((mm = mmRx.exec(combined)) !== null) {
     const before     = combined.slice(0, mm.index);
-    const headMatch  = before.match(/#{1,4}\s+(.+)\s*$/);
+    const headMatches = [...before.matchAll(/^#{1,4}\s+\**(.+?)\**\s*$/gm)];
+    const lastHead   = headMatches.at(-1);
     mermaidDiagrams.push({
-      title: headMatch ? headMatch[1].trim() : `תרשים ${mermaidDiagrams.length + 1}`,
+      title: lastHead ? lastHead[1].trim() : `תרשים ${mermaidDiagrams.length + 1}`,
       code:  mm[1].trim(),
     });
   }

@@ -51,6 +51,26 @@ function buildSidebar() {
       <span class="nav-name">${t.name}</span>
     </a>`).join('');
 
+  const agentItems = AGENTS.map(a => {
+    const href   = agentHref(a.id);
+    const active = a.id === activeId;
+    if (href) {
+      return `
+        <a href="${href}" class="nav-item ${active ? 'nav-item-active' : ''}" title="${a.name}">
+          <span class="nav-icon">${a.icon}</span>
+          <span class="nav-name">${a.name}</span>
+        </a>`;
+    }
+    return `
+      <span class="nav-item nav-item-disabled" title="${a.name}">
+        <span class="nav-icon">${a.icon}</span>
+        <span class="nav-name">${a.name}</span>
+      </span>`;
+  }).join('');
+
+  // Open agents section if current page is one of the agents
+  const agentsOpen = activeId && activeId !== 'mindmap' && activeId !== 'spec-king';
+
   return `
     <div class="sidebar-inner">
       <a href="index.html" class="sidebar-brand">
@@ -62,6 +82,13 @@ function buildSidebar() {
       <div class="sidebar-section-label">כלים</div>
       <nav class="sidebar-nav sidebar-nav-tools" aria-label="ניווט כלים">
         ${toolItems}
+      </nav>
+      <button class="sidebar-collapse-btn ${agentsOpen ? 'open' : ''}" onclick="toggleSidebarAgents(this)" aria-expanded="${agentsOpen}">
+        <span>סוכנים</span>
+        <span class="sidebar-collapse-arrow">▸</span>
+      </button>
+      <nav class="sidebar-nav sidebar-agents-nav" aria-label="ניווט סוכנים" style="${agentsOpen ? '' : 'display:none'}">
+        ${agentItems}
       </nav>
     </div>`;
 }
@@ -104,6 +131,14 @@ window.changeSiteFontSize = function (step) {
   const next = Math.max(13, Math.min(21, cur + step));
   document.documentElement.style.fontSize = next + 'px';
   localStorage.setItem('sdlc-font-size', next);
+};
+
+window.toggleSidebarAgents = function(btn) {
+  const nav = btn.nextElementSibling;
+  const open = nav.style.display === 'none';
+  nav.style.display = open ? '' : 'none';
+  btn.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', String(open));
 };
 
 function injectSidebar() {

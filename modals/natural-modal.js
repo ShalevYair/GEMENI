@@ -240,6 +240,97 @@ ON ERROR (כולל BACKOUT), RESPONSE-CODE לכל ערך, כשל DB לכל סו�
 סיכונים תפעוליים (READ ללא LIMIT / לולאות / DB ללא RESPONSE-CODE / END TRANSACTION חסר),
 חוסר בהירות (נדרש בירור), הצעות שיפור ומודרניזציה.`;
 
+const SECTIONS_MIGRATION_APPENDIX = `
+
+### 10. מוכנות למיגרציה
+#### א. מיפוי Adabas → SQL
+<excel-table name="מיפוי Adabas לSQL">
+[{"DDM_שם": "", "שדה_Natural": "", "טיפוס_ומאפיינים": "", "טבלה_SQL_מוצעת": "", "עמודה_מוצעת": "", "הערות": ""}]
+</excel-table>
+
+#### ב. DPT / Hardcoded → קונפיגורציה
+<excel-table name="ערכים להוצאה לקונפיגורציה">
+[{"ערך": "", "מיקום": "", "משמעות_עסקית": "", "טיפול_מוצע": ""}]
+</excel-table>
+
+#### ג. CALLNATs → Microservices / APIs
+לכל CALLNAT: שם | האם ניתן להפוך ל-API REST | קושי | הערות
+
+#### ד. הערכת סיכוני מיגרציה
+- **עסקי:** מה עלול להשתנות בהתנהגות
+- **נתונים:** המרות, NULL handling, אורכי שדה
+- **תפעולי:** תלויות ב-job scheduler, trigger, JCL`;
+
+const SECTIONS_REWRITE_APPENDIX = `
+
+### 10. Rewrite Blueprint
+#### א. ממשקים (Interfaces)
+<excel-table name="ממשקי קלט-פלט לכתיבה מחדש">
+[{"שם_פונקציה": "", "פרמטרי_קלט": "", "פרמטרי_פלט": "", "שגיאות_אפשריות": "", "הערות_מימוש": ""}]
+</excel-table>
+
+#### ב. תרחישי בדיקה (Test Scenarios)
+| # | תיאור תרחיש | קלט לדוגמה | פלט צפוי | סוג בדיקה |
+|---|------------|------------|----------|-----------|
+
+#### ג. הצעת ארכיטקטורה מודרנית
+- **שפה/Framework מוצע** (ונימוק)
+- **מודל נתונים מוצע** (DB/ORM)
+- **אסינכרוניות / Event-driven** — היכן רלוונטי
+- **מה לשמור מהלוגיקה הקיימת** (כללים עסקיים שתוקפם נשמר)
+- **מה לזרוק** (חוב טכני שאין טעם להעתיק)`;
+
+const SECTIONS_CODE_CHANGE_1 = (changeDesc) => `
+## Output — Part A: ניתוח הקוד הקיים (לפני השינוי)
+
+### 1. מטאדטה וסיכום
+| שדה | ערך |
+|-----|-----|
+| שם האובייקט | |
+| סוג | |
+| מטרה כללית | |
+| ישויות עסקיות | |
+
+### 2. השינוי המבוקש
+**תיאור השינוי:** ${changeDesc || '(לא צוין — נסה להסיק מהקשר)'}
+
+### 3. ניתוח השפעה — משתנים ומודולים
+- **משתנים מושפעים:** כל DEFINE DATA / LOCAL / PARAMETER שקשור לשינוי
+- **לוגיקה מושפעת:** IF/DECIDE/PERFORM blocks שיצטרכו שינוי
+- **CALLNATs מושפעים:** תוכניות חיצוניות שיושפעו משינוי הפרמטרים
+- **DDMs/קבצים מושפעים:** גישות נתונים שיושפעו
+
+### 4. כללים עסקיים שמשפיעים על השינוי
+כל IF/DECIDE הקשור לתחום השינוי — "אם [תנאי] → [פעולה]"`;
+
+const SECTIONS_CODE_CHANGE_2 = `
+## Output — Part B: יישום השינוי וניהול סיכונים
+(המשך — אותו קובץ Natural)
+
+### 5. לפני/אחרי — פסאודו-קוד
+הצג את הלוגיקה הרלוונטית לפני השינוי ואחריו:
+\`\`\`python
+# BEFORE — קוד קיים (הלוגיקה הנוכחית)
+
+\`\`\`
+\`\`\`python
+# AFTER — קוד מוצע (עם השינוי)
+
+\`\`\`
+
+### 6. סיכון רגרסיה
+<excel-table name="ניתוח סיכון רגרסיה">
+[{"תחום_סיכון": "", "תרחיש_כשל": "", "רמת_סיכון": "גבוה/בינוני/נמוך", "בדיקה_מומלצת": ""}]
+</excel-table>
+
+### 7. צעדי יישום מומלצים
+רשימה ממוספרת: כל שינוי קוד נדרש, לפי סדר מומלץ לביצוע.
+
+### 8. בדיקות נדרשות
+- **יחידה:** מה לבדוק ביחידה
+- **אינטגרציה:** תוכניות שיש לבדוק יחד
+- **קצה:** edge cases ספציפיים לשינוי`;
+
 // ── Module state ──────────────────────────────────────────────────────────
 let natFile = null;
 
@@ -290,22 +381,27 @@ function injectNaturalModal() {
         <!-- Depth selector -->
         <div>
           <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.5rem;">רמת עומק הניתוח:</div>
-          <div style="display:flex;flex-direction:column;gap:.4rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.7rem .9rem;">
-            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem;">
-              <input type="radio" name="nat-depth" value="high" style="accent-color:#0891b2;">
-              <span style="color:#1e293b;"><strong>גבוהה</strong></span>
-              <span style="color:#64748b;font-size:.76rem;">— 3 קריאות API · פסאודו-קוד · draw.io XML · מסכים</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem;">
-              <input type="radio" name="nat-depth" value="normal" checked style="accent-color:#0891b2;">
-              <span style="color:#1e293b;"><strong>רגילה</strong></span>
-              <span style="color:#64748b;font-size:.76rem;">— 2 קריאות API · Mermaid · טבלאות Excel (ברירת מחדל)</span>
-            </label>
-            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.84rem;">
-              <input type="radio" name="nat-depth" value="basic" style="accent-color:#0891b2;">
-              <span style="color:#1e293b;"><strong>בסיסית</strong></span>
-              <span style="color:#64748b;font-size:.76rem;">— קריאה אחת · Mermaid · טבלאות Excel</span>
-            </label>
+          <div style="display:flex;flex-direction:column;gap:.3rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.65rem .9rem;">
+            ${[
+              { v:'lite',        checked:false, label:'Lite',               calls:'1 קריאה',  tip:'לקריאה מהירה לפני פגישה.\nמפיק: מטאדטה, תיאור עסקי, זרימה עליונה וכללים עסקיים.\nללא תרשימים, ללא טבלאות Excel.\nמתאים: "רק צריך להבין מה התוכנית עושה."' },
+              { v:'standard',    checked:true,  label:'Standard',           calls:'2 קריאות', tip:'תיעוד מלא לתחזוקה שוטפת.\nכולל: כל 9 הסעיפים + Mermaid flowchart + טבלאות Excel + פסאודו-קוד.\nברירת המחדל לרוב המקרים.' },
+              { v:'enterprise',  checked:false, label:'Enterprise',         calls:'3 קריאות', tip:'ניתוח עמוק מקסימלי.\nכולל: כל מה שב-Standard + draw.io XML + ניתוח מסכים (INPUT/MAP) + פירוט DPT.\nמתאים: תיעוד רגולטורי, ביקורת פנים, הכנה לשינויים מורכבים.' },
+              { v:'migration',   checked:false, label:'Migration Readiness',calls:'3 קריאות', tip:'להסבה למערכת מודרנית.\nכולל: Enterprise + ניתוח מסלול מיגרציה, מיפוי Adabas→SQL, מיפוי DPT לקבועים/קונפיגורציה, הערכת סיכונים.\nמתאים: פרויקטי מודרניזציה.' },
+              { v:'rewrite',     checked:false, label:'Rewrite Blueprint',  calls:'3 קריאות', tip:'למתכנת שיכתוב את הקוד מחדש בשפה מודרנית.\nכולל: Enterprise + מפרט ממשקים מלא, תרחישי בדיקה, הצעת ארכיטקטורה.\nמתאים: מעבר שפה מוחלט.' },
+              { v:'code-change', checked:false, label:'Code Change',        calls:'2 קריאות', tip:'לניתוח השפעת שינוי נקודתי.\nמגדיר את השינוי המבוקש ומנתח: אילו משתנים ומודולים מושפעים, לפני/אחרי פסאודו-קוד, סיכון רגרסיה.\nמתאים: בקשת שינוי ספציפית.' },
+            ].map(o => `
+            <label style="display:flex;align-items:center;gap:.45rem;cursor:pointer;font-size:.83rem;padding:.15rem 0;">
+              <input type="radio" name="nat-depth" value="${o.v}" ${o.checked ? 'checked' : ''} style="accent-color:#0891b2;" onchange="window.natDepthChanged()">
+              <span style="color:#1e293b;min-width:130px;"><strong>${o.label}</strong></span>
+              <span style="color:#64748b;font-size:.75rem;">— ${o.calls}</span>
+              <span title="${o.tip.replace(/"/g,'&quot;')}" style="margin-right:auto;color:#0891b2;font-size:.78rem;cursor:help;user-select:none;" tabindex="0">ⓘ</span>
+            </label>`).join('')}
+          </div>
+
+          <!-- Code Change: extra field -->
+          <div id="nat-change-field" style="display:none;margin-top:.55rem;padding:.6rem .75rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;">
+            <div style="font-size:.8rem;font-weight:600;color:#92400e;margin-bottom:.3rem;">תאר את השינוי המבוקש:</div>
+            <textarea id="nat-change-desc" rows="2" placeholder="לדוגמה: הוספת פטור ל-4 שנים לרכבים חשמליים רשומים אחרי 2024." style="width:100%;padding:.45rem .6rem;border:1px solid #fed7aa;border-radius:6px;font-family:Heebo,sans-serif;font-size:.81rem;direction:rtl;resize:vertical;box-sizing:border-box;"></textarea>
           </div>
         </div>
       </div>
@@ -376,6 +472,12 @@ function renderNatFileDisplay() {
     </div>`;
 }
 
+window.natDepthChanged = function () {
+  const v = document.querySelector('input[name="nat-depth"]:checked')?.value;
+  const field = document.getElementById('nat-change-field');
+  if (field) field.style.display = v === 'code-change' ? '' : 'none';
+};
+
 window.natClearFile = function () {
   natFile = null;
   renderNatFileDisplay();
@@ -398,8 +500,9 @@ window.generateNatural = async function () {
     return;
   }
 
-  const depth         = document.querySelector('input[name="nat-depth"]:checked')?.value || 'normal';
+  const depth         = document.querySelector('input[name="nat-depth"]:checked')?.value || 'standard';
   const context       = (document.getElementById('nat-context')?.value || '').trim();
+  const changeDesc    = (document.getElementById('nat-change-desc')?.value || '').trim();
   const fileToProcess = natFile;
   const fileName      = fileToProcess.name;
 
@@ -425,7 +528,7 @@ window.generateNatural = async function () {
   fileHeader += '\n';
 
   const codeBlock = `\`\`\`natural\n${codeText}\n\`\`\``;
-  const chunks    = buildChunks(depth, fileHeader, codeBlock);
+  const chunks    = buildChunks(depth, fileHeader, codeBlock, changeDesc);
   const results   = [];
   let mIdx        = deps.getModelIdx();
 
@@ -530,10 +633,16 @@ window.generateNatural = async function () {
   }
 
   // ── Open spec-viewer ──────────────────────────────────────────────────────
+  // Pass raw `combined` so spec-viewer can create inline table buttons from
+  // <excel-table> tags. Strip only <drawio-xml> (spec-viewer doesn't handle it).
+  const mdForViewer = combined.replace(
+    /<drawio-xml>[\s\S]*?<\/drawio-xml>/g,
+    '\n> 🔀 **תרשים draw.io** — הורד קובץ XML לייבוא לעריכה.\n'
+  );
 
   try {
     localStorage.setItem('spec-viewer-data', JSON.stringify({
-      markdown: cleanedMd,
+      markdown: mdForViewer,
       tables:   viewerTables,
       screens:  viewerScreens,
       mermaidDiagrams,
@@ -550,7 +659,8 @@ window.generateNatural = async function () {
 
   // ── Chat message ──────────────────────────────────────────────────────────
 
-  const depthLabel = depth === 'high' ? 'גבוהה (3 קריאות)' : depth === 'basic' ? 'בסיסית (קריאה אחת)' : 'רגילה (2 קריאות)';
+  const depthLabels = { lite: 'Lite (קריאה אחת)', standard: 'Standard (2 קריאות)', enterprise: 'Enterprise (3 קריאות)', migration: 'Migration Readiness (3 קריאות)', rewrite: 'Rewrite Blueprint (3 קריאות)', 'code-change': 'Code Change (2 קריאות)' };
+  const depthLabel  = depthLabels[depth] || depth;
   let summary = `✅ ניתוח \`${fileName}\` הסתיים\n\n**עומק:** ${depthLabel}`;
   if (tableCount > 0) summary += ` · **${tableCount} טבלאות** (Excel + מציג)`;
   if (mermaidDiagrams.length > 0) summary += ` · **${mermaidDiagrams.length} תרשימים** (מציג)`;
@@ -576,24 +686,55 @@ async function readNaturalFile(file) {
 
 // ── Prompt assembly ───────────────────────────────────────────────────────
 
-function buildChunks(depth, fileHeader, codeBlock) {
+function buildChunks(depth, fileHeader, codeBlock, changeDesc) {
   const intro = `${NATURAL_SYSTEM}\n\n---\n\n## הקובץ לניתוח:\n\n${fileHeader}${codeBlock}\n\n---\n\n`;
 
-  if (depth === 'basic') {
-    return [intro + SECTIONS_ALL + '\n\n' + OUTPUT_FORMATS_BASIC + '\n\nנתח את הקובץ. פלט את כל הסעיפים + הפורמטים המיוחדים.'];
+  if (depth === 'lite') {
+    return [intro + SECTIONS_PART1 + '\n\nפלט **סעיפים 1–4 בלבד**. ללא תרשימים, ללא טבלאות Excel.'];
   }
 
-  if (depth === 'normal') {
+  if (depth === 'standard') {
     return [
       intro + SECTIONS_PART1 + '\n\n' + OUTPUT_FORMATS_PART1 + '\n\nפלט **Part A בלבד** (סעיפים 1–4).',
       intro + SECTIONS_PART2 + '\n\n' + OUTPUT_FORMATS_PART2 + '\n\nפלט **Part B בלבד** (סעיפים 5–9).',
     ];
   }
 
+  if (depth === 'enterprise') {
+    return [
+      intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
+      intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
+      intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + '\n\nפלט **Part C בלבד** (סעיפים 5–9 + טבלאות + פסאודו-קוד + draw.io XML).',
+    ];
+  }
+
+  if (depth === 'migration') {
+    return [
+      intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
+      intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
+      intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + SECTIONS_MIGRATION_APPENDIX + '\n\nפלט **Part C בלבד** (סעיפים 5–9 + סעיף 10 מוכנות למיגרציה + טבלאות + פסאודו-קוד + draw.io XML).',
+    ];
+  }
+
+  if (depth === 'rewrite') {
+    return [
+      intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
+      intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
+      intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + SECTIONS_REWRITE_APPENDIX + '\n\nפלט **Part C בלבד** (סעיפים 5–9 + סעיף 10 Rewrite Blueprint + טבלאות + פסאודו-קוד + draw.io XML).',
+    ];
+  }
+
+  if (depth === 'code-change') {
+    return [
+      intro + SECTIONS_CODE_CHANGE_1(changeDesc) + '\n\nפלט **Part A בלבד** — ניתוח השפעה (סעיפים 1–4).',
+      intro + SECTIONS_CODE_CHANGE_2 + '\n\nפלט **Part B בלבד** — יישום וסיכונים (סעיפים 5–8).',
+    ];
+  }
+
+  // fallback → standard
   return [
-    intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
-    intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
-    intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + '\n\nפלט **Part C בלבד** (סעיפים 5–9 + טבלאות + פסאודו-קוד + draw.io XML).',
+    intro + SECTIONS_PART1 + '\n\n' + OUTPUT_FORMATS_PART1 + '\n\nפלט **Part A בלבד** (סעיפים 1–4).',
+    intro + SECTIONS_PART2 + '\n\n' + OUTPUT_FORMATS_PART2 + '\n\nפלט **Part B בלבד** (סעיפים 5–9).',
   ];
 }
 

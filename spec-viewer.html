@@ -90,7 +90,7 @@
     .md td { padding: .42rem .7rem; border: 1px solid var(--border); vertical-align: top; }
     .md tr:nth-child(even) td { background: rgba(255,255,255,.02); }
     .md hr { border: none; border-top: 1px solid var(--border); margin: 1.4rem 0; }
-    .md .mermaid-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: .6rem 1rem 1rem; margin: .7rem 0; text-align: center; overflow: auto; }
+    .md .mermaid-wrap { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: .6rem 1rem 1rem; margin: .7rem 0; text-align: center; overflow: auto; cursor: grab; }
     .md .mermaid-wrap svg { max-width: 100%; height: auto; }
     .md .mermaid-err { color: var(--text3); font-size: .8rem; padding: .5rem; }
     .inline-diag-btns { display: flex; gap: .4rem; justify-content: flex-end; margin-bottom: .5rem; }
@@ -119,7 +119,7 @@
     .diag-fs-btn, .diag-erd-btn { background: none; border: 1px solid var(--border); color: var(--text3); cursor: pointer; font-size: .78rem; padding: .18rem .48rem; border-radius: 4px; transition: all .12s; white-space: nowrap; flex-shrink: 0; font-family: Heebo, sans-serif; }
     .diag-fs-btn:hover, .diag-erd-btn:hover { color: var(--text); border-color: var(--text2); }
     .diag-erd-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .diag-body { padding: 1rem; text-align: center; overflow: auto; cursor: default; }
+    .diag-body { padding: 1rem; text-align: center; overflow: auto; cursor: grab; }
     .diag-body svg { max-width: 100%; height: auto; }
     .diag-err { color: #f87171; font-size: .79rem; padding: .5rem; background: rgba(239,68,68,.08); border-radius: 6px; margin: .5rem; }
     .diag-iframe { width: 100%; flex: 1; border: none; border-radius: var(--r); min-height: calc(100vh - 170px); }
@@ -346,6 +346,27 @@
       svg.style.height = (parseFloat(card.dataset.origH) * next) + 'px';
     }
 
+    // ── Pan with left mouse button ───────────────────────────────────────────
+    function addPanListeners(el) {
+      let panning = false, startX = 0, startY = 0, scrollX = 0, scrollY = 0;
+      el.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        panning = true;
+        startX = e.clientX; startY = e.clientY;
+        scrollX = el.scrollLeft; scrollY = el.scrollTop;
+        el.style.cursor = 'grabbing';
+        e.preventDefault();
+      });
+      el.addEventListener('mousemove', (e) => {
+        if (!panning) return;
+        el.scrollLeft = scrollX - (e.clientX - startX);
+        el.scrollTop  = scrollY - (e.clientY - startY);
+      });
+      const stop = () => { panning = false; el.style.cursor = 'grab'; };
+      el.addEventListener('mouseup', stop);
+      el.addEventListener('mouseleave', stop);
+    }
+
     // ── Mermaid renderer (programmatic) ─────────────────────────────────────
     async function renderMermaidEl(code, wrapEl, uid) {
       const isErd = code.trim().startsWith('erDiagram');
@@ -494,6 +515,7 @@
           svg.style.width  = (parseFloat(wrap.dataset.origW) * next) + 'px';
           svg.style.height = (parseFloat(wrap.dataset.origH) * next) + 'px';
         }, { passive: false });
+        addPanListeners(wrap);
       }
     }
 
@@ -656,6 +678,7 @@
           e.preventDefault();
           adjustZoom(card, e.deltaY < 0 ? 0.15 : -0.15);
         }, { passive: false });
+        addPanListeners(bodyEl);
 
         card.appendChild(titleRow);
         card.appendChild(bodyEl);

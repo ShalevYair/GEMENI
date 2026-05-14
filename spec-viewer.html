@@ -134,6 +134,12 @@
     .diag-card:fullscreen .diag-body { flex: 1; overflow: auto; display: flex; align-items: flex-start; justify-content: flex-start; padding: 1.5rem; background: #fff; }
     .diag-card:fullscreen .diag-body svg { max-width: none; height: auto; }
 
+    /* Collapsible headings */
+    .hd-toggle { cursor: pointer; user-select: none; margin-left: .35rem; font-size: .72em; color: var(--text3); vertical-align: middle; display: inline-block; width: .85em; transition: color .15s; }
+    .hd-toggle:hover { color: var(--accent); }
+    .collapse-level-btn { padding: .28rem .7rem; background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 6px; cursor: pointer; font-size: .75rem; font-family: Heebo, sans-serif; transition: all .15s; margin-bottom: .6rem; width: 100%; text-align: center; }
+    .collapse-level-btn:hover { border-color: var(--accent); color: var(--text); }
+
     /* Inline table button in markdown */
     .inline-tbl-btn { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .75rem; background: var(--surface2); border: 1px solid var(--border); color: var(--accent); border-radius: 6px; font-family: Heebo, sans-serif; font-size: .82rem; font-weight: 600; cursor: pointer; transition: all .15s; margin: .3rem 0; }
     .inline-tbl-btn:hover { border-color: var(--accent); background: rgba(124,58,237,.12); }
@@ -346,25 +352,29 @@
       svg.style.height = (parseFloat(card.dataset.origH) * next) + 'px';
     }
 
-    // ── Pan with left mouse button ───────────────────────────────────────────
+    // ── Pan with left mouse button (transform-based — works both axes) ────────
     function addPanListeners(el) {
-      let panning = false, startX = 0, startY = 0, scrollX = 0, scrollY = 0;
+      let panning = false, startX = 0, startY = 0, tx = 0, ty = 0;
       el.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
         panning = true;
         startX = e.clientX; startY = e.clientY;
-        scrollX = el.scrollLeft; scrollY = el.scrollTop;
         el.style.cursor = 'grabbing';
         e.preventDefault();
       });
       el.addEventListener('mousemove', (e) => {
         if (!panning) return;
-        el.scrollLeft = scrollX - (e.clientX - startX);
-        el.scrollTop  = scrollY - (e.clientY - startY);
+        tx += e.clientX - startX;
+        ty += e.clientY - startY;
+        startX = e.clientX;
+        startY = e.clientY;
+        const svg = el.querySelector('svg');
+        if (svg) svg.style.translate = `${tx}px ${ty}px`;
       });
       const stop = () => { panning = false; el.style.cursor = 'grab'; };
       el.addEventListener('mouseup', stop);
       el.addEventListener('mouseleave', stop);
+      el._resetPan = () => { tx = 0; ty = 0; };
     }
 
     // ── Mermaid renderer (programmatic) ─────────────────────────────────────
@@ -484,6 +494,7 @@
             wrap.dataset.origW = '';
             svgEl.innerHTML = '';
             await renderMermaidEl(code, svgEl, 'inerd' + Date.now());
+            wrap._resetPan?.();
           };
           ctrlBar.appendChild(erdBtn);
         }
@@ -519,9 +530,92 @@
       }
     }
 
+    // ── Collapsible headings ──────────────────────────────────────────────────
+    let _collapseLevel = 0;
+
+    function makeCollapsible(contentEl) {
+      contentEl.querySelectorAll('h2, h3, h4').forEach(h => {
+        const tog = document.createElement('span');
+        tog.className = 'hd-toggle';
+        tog.textContent = '▼';
+        tog.title = 'קפל/פתח';
+        tog.addEventListener('click', (e) => { e.stopPropagation(); toggleSection(h); });
+        h.insertBefore(tog, h.firstChild);
+      });
+    }
+
+    function toggleSection(h) {
+      const collapse = h.dataset.collapsed !== 'true';
+      setHeadingCollapsed(h, collapse);
+    }
+
+    function setHeadingCollapsed(h, collapse) {
+      const level = parseInt(h.tagName[1]);
+      h.dataset.collapsed = collapse ? 'true' : 'false';
+      const tog = h.querySelector('.hd-toggle');
+      if (tog) tog.textContent = collapse ? '▶' : '▼';
+      let el = h.nextElementSibling;
+      while (el) {
+        const m = el.tagName?.match(/^H([2-6])$/);
+        if (m && parseInt(m[1]) <= level) break;
+        el.style.display = collapse ? 'none' : '';
+        el = el.nextElementSibling;
+      }
+    }
+
+    function applyCollapseLevel(targetLevel) {
+      const contentEl = document.getElementById('doc-content');
+      if (!contentEl) return;
+      // expand everything first
+      [...contentEl.children].forEach(el => { el.style.display = ''; });
+      contentEl.querySelectorAll('h2,h3,h4').forEach(h => {
+        h.dataset.collapsed = 'false';
+        const tog = h.querySelector('.hd-toggle');
+        if (tog) tog.textContent = '▼';
+      });
+      if (targetLevel === 0) return;
+      // collapse the target level
+      contentEl.querySelectorAll('h' + targetLevel).forEach(h => setHeadingCollapsed(h, true));
+    }
+
+    function cycleCollapseLevel() {
+      const contentEl = document.getElementById('doc-content');
+      if (!contentEl) return;
+      const available = new Set();
+      contentEl.querySelectorAll('h2,h3,h4').forEach(h => available.add(parseInt(h.tagName[1])));
+      const levels = [0, ...[...available].sort()];
+      const idx = levels.indexOf(_collapseLevel);
+      _collapseLevel = levels[(idx + 1) % levels.length];
+      applyCollapseLevel(_collapseLevel);
+      updateCollapseBtnLabel(levels);
+    }
+
+    function updateCollapseBtnLabel(levels) {
+      const btn = document.getElementById('collapse-level-btn');
+      if (!btn) return;
+      if (_collapseLevel === 0) {
+        btn.textContent = 'קפל רמה ▼';
+      } else {
+        const idx = levels ? levels.indexOf(_collapseLevel) : -1;
+        const isLast = idx === (levels?.length ?? 0) - 1;
+        btn.textContent = isLast ? 'פתח הכל ▲' : 'קפל רמה ▼';
+      }
+    }
+
     function buildTOC(contentEl) {
+      _collapseLevel = 0;
+      makeCollapsible(contentEl);
       const toc = document.getElementById('doc-toc');
       toc.innerHTML = '<div class="doc-toc-title">תוכן עניינים</div>';
+      const hasHeadings = contentEl.querySelectorAll('h2,h3,h4').length > 0;
+      if (hasHeadings) {
+        const collapseBtn = document.createElement('button');
+        collapseBtn.id = 'collapse-level-btn';
+        collapseBtn.className = 'collapse-level-btn';
+        collapseBtn.textContent = 'קפל רמה ▼';
+        collapseBtn.onclick = cycleCollapseLevel;
+        toc.appendChild(collapseBtn);
+      }
       const headings = contentEl.querySelectorAll('h2, h3');
       if (headings.length === 0) return;
 
@@ -641,9 +735,10 @@
             erdBtn.textContent = simplified ? 'הצג שדות' : 'הסתר שדות';
             erdBtn.classList.toggle('on', simplified);
             const code = simplified ? card.dataset.rawCode : stripErdFields(card.dataset.rawCode);
-            card.dataset.origW = ''; // reset zoom origin
+            card.dataset.origW = '';
             bodyEl.innerHTML = '';
             await renderMermaidEl(code, bodyEl, 'er' + Date.now());
+            bodyEl._resetPan?.();
           };
           titleRow.appendChild(erdBtn);
         }

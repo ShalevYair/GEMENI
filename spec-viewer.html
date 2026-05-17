@@ -937,7 +937,7 @@ nav.appendChild(btn);});if(screens.length>0)frame.srcdoc=screens[0].html;<\/scri
         return;
       }
       _viewerData = data;
-      document.getElementById('hd-download-btn').style.display = '';
+      document.getElementById('hd-download-btn').style.display = 'inline-flex';
       if (data.meta) updateHeader(data.meta);
       if (data.markdown)       await renderMarkdown(data.markdown);
       renderExcel(data.tables);

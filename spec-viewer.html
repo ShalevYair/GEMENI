@@ -31,6 +31,8 @@
     .hd-home-btn:hover { border-color: var(--accent); color: var(--text); background: var(--surface2); }
     .hd-upload-btn { padding: .4rem .9rem; background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 7px; cursor: pointer; font-size: .82rem; font-family: Heebo, sans-serif; transition: all .15s; flex-shrink: 0; }
     .hd-upload-btn:hover { border-color: var(--accent); color: var(--text); }
+    .hd-download-btn { padding: .4rem .9rem; background: var(--accent); border: 1px solid var(--accent); color: #fff; border-radius: 7px; cursor: pointer; font-size: .82rem; font-family: Heebo, sans-serif; transition: all .15s; flex-shrink: 0; display: none; }
+    .hd-download-btn:hover { background: #6d28d9; border-color: #6d28d9; }
 
     /* Tabs */
     .tabs { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-shrink: 0; overflow-x: auto; }
@@ -173,6 +175,7 @@
       <div class="hd-meta" id="hd-meta">טוען נתונים…</div>
     </div>
     <div class="hd-badge" id="hd-badge">מלך האפיונים</div>
+    <button id="hd-download-btn" class="hd-download-btn" onclick="downloadAll()">⬇️ הורד קבצים</button>
     <button class="hd-upload-btn" onclick="document.getElementById('file-input').click()">📂 טען קבצים</button>
     <input id="file-input" type="file" multiple accept=".md,.xlsx,.html" onchange="handleFileInput(this.files)">
   </header>
@@ -262,6 +265,100 @@
   </div>
 
   <script>
+    // ── Loaded data ref (for re-download) ────────────────────────────────────
+    let _viewerData = null;
+
+    // ── Download helpers ─────────────────────────────────────────────────────
+    function dlText(content, filename, mime) {
+      const blob = new Blob([content], { type: mime || 'text/plain;charset=utf-8' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function buildBaseName(meta) {
+      const ts   = meta?.timestamp ? new Date(meta.timestamp).toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
+      const flav = meta?.flavor === 'Salesforce' ? 'salesforce'
+        : (meta?.flavor || '').toLowerCase().startsWith('outsystems') ? 'outsystems' : 'general';
+      return `spec-king-spec-${flav}-${ts}`;
+    }
+
+    function buildDiagsHtml(diagrams, baseName) {
+      const cards = diagrams.map(d => `
+  <div class="card">
+    <div class="card-title">${d.title.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+    <div class="mermaid">${d.code}</div>
+  </div>`).join('');
+      return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>תרשימים — ${baseName}</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"><\/script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base'});<\/script>
+<style>body{font-family:Arial,sans-serif;padding:24px;background:#f8fafc;direction:rtl}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px}
+.card-title{font-weight:700;color:#374151;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #f1f5f9}
+.mermaid{text-align:center}</style></head>
+<body><h1>🔀 תרשימים — ${baseName}</h1>${cards}</body></html>`;
+    }
+
+    function buildScreensHtml(screens, baseName) {
+      const json = JSON.stringify(screens.map(s => ({ name: s.name, html: s.html })));
+      return `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="UTF-8"><title>מסכים — ${baseName}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;display:flex;height:100vh;overflow:hidden;direction:rtl}
+.nav{width:210px;background:#1e293b;padding:12px;display:flex;flex-direction:column;gap:5px;overflow-y:auto}
+.nav h2{color:#64748b;font-size:.7rem;text-transform:uppercase;padding:4px 8px;margin-bottom:4px}
+.nav-btn{background:none;border:none;color:#94a3b8;padding:8px 12px;border-radius:6px;cursor:pointer;text-align:right;font-family:inherit;font-size:.83rem;width:100%}
+.nav-btn.active{background:#7c3aed;color:#fff}.frame-wrap{flex:1}
+iframe{width:100%;height:100%;border:none;display:block}</style></head>
+<body><div class="nav"><h2>🖥️ מסכים</h2><div id="nav"></div></div>
+<div class="frame-wrap"><iframe id="frame"></iframe></div>
+<script>const screens=${json};const nav=document.getElementById('nav'),frame=document.getElementById('frame');
+screens.forEach((s,i)=>{const btn=document.createElement('button');btn.className='nav-btn'+(i===0?' active':'');
+btn.textContent=s.name;btn.onclick=()=>{document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');frame.srcdoc=s.html;};
+nav.appendChild(btn);});if(screens.length>0)frame.srcdoc=screens[0].html;<\/script></body></html>`;
+    }
+
+    async function downloadAll() {
+      if (!_viewerData) return;
+      const { markdown, tables, mermaidDiagrams, screens, meta } = _viewerData;
+      const baseName = buildBaseName(meta);
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+      const files = [];
+
+      // Build clean markdown (replace raw tags with placeholders)
+      if (markdown) {
+        let clean = markdown;
+        clean = clean.replace(/<html-screen name="(.*?)">([\s\S]*?)<\/html-screen>/g,
+          (_, name) => `\n> 🖥️ **מסך: ${name.trim()}** — מוצג בצופן האפיון.\n`);
+        clean = clean.replace(/<excel-table name="(.*?)">([\s\S]*?)<\/excel-table>/g,
+          (_, name) => `\n> 📊 **טבלה: ${name.trim()}** — הנתונים המלאים בצופן האפיון ובקובץ האקסל.\n`);
+        files.push({ content: clean, name: `${baseName}.md`, mime: 'text/markdown;charset=utf-8', type: 'md' });
+      }
+      if (tables && tables.length > 0) {
+        files.push({ type: 'xlsx', name: `${baseName}.xlsx`, tables });
+      }
+      if (mermaidDiagrams && mermaidDiagrams.length > 0) {
+        files.push({ content: buildDiagsHtml(mermaidDiagrams, baseName), name: `${baseName}-diagrams.html`, mime: 'text/html;charset=utf-8', type: 'html' });
+      }
+      if (screens && screens.length > 0) {
+        files.push({ content: buildScreensHtml(screens, baseName), name: `${baseName}-screens.html`, mime: 'text/html;charset=utf-8', type: 'html' });
+      }
+
+      for (let i = 0; i < files.length; i++) {
+        if (i > 0) await delay(500);
+        const f = files[i];
+        if (f.type === 'xlsx') {
+          const wb = XLSX.utils.book_new();
+          f.tables.forEach(t => {
+            const ws = XLSX.utils.json_to_sheet(t.data);
+            XLSX.utils.book_append_sheet(wb, ws, t.name.replace(/[\\*?:\[\]\/]/g,'').substring(0,31) || 'Sheet');
+          });
+          XLSX.writeFile(wb, f.name);
+        } else {
+          dlText(f.content, f.name, f.mime);
+        }
+      }
+    }
+
     // ── Mermaid init ─────────────────────────────────────────────────────────
     mermaid.initialize({
       startOnLoad: false,
@@ -839,6 +936,8 @@
         document.getElementById('hd-meta').textContent = 'טען קבצים או צור אפיון במלך האפיונים';
         return;
       }
+      _viewerData = data;
+      document.getElementById('hd-download-btn').style.display = '';
       if (data.meta) updateHeader(data.meta);
       if (data.markdown)       await renderMarkdown(data.markdown);
       renderExcel(data.tables);

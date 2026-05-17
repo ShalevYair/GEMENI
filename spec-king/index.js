@@ -125,8 +125,61 @@ export const CHUNK_MAP_BASIC = {
   1: ['ch1', 'ch2', 'ch3', 'ch4', 'ch5', 'ch6'],
 };
 
+// 2 chunks: first half / second half
+export const CHUNK_MAP_2 = {
+  1: ['ch1', 'ch2', 'ch3'],
+  2: ['ch4', 'ch5', 'ch6'],
+};
+
+// 4 chunks
+export const CHUNK_MAP_4 = {
+  1: ['ch1', 'ch2'],
+  2: ['ch3'],
+  3: ['ch4'],
+  4: ['ch5', 'ch6'],
+};
+
+// 5 chunks
+export const CHUNK_MAP_5 = {
+  1: ['ch1', 'ch2'],
+  2: ['ch3'],
+  3: ['ch4'],
+  4: ['ch5'],
+  5: ['ch6'],
+};
+
+export function getChunkMapForCount(n) {
+  if (n <= 1) return CHUNK_MAP_BASIC;
+  if (n === 2) return CHUNK_MAP_2;
+  if (n === 3) return CHUNK_MAP_NORMAL;
+  if (n === 4) return CHUNK_MAP_4;
+  if (n === 5) return CHUNK_MAP_5;
+  return CHUNK_MAP_HIGH;
+}
+
 // backward compat
 export const CHUNK_MAP = CHUNK_MAP_NORMAL;
+
+// ── Auto-depth: ניתוח מסמך לבחירת מספר קריאות ──────────────────────────────
+export function buildAutoDepthPrompt(combinedText) {
+  return `אתה מנתח דרישות. קרא את מסמכי המקור הבאים והחלט כמה קריאות API נדרשות כדי לייצר מסמך אפיון מלא ומדויק.
+
+קריטריונים להחלטה:
+- 1 קריאה: מסמך קצר ופשוט, מערכת קטנה עם מעט תהליכים
+- 2-3 קריאות: מסמך בינוני, מספר מודולים ותהליכים
+- 4-5 קריאות: מסמך מורכב, מספר מערכות ותהליכים רבים, הרבה טבלאות נדרשות
+- 6 קריאות: מסמך ארוך ומורכב מאוד — אל תגיע ל-6 אלא אם באמת נדרש
+
+החלטה מקסימלית: 6 קריאות.
+
+השב אך ורק ב-JSON הבא, ללא שום טקסט נוסף:
+{"chunks": <מספר שלם בין 1 ל-6>, "reason": "<סיבה קצרה בעברית, עד 20 מילה>"}
+
+═══════════════════════════════════════════════════
+מסמכי מקור
+═══════════════════════════════════════════════════
+${combinedText}`;
+}
 
 export function getChunkLabel(chunkNum, chunkMap = CHUNK_MAP_NORMAL) {
   const chapterIds = chunkMap[chunkNum] || [];

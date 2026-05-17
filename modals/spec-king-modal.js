@@ -4,7 +4,9 @@ import {
   ALL_CHECKLIST_ITEMS,
   buildChunkPrompt,
   buildClarificationPrompt,
+  buildAutoDepthPrompt,
   getChunkLabel,
+  getChunkMapForCount,
   CHUNK_MAP_NORMAL,
   CHUNK_MAP_HIGH,
   CHUNK_MAP_BASIC,
@@ -157,6 +159,11 @@ function injectSpecKingModal() {
             <!-- Depth selector — shown only when "אפיון מלא" is selected -->
             <div id="sk2-depth-section" style="margin-bottom:.35rem;margin-right:1.3rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:.55rem .7rem;">
               <div style="font-size:.78rem;font-weight:600;color:#374151;margin-bottom:.35rem;">רמת עומק:</div>
+              <label style="display:flex;align-items:center;gap:.35rem;margin-bottom:.25rem;cursor:pointer;font-size:.82rem;">
+                <input type="radio" name="sk2-depth" value="auto" style="accent-color:#7c3aed;">
+                <span style="color:#1e293b;"><strong>✨ חכמה</strong></span>
+                <span style="color:#64748b;font-size:.76rem;">— AI מחליט (1–6 קריאות לפי מורכבות)</span>
+              </label>
               <label style="display:flex;align-items:center;gap:.35rem;margin-bottom:.25rem;cursor:pointer;font-size:.82rem;">
                 <input type="radio" name="sk2-depth" value="high" style="accent-color:#7c3aed;">
                 <span style="color:#1e293b;"><strong>גבוהה</strong></span>
@@ -332,10 +339,11 @@ window.generateSpecKing = async function () {
   const checkedIds = mode === 'spec' ? skGetCheckedIds() : [];
   skSaveChecked(checkedIds);
 
-  const chunkMap = depth === 'high' ? CHUNK_MAP_HIGH
+  let chunkMap = depth === 'high' ? CHUNK_MAP_HIGH
     : depth === 'basic' ? CHUNK_MAP_BASIC
+    : depth === 'auto' ? null           // resolved after analysis call
     : CHUNK_MAP_NORMAL;
-  const totalChunks = Object.keys(chunkMap).length;
+  const totalChunks = chunkMap ? Object.keys(chunkMap).length : null; // null = TBD
 
   const filesToProcess = [...skFiles];
   const fileNames = filesToProcess.map(f => f.name).join(', ');
@@ -366,15 +374,40 @@ window.generateSpecKing = async function () {
   const results = [];
   let skModelIdx = deps.getModelIdx();
 
+  let autoDepthReason = '';
   try {
     if (mode === 'questions') {
       deps.updateTyping(progressId, 'מנתח חומרים ומייצר שאלות הבהרה…');
       const prompt = buildClarificationPrompt(combinedText, flavor, osVer);
       results.push(await callWithFallback(prompt, skModelIdx));
     } else {
-      for (let chunkNum = 1; chunkNum <= totalChunks; chunkNum++) {
+      // auto-depth: analysis call to decide chunk count
+      if (depth === 'auto') {
+        deps.updateTyping(progressId, '✨ מנתח את מורכבות המסמך…');
+        const analysisPrompt = buildAutoDepthPrompt(combinedText);
+        let analysisText = '';
+        try {
+          analysisText = await callWithFallback(analysisPrompt, skModelIdx);
+          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
+            chunkMap = getChunkMapForCount(n);
+            autoDepthReason = parsed.reason || '';
+            deps.appendMessage('assistant',
+              `✨ **ניתוח מסמך:** ${autoDepthReason}\n→ נבחרו **${n} קריאות API**`);
+          } else {
+            chunkMap = CHUNK_MAP_NORMAL;
+          }
+        } catch {
+          chunkMap = CHUNK_MAP_NORMAL;
+        }
+      }
+
+      const resolvedTotal = Object.keys(chunkMap).length;
+      for (let chunkNum = 1; chunkNum <= resolvedTotal; chunkNum++) {
         const label = getChunkLabel(chunkNum, chunkMap);
-        deps.updateTyping(progressId, `מייצר חלק ${chunkNum} מתוך ${totalChunks}… (${label})`);
+        deps.updateTyping(progressId, `מייצר חלק ${chunkNum} מתוך ${resolvedTotal}… (${label})`);
         const prompt = buildChunkPrompt(combinedText, chunkNum, checkedIds, flavor, osVer, chunkMap);
         if (!prompt) continue;
         results.push(await callWithFallback(prompt, skModelIdx));
@@ -435,18 +468,6 @@ window.generateSpecKing = async function () {
     } catch { /* skip malformed tables */ }
   }
 
-  // Download .md
-  const mdBlob = new Blob([finalMarkdown], { type: 'text/markdown;charset=utf-8' });
-  const mdUrl  = URL.createObjectURL(mdBlob);
-  const mdLink = document.createElement('a');
-  mdLink.href = mdUrl; mdLink.download = `${baseName}.md`; mdLink.click();
-  URL.revokeObjectURL(mdUrl);
-
-  // Download .xlsx if tables exist
-  if (tableCount > 0) {
-    XLSX.writeFile(wb, `${baseName}.xlsx`);
-  }
-
   const flavorLabel = flavor === 'salesforce' ? 'Salesforce'
     : flavor === 'outsystems' ? `OutSystems ${osVer.toUpperCase()}`
     : 'כללי';
@@ -465,14 +486,32 @@ window.generateSpecKing = async function () {
     });
   }
 
+  // Stagger all downloads — browsers block simultaneous programmatic downloads
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+
+  // Download .md (first, immediately)
+  const mdBlob = new Blob([finalMarkdown], { type: 'text/markdown;charset=utf-8' });
+  const mdUrl  = URL.createObjectURL(mdBlob);
+  const mdLink = document.createElement('a');
+  mdLink.href = mdUrl; mdLink.download = `${baseName}.md`; mdLink.click();
+  URL.revokeObjectURL(mdUrl);
+
+  // Download .xlsx if tables exist
+  if (tableCount > 0) {
+    await delay(500);
+    XLSX.writeFile(wb, `${baseName}.xlsx`);
+  }
+
   // Download diagrams.html
   if (mermaidDiagrams.length > 0) {
+    await delay(500);
     const diagHtml = sk2BuildDiagramsHtml(mermaidDiagrams, baseName);
     sk2DownloadText(diagHtml, `${baseName}-diagrams.html`);
   }
 
   // Download screens.html
   if (viewerScreens.length > 0) {
+    await delay(500);
     const scrHtml = sk2BuildScreensHtml(viewerScreens, baseName);
     sk2DownloadText(scrHtml, `${baseName}-screens.html`);
   }
@@ -495,10 +534,15 @@ window.generateSpecKing = async function () {
     window.open('spec-viewer.html', 'spec-viewer');
   } catch { /* localStorage unavailable */ }
 
+  const downloadedFiles = [`\`${baseName}.md\``];
+  if (tableCount > 0)           downloadedFiles.push(`\`${baseName}.xlsx\` (${tableCount} גיליונות)`);
+  if (mermaidDiagrams.length > 0) downloadedFiles.push(`\`${baseName}-diagrams.html\` (${mermaidDiagrams.length} תרשימים)`);
+  if (viewerScreens.length > 0)   downloadedFiles.push(`\`${baseName}-screens.html\` (${viewerScreens.length} מסכים)`);
+
   deps.appendMessage('assistant',
     isQuestions
       ? `✅ שאלות ההבהרה הורדו כ-\`${baseName}.md\`\n\n**טעם:** ${flavorLabel} · **מקורות:** ${fileNames}`
-      : `✅ מסמך האפיון הורד כ-\`${baseName}.md\`${tableCount > 0 ? ` + \`${baseName}.xlsx\` (${tableCount} גיליונות)` : ''}\n\n**טעם:** ${flavorLabel} · **מקורות:** ${fileNames}`
+      : `✅ מסמך האפיון הורד:\n${downloadedFiles.map(f => `- ${f}`).join('\n')}\n\n**טעם:** ${flavorLabel} · **מקורות:** ${fileNames}`
   );
 };
 

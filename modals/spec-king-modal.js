@@ -371,6 +371,11 @@ window.generateSpecKing = async function () {
     return;
   }
 
+  const flavorLabel = flavor === 'salesforce' ? 'Salesforce'
+    : flavor === 'outsystems' ? `OutSystems ${osVer.toUpperCase()}`
+    : 'כללי';
+  const baseMeta = { flavor: flavorLabel, fileNames, mode, timestamp: new Date().toISOString() };
+
   const results = [];
   let skModelIdx = deps.getModelIdx();
 
@@ -411,6 +416,7 @@ window.generateSpecKing = async function () {
         const prompt = buildChunkPrompt(combinedText, chunkNum, checkedIds, flavor, osVer, chunkMap);
         if (!prompt) continue;
         results.push(await callWithFallback(prompt, skModelIdx));
+        sk2SavePartialToViewer(results, baseMeta);
       }
     }
   } catch (err) {
@@ -434,57 +440,8 @@ window.generateSpecKing = async function () {
   const combined    = (isQuestions ? '# שאלות הבהרה\n\n' : '') + results.join('\n\n---\n\n');
   const baseName    = `spec-king-${isQuestions ? 'questions' : 'spec'}-${flavor}-${timestamp}`;
 
-  let finalMarkdown = combined;
-  const wb = XLSX.utils.book_new();
-  let tableCount = 0;
-  const viewerTables = [];
-  const viewerScreens = [];
-
-  // Extract html-screen blocks first (before excel processing)
-  finalMarkdown = finalMarkdown.replace(
-    /<html-screen name="(.*?)">([\s\S]*?)<\/html-screen>/g,
-    (_, name, html) => {
-      viewerScreens.push({ name: name.trim(), html: html.trim() });
-      return `\n> 🖥️ **מסך: ${name.trim()}** — מוצג בצופן האפיון.\n`;
-    }
-  );
-
-  const excelRegex = /<excel-table name="(.*?)">([\s\S]*?)<\/excel-table>/g;
-  let match;
-  while ((match = excelRegex.exec(combined)) !== null) {
-    const tableName = match[1];
-    const jsonData  = match[2].trim();
-    try {
-      const data = JSON.parse(jsonData);
-      if (Array.isArray(data) && data.length > 0) {
-        tableCount++;
-        viewerTables.push({ name: tableName, data });
-        const ws = XLSX.utils.json_to_sheet(data);
-        const sheetName = tableName.replace(/[\\*?:\[\]\/]/g, '').substring(0, 31) || `Sheet ${tableCount}`;
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        const placeholder = `\n> 📊 **טבלה: ${tableName}** — הנתונים המלאים בצופן האפיון ובקובץ האקסל.\n`;
-        finalMarkdown = finalMarkdown.replace(match[0], placeholder);
-      }
-    } catch { /* skip malformed tables */ }
-  }
-
-  const flavorLabel = flavor === 'salesforce' ? 'Salesforce'
-    : flavor === 'outsystems' ? `OutSystems ${osVer.toUpperCase()}`
-    : 'כללי';
-
-  // Extract mermaid diagrams from raw markdown
-  const mermaidDiagrams = [];
-  const mmRx = /```mermaid\n([\s\S]*?)```/g;
-  let mm;
-  while ((mm = mmRx.exec(combined)) !== null) {
-    const before     = combined.slice(0, mm.index);
-    const headMatches = [...before.matchAll(/^#{1,4}\s+\**(.+?)\**\s*$/gm)];
-    const lastHead   = headMatches.at(-1);
-    mermaidDiagrams.push({
-      title: lastHead ? lastHead[1].trim() : `תרשים ${mermaidDiagrams.length + 1}`,
-      code:  mm[1].trim(),
-    });
-  }
+  const { finalMarkdown, viewerTables, viewerScreens, mermaidDiagrams } = sk2BuildViewerPayload(combined);
+  const tableCount = viewerTables.length;
 
   // Stagger all downloads — browsers block simultaneous programmatic downloads
   const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -519,17 +476,10 @@ window.generateSpecKing = async function () {
   // Open spec-viewer with full data
   try {
     localStorage.setItem('spec-viewer-data', JSON.stringify({
-      markdown: combined,
-      tables: viewerTables,
-      screens: viewerScreens,
-      mermaidDiagrams,
-      meta: {
-        flavor: flavorLabel,
-        timestamp: new Date().toISOString(),
-        fileNames,
-        mode,
-      },
+      markdown: combined, tables: viewerTables, screens: viewerScreens,
+      mermaidDiagrams, meta: baseMeta,
     }));
+    localStorage.removeItem('spec-king-draft');
     try { new BroadcastChannel('spec-viewer').postMessage('update'); } catch {}
     window.open('spec-viewer.html', 'spec-viewer');
   } catch { /* localStorage unavailable */ }
@@ -545,6 +495,62 @@ window.generateSpecKing = async function () {
       : `✅ מסמך האפיון הורד:\n${downloadedFiles.map(f => `- ${f}`).join('\n')}\n\n**טעם:** ${flavorLabel} · **מקורות:** ${fileNames}`
   );
 };
+
+// ── Payload builder (shared by partial save + final download) ─────────────
+
+function sk2BuildViewerPayload(combined) {
+  let finalMarkdown = combined;
+  const viewerTables = [];
+  const viewerScreens = [];
+
+  finalMarkdown = finalMarkdown.replace(
+    /<html-screen name="(.*?)">([\s\S]*?)<\/html-screen>/g,
+    (_, name, html) => {
+      viewerScreens.push({ name: name.trim(), html: html.trim() });
+      return `\n> 🖥️ **מסך: ${name.trim()}** — מוצג בצופן האפיון.\n`;
+    }
+  );
+
+  const excelRegex = /<excel-table name="(.*?)">([\s\S]*?)<\/excel-table>/g;
+  let match;
+  while ((match = excelRegex.exec(combined)) !== null) {
+    try {
+      const data = JSON.parse(match[2].trim());
+      if (Array.isArray(data) && data.length > 0) {
+        viewerTables.push({ name: match[1], data });
+        finalMarkdown = finalMarkdown.replace(match[0],
+          `\n> 📊 **טבלה: ${match[1]}** — הנתונים המלאים בצופן האפיון ובקובץ האקסל.\n`);
+      }
+    } catch { /* skip malformed */ }
+  }
+
+  const mermaidDiagrams = [];
+  const mmRx = /```mermaid\n([\s\S]*?)```/g;
+  let mm;
+  while ((mm = mmRx.exec(combined)) !== null) {
+    const before      = combined.slice(0, mm.index);
+    const headMatches = [...before.matchAll(/^#{1,4}\s+\**(.+?)\**\s*$/gm)];
+    const lastHead    = headMatches.at(-1);
+    mermaidDiagrams.push({
+      title: lastHead ? lastHead[1].trim() : `תרשים ${mermaidDiagrams.length + 1}`,
+      code:  mm[1].trim(),
+    });
+  }
+
+  return { finalMarkdown, viewerTables, viewerScreens, mermaidDiagrams };
+}
+
+function sk2SavePartialToViewer(results, meta) {
+  const combined = results.join('\n\n---\n\n');
+  const { viewerTables, viewerScreens, mermaidDiagrams } = sk2BuildViewerPayload(combined);
+  try {
+    localStorage.setItem('spec-king-draft', JSON.stringify({ results, meta, savedAt: Date.now() }));
+    localStorage.setItem('spec-viewer-data', JSON.stringify({
+      markdown: combined, tables: viewerTables, screens: viewerScreens, mermaidDiagrams, meta,
+    }));
+    try { new BroadcastChannel('spec-viewer').postMessage('update'); } catch {}
+  } catch {}
+}
 
 // ── HTML file builders ────────────────────────────────────────────────────
 

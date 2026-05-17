@@ -700,14 +700,15 @@ function escHtml(str) {
 
 
 async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[mIdx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const parts = [{ text: promptText }];
-  if (inlineFile) parts.push({ inlineData: { mimeType: inlineFile.mimeType, data: inlineFile.base64 } });
-  const res = await fetch(url, {
+  const makeUrl = (idx) => `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[idx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const userParts = [{ text: promptText }];
+  if (inlineFile) userParts.push({ inlineData: { mimeType: inlineFile.mimeType, data: inlineFile.base64 } });
+
+  const res = await fetch(makeUrl(mIdx), {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
+      contents: [{ role: 'user', parts: userParts }],
       generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
     }),
   });
@@ -717,10 +718,40 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null) {
   }
   const data      = await res.json();
   const candidate = data.candidates[0];
+  let text = candidate.content.parts.map(p => p.text).join('');
+
+  // Auto-continuation: if truncated, resume up to 3 times via multi-turn conversation
   if (candidate.finishReason === 'MAX_TOKENS') {
-    appendMessage('error', '⚠️ חלק נחתך בגלל מגבלת אסימונים — ייתכן שחלק מהתוכן חסר.');
+    const MAX_CONT = 3;
+    let truncated = true;
+    let contNum = 0;
+    while (truncated && contNum < MAX_CONT) {
+      contNum++;
+      appendMessage('error', `⚠️ חלק נחתך — ממשיך אוטומטית (${contNum}/${MAX_CONT})…`);
+      const contRes = await fetch(makeUrl(mIdx), {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            { role: 'user',  parts: userParts },
+            { role: 'model', parts: [{ text }] },
+            { role: 'user',  parts: [{ text: 'המשך ישירות מהיכן שנעצרת — ללא חזרה על מה שכבר נכתב.' }] },
+          ],
+          generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+        }),
+      });
+      if (!contRes.ok) break;
+      const contData = await contRes.json();
+      const contCand = contData.candidates[0];
+      text += contCand.content.parts.map(p => p.text).join('');
+      truncated = contCand.finishReason === 'MAX_TOKENS';
+    }
+    if (truncated) {
+      appendMessage('error', '⚠️ הפרק לא הושלם גם לאחר המשכים — שקול עומק גבוה יותר.');
+    }
   }
-  return candidate.content.parts.map(p => p.text).join('');
+
+  return text;
 }
 
 async function callGeminiForBacklog(promptText, mIdx) {

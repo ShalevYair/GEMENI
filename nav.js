@@ -1,5 +1,6 @@
 // All agent IDs that have a dedicated page via agent.html?id=<id>
 const CHAT_AGENT_IDS = new Set([
+  'json-gen',
   'requirements', 'project-manager', 'project-coordinator', 'spec-king',
   'software-architect', 'platform-architect', 'tender-writer', 'outsystems',
   'storyteller', 'design-queen', 'dev-champ', 'tester', 'security', 'natural',
@@ -12,6 +13,7 @@ function agentHref(id) {
 }
 
 const AGENTS = [
+  { id: 'json-gen',             name: 'JSON',                 icon: '{ }' },
   { id: 'natural',              name: 'NATURAL',              icon: '🖥️' },
   { id: 'requirements',        name: 'אוסף הדרישות',       icon: '📋' },
   { id: 'project-manager',     name: 'מנהל הפרויקט',        icon: '📊' },

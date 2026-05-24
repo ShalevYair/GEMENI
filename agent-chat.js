@@ -9,6 +9,7 @@ import { initSpecKingModal }     from './modals/spec-king-modal.js';
 import { initRequirementsModal } from './modals/requirements-modal.js';
 import { initNaturalModal }      from './modals/natural-modal.js';
 import { initDynamicModal }     from './modals/dynamic-modal.js';
+import { initJsonModal }        from './modals/json-modal.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
 const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
@@ -66,6 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (agentId === 'requirements')       initRequirementsModal();
   if (agentId === 'natural')            initNaturalModal();
   if (agentId === 'dynamic')            initDynamicModal();
+  if (agentId === 'json-gen')           initJsonModal();
   if (apiKey) showChatReady();
   bindEvents();
 });
@@ -189,6 +191,9 @@ function renderEmptyState() {
         : ''}
       ${agentId === 'dynamic'
         ? `<button class="chip chip--generate" onclick="window.openDynamicModal()">🔮 הפעל סוכן דינמי</button>`
+        : ''}
+      ${agentId === 'json-gen'
+        ? `<button class="chip chip--generate" onclick="window.openJsonModal()">{ } צור JSON מאפיון — מוכן להעלאה ל-Builder</button>`
         : ''}
     </div>`;
   msgs.appendChild(empty);

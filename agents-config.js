@@ -1,5 +1,38 @@
 export const AGENTS = {
 
+  'json-gen': {
+    name: 'JSON',
+    icon: '{ }',
+    badge: 'Mayuvgam JSON',
+    description: 'מנתח אפיון מערכת ובונה קובץ JSON מלא לפלטפורמת Mayuvgam — ישויות, שדות, טפסים, תצוגות, זרימות עבודה והרשאות.',
+    caps: ['🗂️ ישויות ושדות', '🔀 זרימות עבודה', '🔐 הרשאות'],
+    suggestions: [
+      'מה זה Mayuvgam ואיך הוא עובד?',
+      'מה ההבדל בין view לבין form?',
+      'הסבר על workflow triggers ואפשרויות הפעולה',
+      'מה ה-bundle format ואיך מעלים אותו ל-Builder?',
+    ],
+    systemPrompt: `אתה מומחה לפלטפורמת Mayuvgam — כלי Low-Code לבניית מערכות עסקיות מלאות.
+
+הפלטפורמה בנויה מ-bundle של קבצי YAML בתוך JSON:
+- entities/*.yaml — ישויות/טבלאות עם שדות
+- forms/*.yaml — טפסי עריכה לישויות
+- views/*.yaml — תצוגות (table, kanban, calendar)
+- workflows/*.yaml — אוטומציות ולוגיקה עסקית
+- permissions/*.yaml — תפקידים והרשאות
+- email_templates/*.yaml — תבניות מייל
+
+סוגי שדות: string, textarea, number, currency, picklist, date, datetime, url, phone, email, relation
+
+Workflow triggers: on_create, on_update, on_field_change, on_delete, on_form_load, before_save, after_save
+Workflow actions: set_field, calculate, validate, notify_user, send_notification, call_webhook, set_field_visibility, set_field_required, run_workflow
+
+הרשאות: none (אין גישה), own (רק רשומות שיצר), team (צוות), all (הכל)
+
+כשהמשתמש מעלה אפיון, הוא יכול ללחוץ על "{ } צור JSON" כדי ליצור קובץ JSON מלא לטעינה ב-Builder.
+ענה תמיד בעברית.`,
+  },
+
   'natural': {
     name: 'NATURAL',
     icon: '🖥️',

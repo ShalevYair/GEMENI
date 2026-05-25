@@ -453,27 +453,37 @@ Start your response with { and end with }`;
 
 const EXCEL_SECTION_GUIDE = {
   entities:
-    '"entities": array of objects — each object: {name (snake_case English), label (Hebrew display name), description (Hebrew description of the entity purpose)}',
+    '"entities": array of objects — each: {name (snake_case English), label (Hebrew singular label), label_plural (Hebrew plural label), icon (lucide icon name, optional e.g. "file-text", "users", "clipboard-list")}. NEVER include: picklist/lookup entities, notes, documents, change_log, sequence, login, roles, alerts.',
+
   fields:
-    '"fields": array of objects — each object: {entity (entity name), name (snake_case field name), label (Hebrew label), type (one of: string/textarea/number/currency/picklist/date/datetime/url/phone/email/relation), required (כן or לא), options (comma-separated values for picklist; related entity name for relation; empty for others), default_value (default value or empty), description (Hebrew, optional)}',
+    '"fields": array of objects — each: {entity (entity name), name (snake_case field name), label (Hebrew label), type (one of: string/textarea/number/currency/picklist/date/datetime/url/phone/email/relation), required (כן or לא), options (comma-separated picklist values e.g. "active,inactive,pending"; empty for non-picklist), default (default value or empty), relation_entity (target entity name for relation type; empty otherwise), display_field (display field in related entity for relation type; empty otherwise), max_length (max chars for string; empty otherwise), min (min value for number; empty otherwise), max (max value for number; empty otherwise), rows (row count for textarea; empty otherwise), currency (currency symbol for currency type e.g. "₪"; empty otherwise)}. NEVER include system fields: id, created_at, updated_at, created_by, updated_by, owner_id, record_number.',
+
   workflows:
-    '"workflows": array of objects — each object: {name (snake_case), label (Hebrew name), entity (entity name), trigger (one of: on_create/on_update/on_field_change/on_delete/on_form_load/before_save/after_save), condition (Hebrew description of when this fires, or empty if always), actions_summary (Hebrew summary of what this workflow does)}',
+    '"workflows": array of objects — each: {name (snake_case), label (Hebrew), entity (entity name), trigger_type (one of: on_create/on_update/on_field_change/on_delete/on_form_load/before_save/after_save), trigger_fields (comma-separated field names; only for on_field_change; empty otherwise), conditions (YAML block or empty — e.g. "field: status\\nop: equals\\nvalue: approved"), actions (YAML array — required — e.g. "- type: set_field\\n  target: status\\n  value: active"), enabled (true or false), priority (integer, default 100)}.',
+
   permissions:
-    '"permissions": array of objects — one row per role×entity combination — each object: {role (snake_case role name), role_label (Hebrew role name), entity (entity name), read (none/own/team/all), create (none/own/team/all), update (none/own/team/all), delete (none/own/team/all)}',
+    '"permissions": array — one row per role×entity combination — each: {role (snake_case role name), role_label (Hebrew role name), entity (entity name), read (none/own/team/all), create (true or false — not a scope level), update (none/own/team/all), delete (none/own/team/all)}. Include ALL role×entity combinations.',
+
   forms:
-    '"forms": array of objects — each object: {entity (entity name), form_name (snake_case), form_label (Hebrew), sections_fields (Hebrew section names with field lists, e.g. "פרטים בסיסיים: name, email | פרטי קשר: phone, address")}',
+    '"forms": array — ONE ROW PER SECTION (a form with 3 sections = 3 rows with same entity/form_name/label/is_default) — each: {entity (entity name), form_name (snake_case), label (Hebrew form title), is_default (כן or לא), section_title (Hebrew section heading), columns (1 or 2), fields (comma-separated field names optionally with :width suffix, e.g. "request_type:12, company_name:6, phone:6")}. Rules: one form per entity; tabs/כרטסות are sections in the same form; no login form.',
+
   views:
-    '"views": array of objects — each object: {entity (entity name), view_name (snake_case), view_label (Hebrew), type (table/kanban/calendar), is_default (כן or לא), displayed_fields (comma-separated field names)}',
+    '"views": array — each: {entity, view_name (snake_case), label (Hebrew), type (table/kanban/calendar), is_default (כן or לא), columns (comma-separated "field:display_type:width" e.g. "name:link:220,status:badge:140,created_at:date:130"), sort_field (field name or empty), sort_direction (asc or desc), page_size (number, default 25), kanban_field (picklist field for kanban type; empty otherwise), kanban_columns (comma-separated picklist values for kanban columns; empty otherwise), calendar_date_field (date field for calendar type; empty otherwise)}. Every entity must have at least one is_default=כן view.',
+
   email_templates:
-    '"email_templates": array of objects — each object: {name (snake_case), label (Hebrew), subject (Hebrew subject line), body_preview (first 120 chars of body in Hebrew)}',
+    '"email_templates": array — each: {name (snake_case), label (Hebrew), subject (Hebrew email subject), body_html (full HTML body with {{field_name}} placeholders — e.g. {{created_by.email}}, {{owner_id.email}}, {{record_number}})}. Every template MUST have a matching workflow with a send_notification action.',
+
   roles:
-    '"roles": array of objects — role definitions only (not per-entity CRUD, that is in "permissions") — each object: {name (snake_case), label (Hebrew role name), description (Hebrew, what this role represents in the system)}',
+    '"roles": array — role definitions — each: {name (snake_case), label (Hebrew role name), description (Hebrew — what this role represents in the system)}',
+
   groups:
-    '"groups": array of objects — each object: {name (snake_case), label (Hebrew group name), description (Hebrew), roles (comma-separated role names that belong to this group)}',
+    '"groups": array — each: {name (snake_case), label (Hebrew group name), description (Hebrew), roles (comma-separated role names in this group)}',
+
   dashboards:
-    '"dashboards": array of objects — each object: {name (snake_case), label (Hebrew dashboard name), description (Hebrew), assigned_roles (comma-separated role names that can access this dashboard)}',
+    '"dashboards": array — each: {name (snake_case), label (Hebrew dashboard name), description (Hebrew), assigned_roles (comma-separated role names with access)}',
+
   widgets:
-    '"widgets": array of objects — one row per widget — each object: {dashboard (dashboard name), name (snake_case widget name), label (Hebrew widget title), entity (entity name), type (count/sum/list/distribution), color (blue/green/red/orange/purple/gray), sum_field (field name for sum type; empty otherwise), group_by_field (field name for grouping in list/distribution; empty if none), rows_limit (max rows for list type as number; empty otherwise), filters (semicolon-separated "field=operator=value" triplets, e.g. "status==active;type==premium"; empty if none)}',
+    '"widgets": array — one row per widget — each: {dashboard (dashboard name), name (snake_case widget name), label (Hebrew widget title), entity (entity name), type (count/sum/list/distribution), color (blue/green/red/orange/purple/gray), sum_field (field name for sum type; empty otherwise), group_by_field (field name for grouping in list/distribution; empty if none), rows_limit (max rows for list type as number; empty otherwise), filters (semicolon-separated "field=operator=value" triplets e.g. "status==active;type==premium"; empty if none)}',
 };
 
 function buildExcelChunkPrompt(specText, sections) {
@@ -481,8 +491,7 @@ function buildExcelChunkPrompt(specText, sections) {
   const guides  = allSecs.map(s => EXCEL_SECTION_GUIDE[s]).filter(Boolean);
 
   return `You are analyzing a system specification to produce structured tabular data for an Excel review spreadsheet.
-
-The user needs to verify the complete system design before generating a full Mayuvgam Low-Code configuration.
+The system will be built on Mayuvgam — a Low-Code CRM platform with entities, forms, views, workflows, and permissions.
 
 ## System Specification
 ${specText}
@@ -497,12 +506,19 @@ Return ONLY a valid JSON object with these exact keys:
 
 ## Critical Rules
 1. Return ONLY a JSON object — no explanation, no markdown, no code blocks, no comments
-2. All name/entity/role/form_name/view_name values: snake_case English only
-3. All label/description/condition/actions_summary/subject/body_preview values: Hebrew
-4. "permissions" must include one row per (role × entity) combination — list ALL combinations
-5. "fields" must include ALL fields for EVERY entity (including title/name string, status picklist, created_at datetime)
-6. For picklist type: "options" = all possible values comma-separated. For relation: "options" = related entity name
-7. Start your response with { and end with }`;
+2. All name/entity/role/form_name/view_name/workflow name values: snake_case English only
+3. All label/description/Hebrew text values: Hebrew
+4. NEVER include system fields in the fields array: id, created_at, updated_at, created_by, updated_by, owner_id, record_number — these are automatically added by the platform
+5. NEVER create an entity whose sole purpose is a lookup list — use type:picklist with options in the field itself
+6. NEVER create entities, fields, or forms for platform built-ins: notes, documents, change_log, sequence numbers, login/authentication, notifications/alerts
+7. "permissions" must include one row per (role × entity) combination — list ALL combinations explicitly
+8. "fields" must include ALL domain fields for EVERY entity; include a status picklist and a main name/title string field at minimum
+9. "forms" has ONE ROW PER SECTION — a form with 3 sections needs 3 rows sharing the same entity/form_name/label/is_default
+10. One form per entity; tabs/כרטסות are sections (separate rows) within the SAME form, never separate forms
+11. Role-based field visibility → implement as on_form_load or on_field_change workflows, NOT as extra forms
+12. Every email_template entry MUST have a matching workflow with a send_notification action using that template name
+13. Workflow conditions must be valid YAML (or empty); workflow actions must be a valid YAML array
+14. Start your response with { and end with }`;
 }
 
 // ── Excel file builder ───────────────────────────────────────────────────────
@@ -511,20 +527,20 @@ const EXCEL_SHEETS_CONFIG = [
   {
     key:     'entities',
     title:   'ישויות',
-    headers: ['שם מערכתי', 'כותרת עברית', 'תיאור'],
-    cols:    ['name', 'label', 'description'],
+    headers: ['שם מערכתי', 'כותרת עברית', 'כותרת רבים', 'אייקון'],
+    cols:    ['name', 'label', 'label_plural', 'icon'],
   },
   {
     key:     'fields',
     title:   'שדות',
-    headers: ['ישות', 'שם מערכתי', 'כותרת עברית', 'סוג', 'חובה', 'ערכי רשימה / קשר', 'ברירת מחדל', 'תיאור'],
-    cols:    ['entity', 'name', 'label', 'type', 'required', 'options', 'default_value', 'description'],
+    headers: ['ישות', 'שם מערכתי', 'כותרת עברית', 'סוג', 'חובה', 'ערכי רשימה', 'ברירת מחדל', 'ישות קשורה', 'שדה תצוגה', 'אורך מקס\'', 'מינימום', 'מקסימום', 'שורות', 'מטבע'],
+    cols:    ['entity', 'name', 'label', 'type', 'required', 'options', 'default', 'relation_entity', 'display_field', 'max_length', 'min', 'max', 'rows', 'currency'],
   },
   {
     key:     'workflows',
     title:   'זרימות עבודה',
-    headers: ['שם', 'כותרת', 'ישות', 'אירוע', 'תנאי', 'סיכום פעולות'],
-    cols:    ['name', 'label', 'entity', 'trigger', 'condition', 'actions_summary'],
+    headers: ['שם', 'כותרת', 'ישות', 'אירוע', 'שדות מפעילים', 'תנאים (YAML)', 'פעולות (YAML)', 'פעיל', 'עדיפות'],
+    cols:    ['name', 'label', 'entity', 'trigger_type', 'trigger_fields', 'conditions', 'actions', 'enabled', 'priority'],
   },
   {
     key:     'permissions',
@@ -535,20 +551,20 @@ const EXCEL_SHEETS_CONFIG = [
   {
     key:     'forms',
     title:   'טפסים',
-    headers: ['ישות', 'שם טופס', 'כותרת', 'סעיפים ושדות'],
-    cols:    ['entity', 'form_name', 'form_label', 'sections_fields'],
+    headers: ['ישות', 'שם טופס', 'כותרת טופס', 'ברירת מחדל', 'כותרת סעיף', 'עמודות', 'שדות בסעיף'],
+    cols:    ['entity', 'form_name', 'label', 'is_default', 'section_title', 'columns', 'fields'],
   },
   {
     key:     'views',
     title:   'תצוגות',
-    headers: ['ישות', 'שם תצוגה', 'כותרת', 'סוג', 'ברירת מחדל', 'שדות מוצגים'],
-    cols:    ['entity', 'view_name', 'view_label', 'type', 'is_default', 'displayed_fields'],
+    headers: ['ישות', 'שם תצוגה', 'כותרת', 'סוג', 'ברירת מחדל', 'עמודות (שדה:סוג:רוחב)', 'מיון לפי', 'כיוון מיון', 'גודל עמוד', 'שדה קנבן', 'ערכי קנבן', 'שדה לוח שנה'],
+    cols:    ['entity', 'view_name', 'label', 'type', 'is_default', 'columns', 'sort_field', 'sort_direction', 'page_size', 'kanban_field', 'kanban_columns', 'calendar_date_field'],
   },
   {
     key:     'email_templates',
     title:   'תבניות מייל',
-    headers: ['שם', 'כותרת', 'נושא', 'תצוגה מקדימה'],
-    cols:    ['name', 'label', 'subject', 'body_preview'],
+    headers: ['שם', 'כותרת', 'נושא', 'גוף מייל (HTML)'],
+    cols:    ['name', 'label', 'subject', 'body_html'],
   },
   {
     key:     'roles',

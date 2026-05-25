@@ -10,6 +10,7 @@ const CHUNK_MAP_NORMAL = {
   1: { sections: ['entities'], label: 'ישויות ושדות' },
   2: { sections: ['workflows', 'email_templates'], label: 'זרימות עבודה ותבניות מייל' },
   3: { sections: ['forms', 'views', 'permissions'], label: 'טפסים, תצוגות והרשאות' },
+  4: { sections: ['groups', 'dashboards'], label: 'קבוצות ולוחות מחוונים' },
 };
 
 const CHUNK_MAP_DEEP = {
@@ -17,8 +18,8 @@ const CHUNK_MAP_DEEP = {
   2: { sections: ['forms'], label: 'טפסים' },
   3: { sections: ['views'], label: 'תצוגות' },
   4: { sections: ['workflows'], label: 'זרימות עבודה' },
-  5: { sections: ['permissions'], label: 'הרשאות ותפקידים' },
-  6: { sections: ['email_templates'], label: 'תבניות מייל' },
+  5: { sections: ['permissions', 'groups'], label: 'הרשאות, תפקידים וקבוצות' },
+  6: { sections: ['email_templates', 'dashboards'], label: 'תבניות מייל ולוחות מחוונים' },
 };
 
 // ── Chunk maps — Excel output ────────────────────────────────────────────────
@@ -31,15 +32,16 @@ const EXCEL_CHUNK_MAP_NORMAL = {
   1: { sections: ['entities', 'fields'], label: 'ישויות ושדות' },
   2: { sections: ['workflows', 'permissions', 'email_templates'], label: 'זרימות, הרשאות ומיילים' },
   3: { sections: ['forms', 'views'], label: 'טפסים ותצוגות' },
+  4: { sections: ['roles', 'groups', 'dashboards', 'widgets'], label: 'תפקידים, קבוצות ולוחות מחוונים' },
 };
 
 const EXCEL_CHUNK_MAP_DEEP = {
   1: { sections: ['entities', 'fields'], label: 'ישויות ושדות' },
   2: { sections: ['workflows'], label: 'זרימות עבודה' },
-  3: { sections: ['permissions'], label: 'הרשאות ותפקידים' },
+  3: { sections: ['permissions', 'roles', 'groups'], label: 'הרשאות, תפקידים וקבוצות' },
   4: { sections: ['forms'], label: 'טפסים' },
   5: { sections: ['views'], label: 'תצוגות' },
-  6: { sections: ['email_templates'], label: 'תבניות מייל' },
+  6: { sections: ['email_templates', 'dashboards', 'widgets'], label: 'מיילים ולוחות מחוונים' },
 };
 
 // ── Reference file cache ────────────────────────────────────────────────────
@@ -410,6 +412,8 @@ const SECTION_GUIDE = {
   workflows:       'workflows/*.yaml — all automation rules: validations (before_save), notifications (on_create/on_update), field calculations, visibility rules (on_form_load/on_field_change).',
   permissions:     'permissions/*.yaml — all user roles with read/create/update/delete permissions per entity. Use levels: none, own, team, all.',
   email_templates: 'email_templates/*.yaml — email templates referenced in workflow send_notification actions.',
+  groups:          'groups/*.yaml — user groups/teams: name, label, description, list of assigned roles.',
+  dashboards:      'dashboards/*.yaml — dashboard definitions with widgets. Each widget has: entity, type (count/sum/list/distribution), label, color (blue/green/red/orange/purple/gray), optional filters, optional sum_field (for sum type), optional group_by (for list/distribution), optional rows_limit (for list type).',
 };
 
 function buildChunkPrompt(specText, currentBundle, sections, instructions, examples) {
@@ -462,6 +466,14 @@ const EXCEL_SECTION_GUIDE = {
     '"views": array of objects — each object: {entity (entity name), view_name (snake_case), view_label (Hebrew), type (table/kanban/calendar), is_default (כן or לא), displayed_fields (comma-separated field names)}',
   email_templates:
     '"email_templates": array of objects — each object: {name (snake_case), label (Hebrew), subject (Hebrew subject line), body_preview (first 120 chars of body in Hebrew)}',
+  roles:
+    '"roles": array of objects — role definitions only (not per-entity CRUD, that is in "permissions") — each object: {name (snake_case), label (Hebrew role name), description (Hebrew, what this role represents in the system)}',
+  groups:
+    '"groups": array of objects — each object: {name (snake_case), label (Hebrew group name), description (Hebrew), roles (comma-separated role names that belong to this group)}',
+  dashboards:
+    '"dashboards": array of objects — each object: {name (snake_case), label (Hebrew dashboard name), description (Hebrew), assigned_roles (comma-separated role names that can access this dashboard)}',
+  widgets:
+    '"widgets": array of objects — one row per widget — each object: {dashboard (dashboard name), name (snake_case widget name), label (Hebrew widget title), entity (entity name), type (count/sum/list/distribution), color (blue/green/red/orange/purple/gray), sum_field (field name for sum type; empty otherwise), group_by_field (field name for grouping in list/distribution; empty if none), rows_limit (max rows for list type as number; empty otherwise), filters (semicolon-separated "field=operator=value" triplets, e.g. "status==active;type==premium"; empty if none)}',
 };
 
 function buildExcelChunkPrompt(specText, sections) {
@@ -537,6 +549,30 @@ const EXCEL_SHEETS_CONFIG = [
     title:   'תבניות מייל',
     headers: ['שם', 'כותרת', 'נושא', 'תצוגה מקדימה'],
     cols:    ['name', 'label', 'subject', 'body_preview'],
+  },
+  {
+    key:     'roles',
+    title:   'תפקידים',
+    headers: ['שם מערכתי', 'כותרת', 'תיאור'],
+    cols:    ['name', 'label', 'description'],
+  },
+  {
+    key:     'groups',
+    title:   'קבוצות',
+    headers: ['שם מערכתי', 'כותרת', 'תיאור', 'תפקידים בקבוצה'],
+    cols:    ['name', 'label', 'description', 'roles'],
+  },
+  {
+    key:     'dashboards',
+    title:   'לוחות מחוונים',
+    headers: ['שם מערכתי', 'כותרת', 'תיאור', 'תפקידים עם גישה'],
+    cols:    ['name', 'label', 'description', 'assigned_roles'],
+  },
+  {
+    key:     'widgets',
+    title:   'ווידג\'טים',
+    headers: ['לוח מחוונים', 'שם מערכתי', 'כותרת', 'ישות', 'סוג', 'צבע', 'שדה לסכימה', 'קיבוץ לפי', 'מספר שורות', 'סינונים'],
+    cols:    ['dashboard', 'name', 'label', 'entity', 'type', 'color', 'sum_field', 'group_by_field', 'rows_limit', 'filters'],
   },
 ];
 

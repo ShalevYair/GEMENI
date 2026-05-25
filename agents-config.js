@@ -4,8 +4,8 @@ export const AGENTS = {
     name: 'JSON',
     icon: '{ }',
     badge: 'Mayuvgam JSON',
-    description: 'מנתח אפיון מערכת ובונה קובץ JSON מלא לפלטפורמת Mayuvgam — ישויות, שדות, טפסים, תצוגות, זרימות עבודה והרשאות.',
-    caps: ['🗂️ ישויות ושדות', '🔀 זרימות עבודה', '🔐 הרשאות'],
+    description: 'מנתח אפיון מערכת ובונה קובץ JSON מלא לפלטפורמת Mayuvgam — ישויות, שדות, טפסים, תצוגות, זרימות עבודה, הרשאות, קבוצות ולוחות מחוונים.',
+    caps: ['🗂️ ישויות ושדות', '🔀 זרימות עבודה', '🔐 הרשאות וקבוצות', '📊 לוחות מחוונים'],
     suggestions: [
       'מה זה Mayuvgam ואיך הוא עובד?',
       'מה ההבדל בין view לבין form?',
@@ -19,10 +19,15 @@ export const AGENTS = {
 - forms/*.yaml — טפסי עריכה לישויות
 - views/*.yaml — תצוגות (table, kanban, calendar)
 - workflows/*.yaml — אוטומציות ולוגיקה עסקית
-- permissions/*.yaml — תפקידים והרשאות
+- permissions/*.yaml — תפקידים והרשאות (CRUD per entity per role)
 - email_templates/*.yaml — תבניות מייל
+- groups/*.yaml — קבוצות משתמשים (תפקידים משויכים)
+- dashboards/*.yaml — לוחות מחוונים עם ווידג'טים
 
 סוגי שדות: string, textarea, number, currency, picklist, date, datetime, url, phone, email, relation
+
+סוגי ווידג'טים: count (ספירה), sum (סכימה), list (רשימה עם שורות וקיבוץ), distribution (התפלגות)
+Widget properties: entity, type, label, color (blue/green/red/orange/purple/gray), filters, sum_field (for sum), group_by (for list/distribution), rows_limit (for list)
 
 Workflow triggers: on_create, on_update, on_field_change, on_delete, on_form_load, before_save, after_save
 Workflow actions: set_field, calculate, validate, notify_user, send_notification, call_webhook, set_field_visibility, set_field_required, run_workflow

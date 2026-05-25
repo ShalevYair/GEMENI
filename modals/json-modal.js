@@ -1,6 +1,6 @@
 import { deps } from './deps.js';
 
-// ── Chunk maps ──────────────────────────────────────────────────────────────
+// ── Chunk maps — JSON output ─────────────────────────────────────────────────
 
 const CHUNK_MAP_FAST = {
   1: { sections: 'all', label: 'כל הסעיפים' },
@@ -10,6 +10,7 @@ const CHUNK_MAP_NORMAL = {
   1: { sections: ['entities'], label: 'ישויות ושדות' },
   2: { sections: ['workflows', 'email_templates'], label: 'זרימות עבודה ותבניות מייל' },
   3: { sections: ['forms', 'views', 'permissions'], label: 'טפסים, תצוגות והרשאות' },
+  4: { sections: ['groups', 'dashboards'], label: 'קבוצות ולוחות מחוונים' },
 };
 
 const CHUNK_MAP_DEEP = {
@@ -17,8 +18,30 @@ const CHUNK_MAP_DEEP = {
   2: { sections: ['forms'], label: 'טפסים' },
   3: { sections: ['views'], label: 'תצוגות' },
   4: { sections: ['workflows'], label: 'זרימות עבודה' },
-  5: { sections: ['permissions'], label: 'הרשאות ותפקידים' },
-  6: { sections: ['email_templates'], label: 'תבניות מייל' },
+  5: { sections: ['permissions', 'groups'], label: 'הרשאות, תפקידים וקבוצות' },
+  6: { sections: ['email_templates', 'dashboards'], label: 'תבניות מייל ולוחות מחוונים' },
+};
+
+// ── Chunk maps — Excel output ────────────────────────────────────────────────
+
+const EXCEL_CHUNK_MAP_FAST = {
+  1: { sections: 'all', label: 'כל הסעיפים' },
+};
+
+const EXCEL_CHUNK_MAP_NORMAL = {
+  1: { sections: ['entities', 'fields'], label: 'ישויות ושדות' },
+  2: { sections: ['workflows', 'permissions', 'email_templates'], label: 'זרימות, הרשאות ומיילים' },
+  3: { sections: ['forms', 'views'], label: 'טפסים ותצוגות' },
+  4: { sections: ['roles', 'groups', 'dashboards', 'widgets'], label: 'תפקידים, קבוצות ולוחות מחוונים' },
+};
+
+const EXCEL_CHUNK_MAP_DEEP = {
+  1: { sections: ['entities', 'fields'], label: 'ישויות ושדות' },
+  2: { sections: ['workflows'], label: 'זרימות עבודה' },
+  3: { sections: ['permissions', 'roles', 'groups'], label: 'הרשאות, תפקידים וקבוצות' },
+  4: { sections: ['forms'], label: 'טפסים' },
+  5: { sections: ['views'], label: 'תצוגות' },
+  6: { sections: ['email_templates', 'dashboards', 'widgets'], label: 'מיילים ולוחות מחוונים' },
 };
 
 // ── Reference file cache ────────────────────────────────────────────────────
@@ -41,6 +64,7 @@ async function loadReferenceFiles() {
 
 let jgSpecFiles        = [];
 let jgCurrentBundleFile = null;
+let jgOutputFormat     = 'json';   // 'json' | 'excel'
 
 // ── Init ────────────────────────────────────────────────────────────────────
 
@@ -105,8 +129,28 @@ function injectJsonModal() {
 
         </div>
 
-        <!-- Right column: depth selector -->
+        <!-- Right column: output format + depth selector -->
         <div style="flex:1;padding:1.1rem 1.4rem;overflow-y:auto;">
+
+          <!-- Output format selector -->
+          <div style="margin-bottom:1.1rem;">
+            <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.45rem;">פורמט פלט:</div>
+            <div style="display:flex;border:1.5px solid #e2e8f0;border-radius:9px;overflow:hidden;">
+              <button id="jg-fmt-json" onclick="window.jgSetFormat('json')"
+                style="flex:1;padding:.55rem .75rem;border:none;background:linear-gradient(135deg,#0070d2,#0052cc);color:#fff;font-weight:700;font-size:.84rem;cursor:pointer;font-family:Heebo,sans-serif;transition:all .2s;">
+                { } JSON
+              </button>
+              <button id="jg-fmt-excel" onclick="window.jgSetFormat('excel')"
+                style="flex:1;padding:.55rem .75rem;border:none;background:#f8fafc;color:#64748b;font-weight:600;font-size:.84rem;cursor:pointer;font-family:Heebo,sans-serif;transition:all .2s;">
+                📊 Excel לבדיקה
+              </button>
+            </div>
+            <div id="jg-fmt-desc" style="font-size:.76rem;color:#64748b;margin-top:.35rem;line-height:1.45;">
+              JSON מוכן להעלאה ל-Builder של Mayuvgam
+            </div>
+          </div>
+
+          <!-- Depth selector -->
           <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.55rem;">רמת עומק ומספר קריאות API:</div>
 
           <div style="display:flex;flex-direction:column;gap:.5rem;">
@@ -173,7 +217,7 @@ function injectJsonModal() {
 
       <!-- ── Footer ── -->
       <div style="padding:.9rem 1.5rem;border-top:1px solid #f1f5f9;display:flex;gap:.75rem;justify-content:flex-end;align-items:center;flex-shrink:0;">
-        <span style="font-size:.78rem;color:#94a3b8;margin-left:auto;">הקובץ יורד אוטומטית לאחר היצירה</span>
+        <span id="jg-footer-hint" style="font-size:.78rem;color:#94a3b8;margin-left:auto;">הקובץ יורד אוטומטית לאחר היצירה</span>
         <button onclick="window.closeJsonModal()" style="padding:.5rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.88rem;font-family:Heebo,sans-serif;color:#374151;">ביטול</button>
         <button id="jg-generate-btn" onclick="window.generateJson()" style="padding:.5rem 1.25rem;background:linear-gradient(135deg,#0070d2,#0052cc);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(0,112,210,.35);">{ } צור JSON</button>
       </div>
@@ -191,11 +235,13 @@ window.openJsonModal = function () {
   if (!modal) return;
   jgSpecFiles = [];
   jgCurrentBundleFile = null;
+  jgOutputFormat = 'json';
   jgRenderSpecList();
   jgRenderBundleStatus();
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
   window.jgDepthChanged();
+  window.jgSetFormat('json');
 };
 
 window.closeJsonModal = function () {
@@ -244,6 +290,35 @@ window.jgDepthChanged = function () {
     card.style.borderColor = sel ? '#0070d2' : '#e2e8f0';
     card.style.background  = sel ? 'linear-gradient(135deg,#f0f9ff,#e0f2fe)' : '#fff';
   });
+};
+
+window.jgSetFormat = function (fmt) {
+  jgOutputFormat = fmt;
+  const isJson = fmt === 'json';
+
+  const btnJson  = document.getElementById('jg-fmt-json');
+  const btnExcel = document.getElementById('jg-fmt-excel');
+  const desc     = document.getElementById('jg-fmt-desc');
+  const genBtn   = document.getElementById('jg-generate-btn');
+  const hint     = document.getElementById('jg-footer-hint');
+
+  if (btnJson) {
+    btnJson.style.background  = isJson ? 'linear-gradient(135deg,#0070d2,#0052cc)' : '#f8fafc';
+    btnJson.style.color       = isJson ? '#fff' : '#64748b';
+    btnJson.style.fontWeight  = isJson ? '700' : '600';
+  }
+  if (btnExcel) {
+    btnExcel.style.background = isJson ? '#f8fafc' : 'linear-gradient(135deg,#059669,#047857)';
+    btnExcel.style.color      = isJson ? '#64748b' : '#fff';
+    btnExcel.style.fontWeight = isJson ? '600' : '700';
+  }
+  if (desc) desc.textContent = isJson
+    ? 'JSON מוכן להעלאה ל-Builder של Mayuvgam'
+    : 'גיליון Excel לבדיקה ותיקון — שלב ביניים לפני יצירת ה-JSON הסופי';
+  if (genBtn) genBtn.textContent = isJson ? '{ } צור JSON' : '📊 צור Excel';
+  if (hint)  hint.textContent   = isJson
+    ? 'הקובץ יורד אוטומטית לאחר היצירה'
+    : 'קובץ Excel יורד לבדיקה — תקן ושלח חזרה לסוכן לצורך JSON';
 };
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -312,6 +387,8 @@ function extractJson(text) {
   return null;
 }
 
+// ── JSON prompt builders ─────────────────────────────────────────────────────
+
 function buildAnalysisPrompt(specText) {
   return `Analyze the following system specification and determine how many API calls are needed to generate a complete Mayuvgam configuration bundle.
 
@@ -335,6 +412,8 @@ const SECTION_GUIDE = {
   workflows:       'workflows/*.yaml — all automation rules: validations (before_save), notifications (on_create/on_update), field calculations, visibility rules (on_form_load/on_field_change).',
   permissions:     'permissions/*.yaml — all user roles with read/create/update/delete permissions per entity. Use levels: none, own, team, all.',
   email_templates: 'email_templates/*.yaml — email templates referenced in workflow send_notification actions.',
+  groups:          'groups/*.yaml — user groups/teams: name, label, description, list of assigned roles.',
+  dashboards:      'dashboards/*.yaml — dashboard definitions with widgets. Each widget has: entity, type (count/sum/list/distribution), label, color (blue/green/red/orange/purple/gray), optional filters, optional sum_field (for sum type), optional group_by (for list/distribution), optional rows_limit (for list type).',
 };
 
 function buildChunkPrompt(specText, currentBundle, sections, instructions, examples) {
@@ -369,6 +448,186 @@ ${sectionList.map(s => `- ${s}`).join('\n')}
 
 Start your response with { and end with }`;
 }
+
+// ── Excel prompt builders ────────────────────────────────────────────────────
+
+const EXCEL_SECTION_GUIDE = {
+  entities:
+    '"entities": array of objects — each object: {name (snake_case English), label (Hebrew display name), description (Hebrew description of the entity purpose)}',
+  fields:
+    '"fields": array of objects — each object: {entity (entity name), name (snake_case field name), label (Hebrew label), type (one of: string/textarea/number/currency/picklist/date/datetime/url/phone/email/relation), required (כן or לא), options (comma-separated values for picklist; related entity name for relation; empty for others), default_value (default value or empty), description (Hebrew, optional)}',
+  workflows:
+    '"workflows": array of objects — each object: {name (snake_case), label (Hebrew name), entity (entity name), trigger (one of: on_create/on_update/on_field_change/on_delete/on_form_load/before_save/after_save), condition (Hebrew description of when this fires, or empty if always), actions_summary (Hebrew summary of what this workflow does)}',
+  permissions:
+    '"permissions": array of objects — one row per role×entity combination — each object: {role (snake_case role name), role_label (Hebrew role name), entity (entity name), read (none/own/team/all), create (none/own/team/all), update (none/own/team/all), delete (none/own/team/all)}',
+  forms:
+    '"forms": array of objects — each object: {entity (entity name), form_name (snake_case), form_label (Hebrew), sections_fields (Hebrew section names with field lists, e.g. "פרטים בסיסיים: name, email | פרטי קשר: phone, address")}',
+  views:
+    '"views": array of objects — each object: {entity (entity name), view_name (snake_case), view_label (Hebrew), type (table/kanban/calendar), is_default (כן or לא), displayed_fields (comma-separated field names)}',
+  email_templates:
+    '"email_templates": array of objects — each object: {name (snake_case), label (Hebrew), subject (Hebrew subject line), body_preview (first 120 chars of body in Hebrew)}',
+  roles:
+    '"roles": array of objects — role definitions only (not per-entity CRUD, that is in "permissions") — each object: {name (snake_case), label (Hebrew role name), description (Hebrew, what this role represents in the system)}',
+  groups:
+    '"groups": array of objects — each object: {name (snake_case), label (Hebrew group name), description (Hebrew), roles (comma-separated role names that belong to this group)}',
+  dashboards:
+    '"dashboards": array of objects — each object: {name (snake_case), label (Hebrew dashboard name), description (Hebrew), assigned_roles (comma-separated role names that can access this dashboard)}',
+  widgets:
+    '"widgets": array of objects — one row per widget — each object: {dashboard (dashboard name), name (snake_case widget name), label (Hebrew widget title), entity (entity name), type (count/sum/list/distribution), color (blue/green/red/orange/purple/gray), sum_field (field name for sum type; empty otherwise), group_by_field (field name for grouping in list/distribution; empty if none), rows_limit (max rows for list type as number; empty otherwise), filters (semicolon-separated "field=operator=value" triplets, e.g. "status==active;type==premium"; empty if none)}',
+};
+
+function buildExcelChunkPrompt(specText, sections) {
+  const allSecs = sections === 'all' ? Object.keys(EXCEL_SECTION_GUIDE) : sections;
+  const guides  = allSecs.map(s => EXCEL_SECTION_GUIDE[s]).filter(Boolean);
+
+  return `You are analyzing a system specification to produce structured tabular data for an Excel review spreadsheet.
+
+The user needs to verify the complete system design before generating a full Mayuvgam Low-Code configuration.
+
+## System Specification
+${specText}
+
+## Your Task
+Extract the following sections as structured arrays. Be COMPREHENSIVE — include every entity, every field, every workflow, every role/entity permission combination.
+
+Return ONLY a valid JSON object with these exact keys:
+{
+  ${guides.join(',\n  ')}
+}
+
+## Critical Rules
+1. Return ONLY a JSON object — no explanation, no markdown, no code blocks, no comments
+2. All name/entity/role/form_name/view_name values: snake_case English only
+3. All label/description/condition/actions_summary/subject/body_preview values: Hebrew
+4. "permissions" must include one row per (role × entity) combination — list ALL combinations
+5. "fields" must include ALL fields for EVERY entity (including title/name string, status picklist, created_at datetime)
+6. For picklist type: "options" = all possible values comma-separated. For relation: "options" = related entity name
+7. Start your response with { and end with }`;
+}
+
+// ── Excel file builder ───────────────────────────────────────────────────────
+
+const EXCEL_SHEETS_CONFIG = [
+  {
+    key:     'entities',
+    title:   'ישויות',
+    headers: ['שם מערכתי', 'כותרת עברית', 'תיאור'],
+    cols:    ['name', 'label', 'description'],
+  },
+  {
+    key:     'fields',
+    title:   'שדות',
+    headers: ['ישות', 'שם מערכתי', 'כותרת עברית', 'סוג', 'חובה', 'ערכי רשימה / קשר', 'ברירת מחדל', 'תיאור'],
+    cols:    ['entity', 'name', 'label', 'type', 'required', 'options', 'default_value', 'description'],
+  },
+  {
+    key:     'workflows',
+    title:   'זרימות עבודה',
+    headers: ['שם', 'כותרת', 'ישות', 'אירוע', 'תנאי', 'סיכום פעולות'],
+    cols:    ['name', 'label', 'entity', 'trigger', 'condition', 'actions_summary'],
+  },
+  {
+    key:     'permissions',
+    title:   'הרשאות',
+    headers: ['תפקיד', 'כותרת תפקיד', 'ישות', 'קריאה', 'יצירה', 'עדכון', 'מחיקה'],
+    cols:    ['role', 'role_label', 'entity', 'read', 'create', 'update', 'delete'],
+  },
+  {
+    key:     'forms',
+    title:   'טפסים',
+    headers: ['ישות', 'שם טופס', 'כותרת', 'סעיפים ושדות'],
+    cols:    ['entity', 'form_name', 'form_label', 'sections_fields'],
+  },
+  {
+    key:     'views',
+    title:   'תצוגות',
+    headers: ['ישות', 'שם תצוגה', 'כותרת', 'סוג', 'ברירת מחדל', 'שדות מוצגים'],
+    cols:    ['entity', 'view_name', 'view_label', 'type', 'is_default', 'displayed_fields'],
+  },
+  {
+    key:     'email_templates',
+    title:   'תבניות מייל',
+    headers: ['שם', 'כותרת', 'נושא', 'תצוגה מקדימה'],
+    cols:    ['name', 'label', 'subject', 'body_preview'],
+  },
+  {
+    key:     'roles',
+    title:   'תפקידים',
+    headers: ['שם מערכתי', 'כותרת', 'תיאור'],
+    cols:    ['name', 'label', 'description'],
+  },
+  {
+    key:     'groups',
+    title:   'קבוצות',
+    headers: ['שם מערכתי', 'כותרת', 'תיאור', 'תפקידים בקבוצה'],
+    cols:    ['name', 'label', 'description', 'roles'],
+  },
+  {
+    key:     'dashboards',
+    title:   'לוחות מחוונים',
+    headers: ['שם מערכתי', 'כותרת', 'תיאור', 'תפקידים עם גישה'],
+    cols:    ['name', 'label', 'description', 'assigned_roles'],
+  },
+  {
+    key:     'widgets',
+    title:   'ווידג\'טים',
+    headers: ['לוח מחוונים', 'שם מערכתי', 'כותרת', 'ישות', 'סוג', 'צבע', 'שדה לסכימה', 'קיבוץ לפי', 'מספר שורות', 'סינונים'],
+    cols:    ['dashboard', 'name', 'label', 'entity', 'type', 'color', 'sum_field', 'group_by_field', 'rows_limit', 'filters'],
+  },
+];
+
+function buildAndDownloadExcel(allData, fileNames, depth) {
+  if (!window.XLSX) {
+    deps.appendMessage('error', 'שגיאה: ספריית Excel (XLSX) לא נטענה — רענן את הדף.');
+    return;
+  }
+  const XL = window.XLSX;
+  const wb = XL.utils.book_new();
+  let addedSheets = 0;
+
+  for (const sheet of EXCEL_SHEETS_CONFIG) {
+    const rows = Array.isArray(allData[sheet.key]) ? allData[sheet.key] : [];
+    if (!rows.length) continue;
+    const aoa = [
+      sheet.headers,
+      ...rows.map(r => sheet.cols.map(c => String(r[c] ?? ''))),
+    ];
+    const ws = XL.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = sheet.cols.map((col, i) => ({
+      wch: Math.max(
+        sheet.headers[i].length + 2,
+        Math.min(60, Math.max(...rows.map(r => String(r[col] ?? '').length)) + 2)
+      ),
+    }));
+    XL.utils.book_append_sheet(wb, ws, sheet.title);
+    addedSheets++;
+  }
+
+  if (!addedSheets) {
+    deps.appendMessage('error', 'האקסל ריק — לא נוצרו נתונים. נסה שוב עם עומק גבוה יותר.');
+    return;
+  }
+
+  const ts       = new Date().toISOString().slice(0, 10);
+  const filename = `mayuvgam-review-${ts}.xlsx`;
+  XL.writeFile(wb, filename);
+
+  const counts = EXCEL_SHEETS_CONFIG
+    .filter(s => Array.isArray(allData[s.key]) && allData[s.key].length)
+    .map(s => `- ${s.title}: **${allData[s.key].length}** שורות`)
+    .join('\n');
+
+  const depthLabel = { fast: 'מהיר (1 קריאה)', deep: 'מעמיק (6 קריאות)', auto: 'חכם', normal: 'רגיל (3 קריאות)' }[depth] || depth;
+
+  deps.appendMessage('assistant',
+    `✅ קובץ Excel הורד: \`${filename}\`\n\n` +
+    `**גיליונות בקובץ:**\n${counts}\n\n` +
+    `**קבצי מקור:** ${fileNames} · **עומק:** ${depthLabel}\n\n` +
+    `💡 **הצעד הבא:** בדוק ותקן את הנתונים באקסל — ואז העלה אותו לסוכן שוב ובקש **"צור JSON מהאקסל"**. התוצאה תהיה מדויקת הרבה יותר.`
+  );
+}
+
+// ── Fallback call ────────────────────────────────────────────────────────────
 
 async function callWithFallback(prompt, startModelIdx) {
   let mIdx = startModelIdx;
@@ -405,22 +664,30 @@ window.generateJson = async function () {
     return;
   }
 
+  const outputFmt = jgOutputFormat;
   const depth = document.querySelector('input[name="jg-depth"]:checked')?.value || 'normal';
-  let chunkMap = depth === 'deep' ? CHUNK_MAP_DEEP
-    : depth === 'fast' ? CHUNK_MAP_FAST
-    : depth === 'auto' ? null
-    : CHUNK_MAP_NORMAL;
+
+  let chunkMap;
+  if (outputFmt === 'excel') {
+    chunkMap = depth === 'deep' ? EXCEL_CHUNK_MAP_DEEP
+      : depth === 'fast' ? EXCEL_CHUNK_MAP_FAST
+      : depth === 'auto' ? null
+      : EXCEL_CHUNK_MAP_NORMAL;
+  } else {
+    chunkMap = depth === 'deep' ? CHUNK_MAP_DEEP
+      : depth === 'fast' ? CHUNK_MAP_FAST
+      : depth === 'auto' ? null
+      : CHUNK_MAP_NORMAL;
+  }
 
   window.closeJsonModal();
   deps.hideEmpty();
   deps.setLoading(true);
   const progressId = deps.appendTyping();
 
-  // Load reference files
   deps.updateTyping(progressId, 'טוען קבצי הפניה…');
   await loadReferenceFiles();
 
-  // Read spec files
   let specText = '';
   const fileNames = jgSpecFiles.map(f => f.name).join(', ');
   try {
@@ -443,7 +710,6 @@ window.generateJson = async function () {
     return;
   }
 
-  // Read current bundle if provided
   let currentBundleText = '';
   if (jgCurrentBundleFile) {
     try { currentBundleText = await jgCurrentBundleFile.text(); } catch {}
@@ -452,10 +718,11 @@ window.generateJson = async function () {
   const instructions = cachedInstructions || '';
   const examples     = cachedExamples     || '{}';
   let jgModelIdx     = deps.getModelIdx();
-  const allChunks    = {};
+
+  // accumulated result — object for JSON, merged arrays for Excel
+  const accumulated = {};
 
   try {
-    // Auto depth: analysis call
     if (depth === 'auto') {
       deps.updateTyping(progressId, '✨ מנתח מורכבות האפיון…');
       const analysisRaw = await callWithFallback(buildAnalysisPrompt(specText), jgModelIdx);
@@ -464,12 +731,18 @@ window.generateJson = async function () {
         try {
           const parsed = JSON.parse(m[0]);
           const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
-          chunkMap = n <= 1 ? CHUNK_MAP_FAST : n <= 3 ? CHUNK_MAP_NORMAL : CHUNK_MAP_DEEP;
+          if (outputFmt === 'excel') {
+            chunkMap = n <= 1 ? EXCEL_CHUNK_MAP_FAST : n <= 3 ? EXCEL_CHUNK_MAP_NORMAL : EXCEL_CHUNK_MAP_DEEP;
+          } else {
+            chunkMap = n <= 1 ? CHUNK_MAP_FAST : n <= 3 ? CHUNK_MAP_NORMAL : CHUNK_MAP_DEEP;
+          }
           const actual = Object.keys(chunkMap).length;
           deps.appendMessage('assistant', `✨ **ניתוח:** ${parsed.reason || ''}\n→ נבחרו **${actual} קריאות API**`);
-        } catch { chunkMap = CHUNK_MAP_NORMAL; }
+        } catch {
+          chunkMap = outputFmt === 'excel' ? EXCEL_CHUNK_MAP_NORMAL : CHUNK_MAP_NORMAL;
+        }
       } else {
-        chunkMap = CHUNK_MAP_NORMAL;
+        chunkMap = outputFmt === 'excel' ? EXCEL_CHUNK_MAP_NORMAL : CHUNK_MAP_NORMAL;
       }
     }
 
@@ -478,11 +751,24 @@ window.generateJson = async function () {
     for (let i = 1; i <= total; i++) {
       const chunk = chunkMap[i];
       deps.updateTyping(progressId, `מייצר ${i} מתוך ${total}… (${chunk.label})`);
-      const prompt  = buildChunkPrompt(specText, currentBundleText, chunk.sections, instructions, examples);
+
+      const prompt = outputFmt === 'excel'
+        ? buildExcelChunkPrompt(specText, chunk.sections)
+        : buildChunkPrompt(specText, currentBundleText, chunk.sections, instructions, examples);
+
       const rawText = await callWithFallback(prompt, jgModelIdx);
       const parsed  = extractJson(rawText);
+
       if (parsed && typeof parsed === 'object') {
-        Object.assign(allChunks, parsed);
+        if (outputFmt === 'excel') {
+          for (const [key, val] of Object.entries(parsed)) {
+            if (Array.isArray(val)) {
+              accumulated[key] = [...(accumulated[key] || []), ...val];
+            }
+          }
+        } else {
+          Object.assign(accumulated, parsed);
+        }
       } else {
         deps.appendMessage('error', `⚠️ חלק ${i} (${chunk.label}) לא הוחזר כ-JSON תקין — דולג.`);
       }
@@ -490,15 +776,22 @@ window.generateJson = async function () {
   } catch (err) {
     deps.removeTyping(progressId);
     deps.setLoading(false);
-    deps.appendMessage('error', 'שגיאה ביצירת JSON: ' + err.message);
+    deps.appendMessage('error', 'שגיאה ביצירת הפלט: ' + err.message);
     return;
   }
 
   deps.removeTyping(progressId);
   deps.setLoading(false);
 
+  // ── Excel output ──
+  if (outputFmt === 'excel') {
+    buildAndDownloadExcel(accumulated, fileNames, depth);
+    return;
+  }
+
+  // ── JSON output ──
   const finalBundle = Object.fromEntries(
-    Object.entries(allChunks).filter(([k]) => !k.startsWith('_'))
+    Object.entries(accumulated).filter(([k]) => !k.startsWith('_'))
   );
 
   if (!Object.keys(finalBundle).length) {
@@ -506,7 +799,6 @@ window.generateJson = async function () {
     return;
   }
 
-  // Auto download
   const ts       = new Date().toISOString().slice(0, 10);
   const filename = `mayuvgam-${ts}.json`;
   const blob     = new Blob([JSON.stringify(finalBundle, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -515,7 +807,6 @@ window.generateJson = async function () {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 
-  // Build summary
   const count = prefix => Object.keys(finalBundle).filter(k => k.startsWith(prefix + '/')).length;
   const entityC = count('entities'), formC  = count('forms'),     viewC  = count('views');
   const wfC     = count('workflows'), permC  = count('permissions'), emailC = count('email_templates');

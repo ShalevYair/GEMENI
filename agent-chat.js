@@ -28,6 +28,9 @@ let typingCounter   = 0;
 let pendingFile     = null;
 let modelIdx        = 0; // current position in MODEL_CHAIN
 
+let overlayTimerInterval = null;
+let overlayStartTime     = null;
+
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 const agentId = new URLSearchParams(location.search).get('id');
 const agent   = AGENTS[agentId];
@@ -56,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     MAX_OUTPUT_TOKENS,
   });
 
+  injectGenerationOverlay();
   populateHero();
   renderEmptyState();
   if (agentId === 'storyteller')       initStorytellerModal();
@@ -668,6 +672,7 @@ function updateTyping(id, text) {
   if (!el) return;
   el.querySelector('.chat-bubble').textContent = text;
   el.scrollIntoView({ block: 'nearest' });
+  showOverlayWithText(text);
 }
 
 function hideEmpty() {
@@ -679,6 +684,7 @@ function setLoading(val) {
   document.getElementById('send-btn').disabled      = val;
   document.getElementById('chat-input').disabled    = val;
   document.getElementById('file-btn').disabled      = val;
+  if (!val) hideOverlay();
 }
 
 function autoResize(el) {
@@ -757,6 +763,145 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null) {
   }
 
   return text;
+}
+
+// ── Generation progress overlay ───────────────────────────────────────────
+
+function injectGenerationOverlay() {
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes gen-overlay-spin { to { transform: rotate(360deg); } }
+    @keyframes gen-overlay-bar  { 0% { background-position: 200% center; } to { background-position: -200% center; } }
+    #gen-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(15,23,42,.72);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      z-index: 2000; align-items: center; justify-content: center;
+      font-family: Heebo, sans-serif; direction: rtl;
+    }
+    #gen-overlay.active { display: flex; }
+    #gen-overlay-card {
+      background: #fff; border-radius: 22px;
+      padding: 2.25rem 2.5rem 2rem;
+      max-width: 400px; width: calc(100% - 2.5rem);
+      text-align: center;
+      box-shadow: 0 30px 80px rgba(0,0,0,.28);
+    }
+    #gen-overlay-spinner {
+      width: 54px; height: 54px;
+      border: 5px solid #e2e8f0; border-top-color: #0070d2;
+      border-radius: 50%;
+      animation: gen-overlay-spin .85s linear infinite;
+      margin: 0 auto 1.4rem;
+    }
+    #gen-overlay-step {
+      font-size: 2rem; font-weight: 800;
+      color: #0070d2; line-height: 1.1; margin-bottom: .3rem;
+    }
+    #gen-overlay-step.gen-hidden { display: none; }
+    #gen-overlay-progress {
+      height: 7px; background: #e2e8f0; border-radius: 99px;
+      overflow: hidden; margin: .7rem 0 1rem;
+    }
+    #gen-overlay-progress.gen-hidden { display: none; }
+    #gen-overlay-progress-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(270deg, #38bdf8, #0070d2, #38bdf8);
+      background-size: 200% 200%;
+      animation: gen-overlay-bar 2s linear infinite;
+      transition: width .5s ease;
+      width: 0%;
+    }
+    #gen-overlay-chunk-label {
+      font-size: .98rem; font-weight: 600; color: #1e293b;
+      margin-bottom: .3rem; min-height: 1.4em;
+    }
+    #gen-overlay-status {
+      font-size: .82rem; color: #64748b;
+      margin-bottom: 1.1rem; min-height: 1.2em;
+    }
+    #gen-overlay-hint {
+      font-size: .78rem; color: #94a3b8;
+      border-top: 1px solid #f1f5f9;
+      padding-top: .75rem; line-height: 1.55;
+    }
+    #gen-overlay-elapsed {
+      font-size: .73rem; color: #cbd5e1; margin-top: .3rem;
+    }
+  `;
+  document.head.appendChild(style);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'gen-overlay';
+  overlay.innerHTML = `
+    <div id="gen-overlay-card">
+      <div id="gen-overlay-spinner"></div>
+      <div id="gen-overlay-step" class="gen-hidden"></div>
+      <div id="gen-overlay-progress" class="gen-hidden">
+        <div id="gen-overlay-progress-fill"></div>
+      </div>
+      <div id="gen-overlay-chunk-label"></div>
+      <div id="gen-overlay-status">מכין…</div>
+      <div id="gen-overlay-hint">כל שלב אורך בדרך כלל 2–4 דקות — אנא המתן</div>
+      <div id="gen-overlay-elapsed"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function showOverlayWithText(text) {
+  const overlay = document.getElementById('gen-overlay');
+  if (!overlay) return;
+
+  if (!overlay.classList.contains('active')) {
+    overlay.classList.add('active');
+    overlayStartTime = Date.now();
+    if (overlayTimerInterval) clearInterval(overlayTimerInterval);
+    overlayTimerInterval = setInterval(updateOverlayElapsed, 1000);
+    updateOverlayElapsed();
+  }
+
+  // Parse "מייצר 2 מתוך 4… (label)" / "מייצר חלק 2 מתוך 4…" / "מעבד חלק 2 מתוך 4"
+  const stepMatch  = text.match(/(\d+)\s+מתוך\s+(\d+)/);
+  const labelMatch = text.match(/\(([^)]+)\)/);
+
+  const stepEl     = document.getElementById('gen-overlay-step');
+  const progressEl = document.getElementById('gen-overlay-progress');
+  const fillEl     = document.getElementById('gen-overlay-progress-fill');
+  const labelEl    = document.getElementById('gen-overlay-chunk-label');
+  const statusEl   = document.getElementById('gen-overlay-status');
+
+  if (stepMatch) {
+    const cur   = parseInt(stepMatch[1]);
+    const total = parseInt(stepMatch[2]);
+    stepEl.textContent = `שלב ${cur} מתוך ${total}`;
+    stepEl.classList.remove('gen-hidden');
+    progressEl.classList.remove('gen-hidden');
+    fillEl.style.width  = `${Math.round((cur / total) * 100)}%`;
+    labelEl.textContent = labelMatch ? labelMatch[1] : '';
+    statusEl.textContent = 'עובד על השלב…';
+  } else {
+    stepEl.classList.add('gen-hidden');
+    progressEl.classList.add('gen-hidden');
+    labelEl.textContent  = '';
+    statusEl.textContent = text;
+  }
+}
+
+function hideOverlay() {
+  const overlay = document.getElementById('gen-overlay');
+  if (overlay) overlay.classList.remove('active');
+  if (overlayTimerInterval) { clearInterval(overlayTimerInterval); overlayTimerInterval = null; }
+}
+
+function updateOverlayElapsed() {
+  const el = document.getElementById('gen-overlay-elapsed');
+  if (!el || !overlayStartTime) return;
+  const secs = Math.floor((Date.now() - overlayStartTime) / 1000);
+  const m    = Math.floor(secs / 60);
+  const s    = secs % 60;
+  el.textContent = m > 0
+    ? `זמן שחלף: ${m}:${String(s).padStart(2, '0')}`
+    : `זמן שחלף: ${s} שניות`;
 }
 
 async function callGeminiForBacklog(promptText, mIdx) {

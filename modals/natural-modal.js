@@ -45,6 +45,14 @@ Use flowchart TD, short Hebrew labels, rhombus for decisions, subprocess shape f
 
 // ── Prompt section blocks ─────────────────────────────────────────────────
 
+const OUTPUT_FORMATS_BASIC = `
+**פורמטים נדרשים בפלט זה:**
+- בסיום סעיף 3, הפק תרשים Mermaid של זרימת התהליך הראשית (flowchart TD).
+- הפק את הטבלאות הבאות בפורמט excel-table:
+  - <excel-table name="מיפוי קלט-פלט"> — כל פרמטר קלט ופלט (עמודות: שם_מקורי, כיוון, סוג_ואורך, תיאור_עסקי)
+  - <excel-table name="קודי שגיאה"> — כל RESPONSE-CODE/ON ERROR (עמודות: קוד, תנאי_הפעלה, משמעות_עסקית, פעולה)
+  - <excel-table name="גישות נתונים"> — כל READ/FIND/STORE/UPDATE/DELETE (עמודות: מקור, פעולה, מפתח_תנאי, מטרה_עסקית)`;
+
 const OUTPUT_FORMATS_PART1 = `
 **פורמטים נדרשים בחלק א':**
 - בסיום סעיף 3, הפק תרשים Mermaid של זרימת התהליך (flowchart TD).
@@ -80,6 +88,54 @@ const OUTPUT_FORMATS_HIGH_3 = `
   </drawio-xml>`;
 
 // ── Section text blocks ───────────────────────────────────────────────────
+
+const SECTIONS_ALL = `
+## Output — All Sections:
+
+### 1. מטאדטה
+| שדה | ערך |
+|-----|-----|
+| שם האובייקט | |
+| סוג | Program / Subprogram / Subroutine / Map / Copycode / Helproutine |
+| מטרה כללית | (משפט אחד) |
+| ישויות עסקיות | (Vehicles / Owners / Licenses — מה הקוד נוגע בו) |
+| קלטים | |
+| פלטים | |
+| תלויות חיצוניות | |
+| בסיסי נתונים / קבצים | |
+
+### 2. תיאור עסקי
+3-6 שורות: מה הקוד עושה ולמה, מנקודת מבט עסקית. ההקשר התהליכי, הבעיה שנפתרת, המשתמש הסופי.
+
+### 3. זרימה לוגית — שלבים מרכזיים
+רשימה ממוספרת. כל שלב = פעולה לוגית משמעותית.
+- אתחולים רצופים → שלב אחד.
+- IF/DECIDE → שלב נפרד + תת-סעיפים לכל ענף.
+- READ/FIND/SELECT → שלב נפרד: DDM + תנאי + מה אם לא נמצא.
+- לולאה → שלב נפרד: מה עוברים + כל איטרציה + יציאה.
+- STORE/UPDATE/DELETE/END TRANSACTION → שלב נפרד.
+- CALLNAT/PERFORM → שלב נפרד: שם + קלט/פלט.
+- INPUT/REINPUT → שלב נפרד.
+- WRITE/DISPLAY → שלב נפרד.
+
+### 4. כללים עסקיים מרכזיים
+כל כלל עסקי מ-IF/DECIDE/WHERE/WHEN. פורמט: "אם [תנאי] → [פעולה/חסימה/מסלול]"
+כלול גם מספרי קסם (Hardcoded values) ומשמעותם העסקית.
+
+### 5. גישות לנתונים (CRUD)
+טבלה: מקור | פעולה | מפתח/תנאי | מטרה עסקית
+
+### 6. נקודות אינטגרציה
+לכל CALLNAT/FETCH/CALL: שם, סוג, פרמטרים (קלט/פלט), תפקיד עסקי.
+
+### 7. היסטוריית תחזוקה
+חפש הערות עם תאריכים, "BUS"/"BUG"/"Y2K"/שמות מפתחים. אם אין — ציין.
+
+### 8. טיפול בשגיאות
+ON ERROR? RESPONSE-CODE? כשל DB? BACKOUT TRANSACTION?
+
+### 9. ביקורת בונה
+חוב טכני, סיכונים, חוסר בהירות, הצעות שיפור.`;
 
 const SECTIONS_PART1 = `
 ## Output — Part A (Sections 1–4):
@@ -315,7 +371,7 @@ function injectNaturalModal() {
           </label>
           <div id="nat-file-display" style="margin-top:.5rem;"></div>
           <div id="nat-multifile-note" style="display:none;margin-top:.4rem;padding:.45rem .7rem;background:#fefce8;border:1px solid #fde68a;border-radius:7px;font-size:.78rem;color:#92400e;">
-            💡 מצב ריבוי קבצים — ניתוח אוטומטי של כל קובץ + קשרים. לשאלה ספציפית, בחר "שאלה חופשית".
+            💡 מצב ריבוי קבצים — יתבצע ניתוח כל קובץ בנפרד + ניתוח קשרים ותלויות בין הקבצים. בחירת עומק מתעלמת במצב זה.
           </div>
         </div>
 
@@ -336,7 +392,6 @@ function injectNaturalModal() {
               { v:'migration',   checked:false, label:'Migration Readiness',calls:'3 קריאות', tip:'להסבה למערכת מודרנית.\nכולל: Enterprise + ניתוח מסלול מיגרציה, מיפוי Adabas→SQL, מיפוי DPT לקבועים/קונפיגורציה, הערכת סיכונים.\nמתאים: פרויקטי מודרניזציה.' },
               { v:'rewrite',     checked:false, label:'Rewrite Blueprint',  calls:'3 קריאות', tip:'למתכנת שיכתוב את הקוד מחדש בשפה מודרנית.\nכולל: Enterprise + מפרט ממשקים מלא, תרחישי בדיקה, הצעת ארכיטקטורה.\nמתאים: מעבר שפה מוחלט.' },
               { v:'code-change', checked:false, label:'Code Change',        calls:'2 קריאות', tip:'לניתוח השפעת שינוי נקודתי.\nמגדיר את השינוי המבוקש ומנתח: אילו משתנים ומודולים מושפעים, לפני/אחרי פסאודו-קוד, סיכון רגרסיה.\nמתאים: בקשת שינוי ספציפית.' },
-              { v:'question',    checked:false, label:'שאלה חופשית',        calls:'1 קריאה',  tip:'שאל שאלה ספציפית על הקוד.\nמשיב ממוקד בצ\'\'אט: הסבר לוגיקה, חיפוש תנאי, השוואה בין קבצים, ועוד.\nהקבצים נשמרים בהקשר לשאלות המשך.' },
             ].map(o => `
             <label style="display:flex;align-items:center;gap:.45rem;cursor:pointer;font-size:.83rem;padding:.15rem 0;">
               <input type="radio" name="nat-depth" value="${o.v}" ${o.checked ? 'checked' : ''} style="accent-color:#0891b2;" onchange="window.natDepthChanged()">
@@ -350,12 +405,6 @@ function injectNaturalModal() {
           <div id="nat-change-field" style="display:none;margin-top:.55rem;padding:.6rem .75rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;">
             <div style="font-size:.8rem;font-weight:600;color:#92400e;margin-bottom:.3rem;">תאר את השינוי המבוקש:</div>
             <textarea id="nat-change-desc" rows="2" placeholder="לדוגמה: הוספת פטור ל-4 שנים לרכבים חשמליים רשומים אחרי 2024." style="width:100%;padding:.45rem .6rem;border:1px solid #fed7aa;border-radius:6px;font-family:Heebo,sans-serif;font-size:.81rem;direction:rtl;resize:vertical;box-sizing:border-box;"></textarea>
-          </div>
-
-          <!-- Question: extra field -->
-          <div id="nat-question-field" style="display:none;margin-top:.55rem;padding:.6rem .75rem;background:#f0f9ff;border:1px solid #bae6fd;border-radius:7px;">
-            <div style="font-size:.8rem;font-weight:600;color:#0369a1;margin-bottom:.3rem;">מה תרצה לשאול על הקוד?</div>
-            <textarea id="nat-question-text" rows="2" placeholder="לדוגמה: מה הקשר בין שני הקבצים? / מה קורה כש-RESPONSE-CODE שונה מ-0? / אילו שדות מתעדכנים בכל מסלול?" style="width:100%;padding:.45rem .6rem;border:1px solid #bae6fd;border-radius:6px;font-family:Heebo,sans-serif;font-size:.81rem;direction:rtl;resize:vertical;box-sizing:border-box;"></textarea>
           </div>
         </div>
       </div>
@@ -417,18 +466,22 @@ function addNatFiles(files) {
 }
 
 function renderNatFileDisplay() {
-  const el          = document.getElementById('nat-file-display');
-  const note        = document.getElementById('nat-multifile-note');
+  const el = document.getElementById('nat-file-display');
   if (!el) return;
+
+  const note = document.getElementById('nat-multifile-note');
+  const depthSection = document.getElementById('nat-depth-section');
 
   if (!natFiles.length) {
     el.innerHTML = '';
     if (note) note.style.display = 'none';
+    if (depthSection) depthSection.style.opacity = '1';
     return;
   }
 
   const isMulti = natFiles.length > 1;
   if (note) note.style.display = isMulti ? '' : 'none';
+  if (depthSection) depthSection.style.opacity = isMulti ? '0.45' : '1';
 
   el.innerHTML = natFiles.map((f, i) => `
     <div style="display:flex;align-items:center;gap:.5rem;background:#f0f9ff;border:1px solid #bae6fd;border-radius:7px;padding:.4rem .65rem;font-size:.82rem;margin-bottom:.25rem;">
@@ -442,10 +495,8 @@ function renderNatFileDisplay() {
 
 window.natDepthChanged = function () {
   const v = document.querySelector('input[name="nat-depth"]:checked')?.value;
-  const changeField   = document.getElementById('nat-change-field');
-  const questionField = document.getElementById('nat-question-field');
-  if (changeField)   changeField.style.display   = v === 'code-change' ? '' : 'none';
-  if (questionField) questionField.style.display = v === 'question'    ? '' : 'none';
+  const field = document.getElementById('nat-change-field');
+  if (field) field.style.display = v === 'code-change' ? '' : 'none';
 };
 
 window.natClearFile = function (idx) {
@@ -476,13 +527,12 @@ window.generateNatural = async function () {
     return;
   }
 
-  const depth        = document.querySelector('input[name="nat-depth"]:checked')?.value || 'standard';
-  const context      = (document.getElementById('nat-context')?.value || '').trim();
-  const changeDesc   = (document.getElementById('nat-change-desc')?.value || '').trim();
-  const questionText = (document.getElementById('nat-question-text')?.value || '').trim();
-  const isMultiFile  = natFiles.length > 1;
+  const depth         = document.querySelector('input[name="nat-depth"]:checked')?.value || 'standard';
+  const context       = (document.getElementById('nat-context')?.value || '').trim();
+  const changeDesc    = (document.getElementById('nat-change-desc')?.value || '').trim();
+  const isMultiFile   = natFiles.length > 1;
   const filesToProcess = [...natFiles];
-  const fileNames    = filesToProcess.map(f => f.name);
+  const fileNames     = filesToProcess.map(f => f.name);
 
   window.closeNaturalModal();
   deps.hideEmpty();
@@ -506,9 +556,7 @@ window.generateNatural = async function () {
   }
 
   let chunks;
-  if (depth === 'question') {
-    chunks = [buildQuestionChunk(filesData, questionText, context)];
-  } else if (isMultiFile) {
+  if (isMultiFile) {
     chunks = buildMultiFileChunks(filesData, context);
   } else {
     const { name, text } = filesData[0];
@@ -537,7 +585,6 @@ window.generateNatural = async function () {
   deps.removeTyping(progressId);
   deps.setLoading(false);
 
-  // Load files into chat context for follow-up questions
   if (deps.setNatContext) deps.setNatContext(filesData);
 
   const combined  = results.join('\n\n---\n\n');
@@ -546,9 +593,11 @@ window.generateNatural = async function () {
   const baseName  = isMultiFile
     ? `natural-multi-${firstName}-${timestamp}`
     : `natural-${firstName}-${timestamp}`;
+  const fileName  = fileNames[0];
 
   // ── Extract structured outputs ──────────────────────────────────────────
 
+  // Screens (html-screen blocks)
   const viewerScreens = [];
   let cleanedMd = combined.replace(
     /<html-screen name="(.*?)">([\s\S]*?)<\/html-screen>/g,
@@ -558,6 +607,7 @@ window.generateNatural = async function () {
     }
   );
 
+  // Draw.io XML
   let drawioXml = '';
   cleanedMd = cleanedMd.replace(
     /<drawio-xml>([\s\S]*?)<\/drawio-xml>/g,
@@ -567,6 +617,7 @@ window.generateNatural = async function () {
     }
   );
 
+  // Excel tables
   const viewerTables = [];
   const wb = typeof XLSX !== 'undefined' ? XLSX.utils.book_new() : null;
   let tableCount = 0;
@@ -588,6 +639,7 @@ window.generateNatural = async function () {
     } catch { /* skip malformed */ }
   }
 
+  // Mermaid diagrams
   const mermaidDiagrams = [];
   const mmRx = /```mermaid\n([\s\S]*?)```/g;
   let mm;
@@ -601,20 +653,21 @@ window.generateNatural = async function () {
     });
   }
 
-  // ── Downloads (skipped for question mode — answer shown directly in chat) ──
+  // ── Downloads ────────────────────────────────────────────────────────────
 
-  if (depth !== 'question') {
-    const mdBlob = new Blob([cleanedMd], { type: 'text/markdown;charset=utf-8' });
-    const mdUrl  = URL.createObjectURL(mdBlob);
-    const mdLink = document.createElement('a');
-    mdLink.href = mdUrl; mdLink.download = `${baseName}.md`; mdLink.click();
-    URL.revokeObjectURL(mdUrl);
-  }
+  // Markdown
+  const mdBlob = new Blob([cleanedMd], { type: 'text/markdown;charset=utf-8' });
+  const mdUrl  = URL.createObjectURL(mdBlob);
+  const mdLink = document.createElement('a');
+  mdLink.href = mdUrl; mdLink.download = `${baseName}.md`; mdLink.click();
+  URL.revokeObjectURL(mdUrl);
 
+  // Excel
   if (tableCount > 0 && wb) {
     XLSX.writeFile(wb, `${baseName}.xlsx`);
   }
 
+  // Draw.io XML
   if (drawioXml) {
     const xmlBlob = new Blob([drawioXml], { type: 'text/xml;charset=utf-8' });
     const xmlUrl  = URL.createObjectURL(xmlBlob);
@@ -623,50 +676,43 @@ window.generateNatural = async function () {
     URL.revokeObjectURL(xmlUrl);
   }
 
-  // ── Open spec-viewer (skipped for question mode unless structured outputs exist) ──
+  // ── Open spec-viewer ──────────────────────────────────────────────────────
+  const mdForViewer = combined.replace(
+    /<drawio-xml>[\s\S]*?<\/drawio-xml>/g,
+    '\n> 🔀 **תרשים draw.io** — הורד קובץ XML לייבוא לעריכה.\n'
+  );
 
-  const hasStructured = viewerTables.length > 0 || mermaidDiagrams.length > 0 || viewerScreens.length > 0;
-  if (depth !== 'question' || hasStructured) {
-    const mdForViewer = combined.replace(
-      /<drawio-xml>[\s\S]*?<\/drawio-xml>/g,
-      '\n> 🔀 **תרשים draw.io** — הורד קובץ XML לייבוא לעריכה.\n'
-    );
-    try {
-      localStorage.setItem('spec-viewer-data', JSON.stringify({
-        markdown: mdForViewer,
-        tables:   viewerTables,
-        screens:  viewerScreens,
-        mermaidDiagrams,
-        meta: {
-          flavor:    'Natural (Software AG)',
-          timestamp: new Date().toISOString(),
-          fileNames: fileNames.join(', '),
-          mode:      depth === 'question' ? 'question' : isMultiFile ? 'multi-file-analysis' : 'analysis',
-        },
-      }));
-      try { new BroadcastChannel('spec-viewer').postMessage('update'); } catch {}
-      window.open('spec-viewer.html', 'spec-viewer');
-    } catch { /* localStorage unavailable */ }
-  }
+  try {
+    localStorage.setItem('spec-viewer-data', JSON.stringify({
+      markdown: mdForViewer,
+      tables:   viewerTables,
+      screens:  viewerScreens,
+      mermaidDiagrams,
+      meta: {
+        flavor:    'Natural (Software AG)',
+        timestamp: new Date().toISOString(),
+        fileNames: fileNames.join(', '),
+        mode:      isMultiFile ? 'multi-file-analysis' : 'analysis',
+      },
+    }));
+    try { new BroadcastChannel('spec-viewer').postMessage('update'); } catch {}
+    window.open('spec-viewer.html', 'spec-viewer');
+  } catch { /* localStorage unavailable */ }
 
   // ── Chat message ──────────────────────────────────────────────────────────
 
-  if (depth === 'question') {
-    // Show the actual answer inline (auto-downloads if long)
-    deps.appendMessage('assistant', cleanedMd);
-  } else {
-    const depthLabels = { lite: 'Lite', standard: 'Standard', enterprise: 'Enterprise', migration: 'Migration Readiness', rewrite: 'Rewrite Blueprint', 'code-change': 'Code Change' };
-    const depthLabel  = depthLabels[depth] || depth;
-    const displayName = isMultiFile ? `${fileNames.length} קבצים` : `\`${fileNames[0]}\``;
-    let summary = `✅ ניתוח ${displayName} הסתיים\n\n` +
-      (isMultiFile ? `**מצב:** ריבוי קבצים` : `**עומק:** ${depthLabel}`);
-    if (tableCount > 0) summary += ` · **${tableCount} טבלאות** (Excel + מציג)`;
-    if (mermaidDiagrams.length > 0) summary += ` · **${mermaidDiagrams.length} תרשימים** (מציג)`;
-    if (drawioXml) summary += ` · **draw.io XML** הורד`;
-    if (viewerScreens.length > 0) summary += ` · **${viewerScreens.length} מסכים** (מציג)`;
-    summary += `\n\n📋 מציג האפיונים נפתח עם הנתונים.\n💬 הקבצים טעונים בהקשר — ניתן לשאול שאלות בצ'אט.`;
-    deps.appendMessage('assistant', summary);
-  }
+  const depthLabels = { lite: 'Lite (קריאה אחת)', standard: 'Standard (2 קריאות)', enterprise: 'Enterprise (3 קריאות)', migration: 'Migration Readiness (3 קריאות)', rewrite: 'Rewrite Blueprint (3 קריאות)', 'code-change': 'Code Change (2 קריאות)' };
+  const depthLabel  = depthLabels[depth] || depth;
+
+  const displayName = isMultiFile ? `${fileNames.length} קבצים (${fileNames.join(', ')})` : `\`${fileNames[0]}\``;
+  let summary = `✅ ניתוח ${displayName} הסתיים\n\n` +
+    (isMultiFile ? `**מצב:** ריבוי קבצים — ניתוח כל קובץ + קשרים` : `**עומק:** ${depthLabel}`);
+  if (tableCount > 0) summary += ` · **${tableCount} טבלאות** (Excel + מציג)`;
+  if (mermaidDiagrams.length > 0) summary += ` · **${mermaidDiagrams.length} תרשימים** (מציג)`;
+  if (drawioXml) summary += ` · **draw.io XML** הורד`;
+  if (viewerScreens.length > 0) summary += ` · **${viewerScreens.length} מסכים** (מציג)`;
+  summary += `\n\n📋 מציג האפיונים נפתח עם הנתונים.\n💬 הקבצים טעונים בהקשר — ניתן לשאול שאלות בצ'אט.`;
+  deps.appendMessage('assistant', summary);
 };
 
 // ── File reader ───────────────────────────────────────────────────────────
@@ -681,25 +727,6 @@ async function readNaturalFile(file) {
     if (result.text) return result.text;
   } catch {}
   return file.text();
-}
-
-// ── Question prompt builder ───────────────────────────────────────────────
-
-function buildQuestionChunk(filesData, question, context) {
-  const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
-  const q = question || 'תאר בקצרה מה הקוד עושה ומה מטרתו העסקית.';
-
-  if (filesData.length === 1) {
-    const { name, text } = filesData[0];
-    return `${NATURAL_SYSTEM}\n\n---\n\n## הקובץ לניתוח:\nשם הקובץ: ${name}${contextLine}\n\n\`\`\`natural\n${text}\n\`\`\`\n\n---\n\n## שאלה:\n${q}\n\nענה בעברית, Markdown RTL. היה ממוקד ומדויק.`;
-  }
-
-  const fileList = filesData.map((f, i) => `${i + 1}. \`${f.name}\``).join('\n');
-  const fileBlocks = filesData.map(({ name, text }, i) =>
-    `### קובץ ${i + 1}: \`${name}\`\n\`\`\`natural\n${text}\n\`\`\``
-  ).join('\n\n');
-
-  return `${NATURAL_SYSTEM}\n\n---\n\n## קבצים לניתוח (${filesData.length} קבצים):${contextLine}\n\n${fileList}\n\n---\n\n${fileBlocks}\n\n---\n\n## שאלה:\n${q}\n\nענה בעברית, Markdown RTL. היה ממוקד ומדויק.`;
 }
 
 // ── Multi-file prompt builder ─────────────────────────────────────────────

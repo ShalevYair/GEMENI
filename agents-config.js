@@ -121,7 +121,7 @@ export const AGENTS = {
   },
 
   'json-gen': {
-    name: 'JSON',
+    name: 'הטכנולוג',
     icon: '{ }',
     badge: 'Mayuvgam JSON',
     description: 'מנתח אפיון מערכת ובונה קובץ JSON מלא לפלטפורמת Mayuvgam — ישויות, שדות, טפסים, תצוגות, זרימות עבודה, הרשאות, קבוצות ולוחות מחוונים.',

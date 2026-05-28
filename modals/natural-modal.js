@@ -585,6 +585,8 @@ window.generateNatural = async function () {
   deps.removeTyping(progressId);
   deps.setLoading(false);
 
+  if (deps.setNatContext) deps.setNatContext(filesData);
+
   const combined  = results.join('\n\n---\n\n');
   const timestamp = new Date().toISOString().slice(0, 10);
   const firstName = fileNames[0].replace(/\.[^.]+$/, '');
@@ -709,7 +711,7 @@ window.generateNatural = async function () {
   if (mermaidDiagrams.length > 0) summary += ` · **${mermaidDiagrams.length} תרשימים** (מציג)`;
   if (drawioXml) summary += ` · **draw.io XML** הורד`;
   if (viewerScreens.length > 0) summary += ` · **${viewerScreens.length} מסכים** (מציג)`;
-  summary += `\n\n📋 מציג האפיונים נפתח עם הנתונים.`;
+  summary += `\n\n📋 מציג האפיונים נפתח עם הנתונים.\n💬 הקבצים טעונים בהקשר — ניתן לשאול שאלות בצ'אט.`;
   deps.appendMessage('assistant', summary);
 };
 

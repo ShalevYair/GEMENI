@@ -28,6 +28,7 @@ let lastFailed      = null;
 let retryTimer      = null;
 let typingCounter   = 0;
 let pendingFile     = null;
+let natContext      = null; // loaded Natural files awaiting first chat message
 let modelIdx        = 0; // current position in MODEL_CHAIN
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     getModelIdx:  () => modelIdx,
     setModelIdx:  (v) => { modelIdx = v; setHeaderActions(true); },
     getIsLoading: () => isLoading,
+    setNatContext: (files) => { natContext = files; showNatContextBanner(files); },
     MODEL_CHAIN,
     MAX_OUTPUT_TOKENS,
   });
@@ -213,7 +215,9 @@ window.clearChat = function () {
   chatHistory  = [];
   lastFailed   = null;
   pendingFile  = null;
+  natContext   = null;
   clearPendingFile();
+  clearNatContextBanner();
   document.getElementById('chat-messages').innerHTML = '';
   renderEmptyState();
 };
@@ -306,6 +310,32 @@ function clearPendingFile() {
   document.getElementById('pending-file-chip')?.remove();
 }
 
+function showNatContextBanner(files) {
+  clearNatContextBanner();
+  const wrapper = document.getElementById('chat-input-wrapper');
+  if (!wrapper) return;
+  const banner = document.createElement('div');
+  banner.id        = 'nat-context-banner';
+  banner.className = 'pending-file-chip';
+  const label = files.length === 1
+    ? escHtml(files[0].name)
+    : `${files.length} קבצי Natural`;
+  banner.innerHTML = `
+    <span class="pending-file-icon">🖥️</span>
+    <span class="pending-file-name">${label} — טעונים בהקשר, שאל שאלה בצ'אט</span>
+    <button class="pending-file-remove" onclick="window.clearNatContext()" title="נקה הקשר">✕</button>`;
+  wrapper.prepend(banner);
+}
+
+function clearNatContextBanner() {
+  document.getElementById('nat-context-banner')?.remove();
+}
+
+window.clearNatContext = function () {
+  natContext = null;
+  clearNatContextBanner();
+};
+
 function showFileError(msg) {
   const err = document.createElement('div');
   err.className = 'file-error-toast';
@@ -362,8 +392,9 @@ window.sendMessage = async function () {
 
 // ── Gemini API ────────────────────────────────────────────────────────────
 async function callGemini(userText, file) {
-  const userParts = buildUserParts(userText, file);
-  const contents  = [
+  const natCtxSnap = natContext; // capture before buildUserParts clears it
+  const userParts  = buildUserParts(userText, file);
+  const contents   = [
     ...chatHistory.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
     { role: 'user', parts: userParts },
   ];
@@ -387,8 +418,9 @@ async function callGemini(userText, file) {
   const data  = await res.json();
   const reply = data.candidates[0].content.parts.map(p => p.text).join('');
 
-  // Store in history as text only (avoid giant base64 in history)
-  const historyText = file
+  const historyText = natCtxSnap
+    ? `[קבצי Natural: ${natCtxSnap.map(f => f.name).join(', ')}]\n${userText || ''}`.trim()
+    : file
     ? `[קובץ מצורף: ${file.name}]${userText ? '\n' + userText : ''}`
     : userText;
   chatHistory.push({ role: 'user',  text: historyText });
@@ -399,16 +431,26 @@ async function callGemini(userText, file) {
 
 function buildUserParts(text, file) {
   const parts = [];
+
+  let natPrefix = '';
+  if (natContext) {
+    natPrefix = natContext.map(f =>
+      `קובץ Natural: "${f.name}"\n\`\`\`natural\n${f.text}\n\`\`\``
+    ).join('\n\n') + '\n\n---\n\n';
+    natContext = null;
+    clearNatContextBanner();
+  }
+
   if (!file) {
-    parts.push({ text: text || '' });
+    parts.push({ text: natPrefix + (text || '') });
     return parts;
   }
 
   if (file.isInline) {
-    if (text) parts.push({ text });
+    if (natPrefix || text) parts.push({ text: natPrefix + (text || '') });
     parts.push({ inlineData: { mimeType: file.mimeType, data: file.base64 } });
   } else {
-    const combined = `תוכן הקובץ "${file.name}":\n\n${file.text}${text ? '\n\n' + text : ''}`;
+    const combined = natPrefix + `תוכן הקובץ "${file.name}":\n\n${file.text}${text ? '\n\n' + text : ''}`;
     parts.push({ text: combined });
   }
   return parts;

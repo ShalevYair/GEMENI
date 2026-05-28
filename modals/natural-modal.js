@@ -332,7 +332,7 @@ const SECTIONS_CODE_CHANGE_2 = `
 - **קצה:** edge cases ספציפיים לשינוי`;
 
 // ── Module state ──────────────────────────────────────────────────────────
-let natFile = null;
+let natFiles = [];
 
 export function initNaturalModal() {
   injectNaturalModal();
@@ -350,8 +350,8 @@ function injectNaturalModal() {
 
       <!-- Header -->
       <div style="padding:1.25rem 1.5rem .9rem;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
-        <h3 style="margin:0 0 .2rem;font-size:1.15rem;display:flex;align-items:center;gap:.5rem;color:#1e293b;">🖥️ NATURAL — ניתוח קובץ Natural</h3>
-        <p style="margin:0;color:#64748b;font-size:.84rem;">העלה קובץ קוד Natural וקבל מסמך אפיון טכני-עסקי, תרשימים וטבלאות.</p>
+        <h3 style="margin:0 0 .2rem;font-size:1.15rem;display:flex;align-items:center;gap:.5rem;color:#1e293b;">🖥️ NATURAL — ניתוח קבצי Natural</h3>
+        <p style="margin:0;color:#64748b;font-size:.84rem;">העלה קבצי קוד Natural (קובץ אחד או יותר) וקבל מסמך אפיון טכני-עסקי, תרשימים וטבלאות.</p>
       </div>
 
       <!-- Body -->
@@ -359,17 +359,20 @@ function injectNaturalModal() {
 
         <!-- File upload -->
         <div>
-          <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.4rem;">קובץ Natural:</div>
+          <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.4rem;">קבצי Natural:</div>
           <label id="nat-dropzone" for="nat-file-input"
             style="display:block;border:2px dashed #c8d0e0;border-radius:9px;padding:1rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;"
             ondragover="event.preventDefault();this.style.borderColor='#0891b2';this.style.background='#f0f9ff';"
             ondragleave="this.style.borderColor='#c8d0e0';this.style.background='';"
             ondrop="event.preventDefault();this.style.borderColor='#c8d0e0';this.style.background='';window.natHandleDrop(event);">
-            <div style="font-size:1.6rem;margin-bottom:.25rem;">📄</div>
-            <div style="color:#64748b;font-size:.82rem;">לחץ לבחירת קובץ או גרור לכאן<br><span style="font-size:.75rem;">.nsp · .nsa · .nsd · .nsc · .nat · .txt (עד 2MB)</span></div>
-            <input id="nat-file-input" type="file" accept=".nsp,.nsa,.nsd,.nsc,.nsl,.nsg,.ncp,.nst,.nsm,.nat,.txt" style="display:none;" onchange="window.natFileSelected(this.files)">
+            <div style="font-size:1.6rem;margin-bottom:.25rem;">📂</div>
+            <div style="color:#64748b;font-size:.82rem;">לחץ לבחירת קובץ/ים או גרור לכאן<br><span style="font-size:.75rem;">.nsp · .nsa · .nsd · .nsc · .nat · .txt · ניתן לבחור מספר קבצים (עד 2MB לקובץ)</span></div>
+            <input id="nat-file-input" type="file" accept=".nsp,.nsa,.nsd,.nsc,.nsl,.nsg,.ncp,.nst,.nsm,.nat,.txt" multiple style="display:none;" onchange="window.natFileSelected(this.files)">
           </label>
           <div id="nat-file-display" style="margin-top:.5rem;"></div>
+          <div id="nat-multifile-note" style="display:none;margin-top:.4rem;padding:.45rem .7rem;background:#fefce8;border:1px solid #fde68a;border-radius:7px;font-size:.78rem;color:#92400e;">
+            💡 מצב ריבוי קבצים — יתבצע ניתוח כל קובץ בנפרד + ניתוח קשרים ותלויות בין הקבצים. בחירת עומק מתעלמת במצב זה.
+          </div>
         </div>
 
         <!-- Optional context -->
@@ -379,7 +382,7 @@ function injectNaturalModal() {
         </div>
 
         <!-- Depth selector -->
-        <div>
+        <div id="nat-depth-section">
           <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.5rem;">רמת עומק הניתוח:</div>
           <div style="display:flex;flex-direction:column;gap:.3rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.65rem .9rem;">
             ${[
@@ -409,7 +412,7 @@ function injectNaturalModal() {
       <!-- Footer -->
       <div style="padding:.9rem 1.5rem;border-top:1px solid #f1f5f9;display:flex;gap:.75rem;justify-content:flex-end;flex-shrink:0;">
         <button onclick="window.closeNaturalModal()" style="padding:.5rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.88rem;font-family:Heebo,sans-serif;color:#374151;">ביטול</button>
-        <button id="nat-generate-btn" onclick="window.generateNatural()" style="padding:.5rem 1.25rem;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(8,145,178,.35);">🖥️ נתח קובץ</button>
+        <button id="nat-generate-btn" onclick="window.generateNatural()" style="padding:.5rem 1.25rem;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(8,145,178,.35);">🖥️ נתח</button>
       </div>
     </div>`;
 
@@ -423,7 +426,7 @@ window.openNaturalModal = function () {
   if (deps.getIsLoading()) return;
   const modal = document.getElementById('natural-modal');
   if (!modal) return;
-  natFile = null;
+  natFiles = [];
   renderNatFileDisplay();
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -434,42 +437,60 @@ window.closeNaturalModal = function () {
   if (!modal) return;
   modal.style.display = 'none';
   document.body.style.overflow = '';
-  natFile = null;
+  natFiles = [];
   const fi = document.getElementById('nat-file-input');
   if (fi) fi.value = '';
 };
 
 window.natHandleDrop = function (event) {
   const files = Array.from(event.dataTransfer.files || []);
-  if (files[0]) setNatFile(files[0]);
+  if (files.length) addNatFiles(files);
 };
 
 window.natFileSelected = function (fileList) {
-  if (fileList && fileList[0]) setNatFile(fileList[0]);
+  if (fileList && fileList.length) addNatFiles(Array.from(fileList));
   const fi = document.getElementById('nat-file-input');
   if (fi) fi.value = '';
 };
 
-function setNatFile(file) {
-  if (file.size > 2 * 1024 * 1024) {
-    alert('הקובץ גדול מ-2MB. אנא חתוך את הקוד לחלקים קטנים יותר.');
-    return;
+function addNatFiles(files) {
+  const oversized = files.filter(f => f.size > 2 * 1024 * 1024);
+  if (oversized.length) {
+    alert(`הקבצים הבאים גדולים מ-2MB:\n${oversized.map(f => f.name).join('\n')}\n\nאנא חתוך את הקוד לחלקים קטנים יותר.`);
+    files = files.filter(f => f.size <= 2 * 1024 * 1024);
   }
-  natFile = file;
+  const existingNames = new Set(natFiles.map(f => f.name));
+  const newFiles = files.filter(f => !existingNames.has(f.name));
+  natFiles.push(...newFiles);
   renderNatFileDisplay();
 }
 
 function renderNatFileDisplay() {
   const el = document.getElementById('nat-file-display');
   if (!el) return;
-  if (!natFile) { el.innerHTML = ''; return; }
-  el.innerHTML = `
-    <div style="display:flex;align-items:center;gap:.5rem;background:#f0f9ff;border:1px solid #bae6fd;border-radius:7px;padding:.4rem .65rem;font-size:.82rem;">
+
+  const note = document.getElementById('nat-multifile-note');
+  const depthSection = document.getElementById('nat-depth-section');
+
+  if (!natFiles.length) {
+    el.innerHTML = '';
+    if (note) note.style.display = 'none';
+    if (depthSection) depthSection.style.opacity = '1';
+    return;
+  }
+
+  const isMulti = natFiles.length > 1;
+  if (note) note.style.display = isMulti ? '' : 'none';
+  if (depthSection) depthSection.style.opacity = isMulti ? '0.45' : '1';
+
+  el.innerHTML = natFiles.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:.5rem;background:#f0f9ff;border:1px solid #bae6fd;border-radius:7px;padding:.4rem .65rem;font-size:.82rem;margin-bottom:.25rem;">
       <span style="color:#0891b2;">📄</span>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1e293b;">${deps.escHtml(natFile.name)}</span>
-      <span style="color:#94a3b8;white-space:nowrap;">${(natFile.size / 1024).toFixed(0)} KB</span>
-      <button onclick="window.natClearFile()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.9rem;padding:0 .15rem;line-height:1;" title="הסר">✕</button>
-    </div>`;
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1e293b;">${deps.escHtml(f.name)}</span>
+      <span style="color:#94a3b8;white-space:nowrap;">${(f.size / 1024).toFixed(0)} KB</span>
+      <button onclick="window.natClearFile(${i})" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.9rem;padding:0 .15rem;line-height:1;" title="הסר">✕</button>
+    </div>`).join('') + (isMulti ? `
+    <div style="font-size:.75rem;color:#0891b2;padding:.15rem .25rem;font-weight:600;">${natFiles.length} קבצים נבחרו</div>` : '');
 }
 
 window.natDepthChanged = function () {
@@ -478,17 +499,23 @@ window.natDepthChanged = function () {
   if (field) field.style.display = v === 'code-change' ? '' : 'none';
 };
 
-window.natClearFile = function () {
-  natFile = null;
+window.natClearFile = function (idx) {
+  if (idx === undefined) {
+    natFiles = [];
+  } else {
+    natFiles.splice(idx, 1);
+  }
   renderNatFileDisplay();
-  const dz = document.getElementById('nat-dropzone');
-  if (dz) dz.style.borderColor = '#c8d0e0';
+  if (!natFiles.length) {
+    const dz = document.getElementById('nat-dropzone');
+    if (dz) dz.style.borderColor = '#c8d0e0';
+  }
 };
 
 // ── Generate ──────────────────────────────────────────────────────────────
 
 window.generateNatural = async function () {
-  if (!natFile) {
+  if (!natFiles.length) {
     const dz = document.getElementById('nat-dropzone');
     if (dz) { dz.style.borderColor = '#e53e3e'; setTimeout(() => { dz.style.borderColor = '#c8d0e0'; }, 2000); }
     return;
@@ -503,19 +530,24 @@ window.generateNatural = async function () {
   const depth         = document.querySelector('input[name="nat-depth"]:checked')?.value || 'standard';
   const context       = (document.getElementById('nat-context')?.value || '').trim();
   const changeDesc    = (document.getElementById('nat-change-desc')?.value || '').trim();
-  const fileToProcess = natFile;
-  const fileName      = fileToProcess.name;
+  const isMultiFile   = natFiles.length > 1;
+  const filesToProcess = [...natFiles];
+  const fileNames     = filesToProcess.map(f => f.name);
 
   window.closeNaturalModal();
   deps.hideEmpty();
   deps.setLoading(true);
   const progressId = deps.appendTyping();
 
-  let codeText = '';
+  const filesData = [];
   try {
-    deps.updateTyping(progressId, `קורא קובץ: ${fileName}…`);
-    codeText = await readNaturalFile(fileToProcess);
-    if (!codeText.trim()) throw new Error('הקובץ ריק.');
+    for (let i = 0; i < filesToProcess.length; i++) {
+      const f = filesToProcess[i];
+      deps.updateTyping(progressId, `קורא קובץ ${i + 1}/${filesToProcess.length}: ${f.name}…`);
+      const text = await readNaturalFile(f);
+      if (!text.trim()) throw new Error(`הקובץ "${f.name}" ריק.`);
+      filesData.push({ name: f.name, text });
+    }
   } catch (e) {
     deps.removeTyping(progressId);
     deps.setLoading(false);
@@ -523,14 +555,20 @@ window.generateNatural = async function () {
     return;
   }
 
-  let fileHeader = `שם הקובץ: ${fileName}\n`;
-  if (context) fileHeader += `\nהקשר הרצה: ${context}\n`;
-  fileHeader += '\n';
+  let chunks;
+  if (isMultiFile) {
+    chunks = buildMultiFileChunks(filesData, context);
+  } else {
+    const { name, text } = filesData[0];
+    let fileHeader = `שם הקובץ: ${name}\n`;
+    if (context) fileHeader += `\nהקשר הרצה: ${context}\n`;
+    fileHeader += '\n';
+    const codeBlock = `\`\`\`natural\n${text}\n\`\`\``;
+    chunks = buildChunks(depth, fileHeader, codeBlock, changeDesc);
+  }
 
-  const codeBlock = `\`\`\`natural\n${codeText}\n\`\`\``;
-  const chunks    = buildChunks(depth, fileHeader, codeBlock, changeDesc);
-  const results   = [];
-  let mIdx        = deps.getModelIdx();
+  const results = [];
+  let mIdx = deps.getModelIdx();
 
   try {
     for (let i = 0; i < chunks.length; i++) {
@@ -549,7 +587,11 @@ window.generateNatural = async function () {
 
   const combined  = results.join('\n\n---\n\n');
   const timestamp = new Date().toISOString().slice(0, 10);
-  const baseName  = `natural-${fileName.replace(/\.[^.]+$/, '')}-${timestamp}`;
+  const firstName = fileNames[0].replace(/\.[^.]+$/, '');
+  const baseName  = isMultiFile
+    ? `natural-multi-${firstName}-${timestamp}`
+    : `natural-${firstName}-${timestamp}`;
+  const fileName  = fileNames[0];
 
   // ── Extract structured outputs ──────────────────────────────────────────
 
@@ -633,8 +675,6 @@ window.generateNatural = async function () {
   }
 
   // ── Open spec-viewer ──────────────────────────────────────────────────────
-  // Pass raw `combined` so spec-viewer can create inline table buttons from
-  // <excel-table> tags. Strip only <drawio-xml> (spec-viewer doesn't handle it).
   const mdForViewer = combined.replace(
     /<drawio-xml>[\s\S]*?<\/drawio-xml>/g,
     '\n> 🔀 **תרשים draw.io** — הורד קובץ XML לייבוא לעריכה.\n'
@@ -649,8 +689,8 @@ window.generateNatural = async function () {
       meta: {
         flavor:    'Natural (Software AG)',
         timestamp: new Date().toISOString(),
-        fileNames: fileName,
-        mode:      'analysis',
+        fileNames: fileNames.join(', '),
+        mode:      isMultiFile ? 'multi-file-analysis' : 'analysis',
       },
     }));
     try { new BroadcastChannel('spec-viewer').postMessage('update'); } catch {}
@@ -661,7 +701,10 @@ window.generateNatural = async function () {
 
   const depthLabels = { lite: 'Lite (קריאה אחת)', standard: 'Standard (2 קריאות)', enterprise: 'Enterprise (3 קריאות)', migration: 'Migration Readiness (3 קריאות)', rewrite: 'Rewrite Blueprint (3 קריאות)', 'code-change': 'Code Change (2 קריאות)' };
   const depthLabel  = depthLabels[depth] || depth;
-  let summary = `✅ ניתוח \`${fileName}\` הסתיים\n\n**עומק:** ${depthLabel}`;
+
+  const displayName = isMultiFile ? `${fileNames.length} קבצים (${fileNames.join(', ')})` : `\`${fileNames[0]}\``;
+  let summary = `✅ ניתוח ${displayName} הסתיים\n\n` +
+    (isMultiFile ? `**מצב:** ריבוי קבצים — ניתוח כל קובץ + קשרים` : `**עומק:** ${depthLabel}`);
   if (tableCount > 0) summary += ` · **${tableCount} טבלאות** (Excel + מציג)`;
   if (mermaidDiagrams.length > 0) summary += ` · **${mermaidDiagrams.length} תרשימים** (מציג)`;
   if (drawioXml) summary += ` · **draw.io XML** הורד`;
@@ -684,7 +727,100 @@ async function readNaturalFile(file) {
   return file.text();
 }
 
-// ── Prompt assembly ───────────────────────────────────────────────────────
+// ── Multi-file prompt builder ─────────────────────────────────────────────
+
+function buildMultiFileChunks(filesData, context) {
+  const fileList = filesData.map((f, i) => `${i + 1}. \`${f.name}\``).join('\n');
+  const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
+
+  const fileBlocks = filesData.map(({ name, text }, i) =>
+    `### קובץ ${i + 1}: \`${name}\`\n\`\`\`natural\n${text}\n\`\`\``
+  ).join('\n\n');
+
+  const intro = `${NATURAL_SYSTEM}\n\n---\n\n## קבצים לניתוח (${filesData.length} קבצים):${contextLine}\n\n${fileList}\n\n---\n\n${fileBlocks}\n\n---\n\n`;
+
+  const part1 = intro + `
+## Output — חלק א': ניתוח כל קובץ בנפרד
+
+עבור כל קובץ, הפק את הסעיפים הבאים לפי הסדר (קובץ 1, קובץ 2, וכן הלאה).
+השתמש בפורמט הזה בדיוק לכל קובץ:
+
+---
+
+### 📄 \`<שם_הקובץ>\`
+
+#### 1. מטאדטה
+| שדה | ערך |
+|-----|-----|
+| שם האובייקט | |
+| סוג | Program / Subprogram / Subroutine / Map / Copycode / Helproutine |
+| מטרה כללית | (משפט אחד) |
+| ישויות עסקיות | |
+| קלטים | |
+| פלטים | |
+| תלויות חיצוניות | (CALLNAT/FETCH לתוכניות אחרות ברשימה — ציין במפורש) |
+| בסיסי נתונים / קבצים | |
+
+#### 2. תיאור עסקי
+2-4 שורות: מה הקוד עושה ולמה, מנקודת מבט עסקית.
+
+#### 3. זרימה לוגית — עיקרי
+שלבים עיקריים בלבד (מקוצר). רק הזרימה המרכזית — לא לרדת לפרטי פרטים.
+
+#### 4. כללים עסקיים מרכזיים
+כל IF/DECIDE/WHERE מרכזי — "אם [תנאי] → [פעולה]"
+
+#### 5. CALLNAT / FETCH לתוכניות אחרות
+רשימה: שם התוכנית הנקראת | פרמטרים קלט | פרמטרים פלט | מטרה עסקית
+(ציין אם היא מופיעה ברשימת הקבצים שהועלו)
+
+---
+
+חזור על הפורמט הזה לכל קובץ ברשימה.`;
+
+  const part2 = intro + `
+## Output — חלק ב': ניתוח קשרים ותלויות בין הקבצים
+
+בחלק זה ניתח את הקשר בין כל הקבצים שקיבלת.
+
+### 1. מפת קריאות בין תוכניות
+<excel-table name="מפת קריאות בין תוכניות">
+[{"קורא": "", "נקרא": "", "סוג_קריאה": "CALLNAT/FETCH/PERFORM", "פרמטרים_קלט": "", "פרמטרים_פלט": "", "מטרה_עסקית": ""}]
+</excel-table>
+
+### 2. תרשים זרימה משולב
+\`\`\`mermaid
+flowchart TD
+    %% הצג את כל הקבצים כצמתים וקשרי הקריאה ביניהם
+    %% השתמש בצורת subprocess לכל קובץ
+\`\`\`
+
+### 3. נתונים / DDMs משותפים
+אילו DDMs, COPYCODE, Global/Local Data Areas משותפים בין הקבצים.
+
+<excel-table name="נתונים משותפים">
+[{"שם_DDM_COPYCODE": "", "קבצים_שמשתמשים": "", "תפקיד_עסקי": ""}]
+</excel-table>
+
+### 4. תהליך עסקי משולב
+תאר את התהליך העסקי הכולל — כיצד הקבצים יחדיו מממשים פונקציה עסקית שלמה.
+מה הסדר הצפוי של הרצה? מי "המנהל" ומי "השירות"?
+
+### 5. תלויות וסדר שינוי מומלץ
+<excel-table name="תלויות קריטיות">
+[{"קובץ": "", "תלוי_ב": "", "סוג_תלות": "קורא/נקרא/DDM משותף", "השפעה_בשינוי": ""}]
+</excel-table>
+
+### 6. נקודות סיכון ואינטגרציה
+- **תלויות קריטיות:** אילו קבצים לא יכולים לפעול ללא אחרים
+- **נקודות כשל:** מה קורה אם קובץ אחד נכשל — האם קיים BACKOUT / rollback?
+- **חוסרים:** CALLNAT לתוכניות שאינן ברשימת הקבצים שהועלו
+- **סדר שינוי מומלץ:** אם יש לשנות משהו, מה לשנות קודם`;
+
+  return [part1, part2];
+}
+
+// ── Single-file prompt assembly ────────────────────────────────────────────
 
 function buildChunks(depth, fileHeader, codeBlock, changeDesc) {
   const intro = `${NATURAL_SYSTEM}\n\n---\n\n## הקובץ לניתוח:\n\n${fileHeader}${codeBlock}\n\n---\n\n`;

@@ -1,37 +1,35 @@
 // All agent IDs that have a dedicated page via agent.html?id=<id>
 const CHAT_AGENT_IDS = new Set([
-  'json-gen', 'briefer',
+  'json-gen', 'briefer', 'dynamic',
   'requirements', 'project-manager', 'project-coordinator', 'spec-king',
   'software-architect', 'platform-architect', 'tender-writer', 'outsystems',
   'storyteller', 'design-queen', 'dev-champ', 'tester', 'security', 'natural',
   'summarizer',
 ]);
 
-function agentHref(id) {
-  if (id === 'salesforce') return 'sf-agent.html';
-  if (CHAT_AGENT_IDS.has(id)) return `agent.html?id=${id}`;
-  return null;
-}
-
-const AGENTS = [
-  { id: 'briefer',              name: 'בריפר',                icon: '📋' },
-  { id: 'json-gen',             name: 'JSON',                 icon: '{ }' },
-  { id: 'summarizer',           name: 'המסכם',                icon: '📝' },
-  { id: 'natural',              name: 'NATURAL',              icon: '🖥️' },
-  { id: 'requirements',        name: 'אוסף הדרישות',       icon: '📋' },
-  { id: 'project-manager',     name: 'מנהל הפרויקט',        icon: '📊' },
-  { id: 'project-coordinator', name: 'רכזת הפרויקטים',      icon: '🗂️' },
-  { id: 'spec-king',           name: 'מלך האיפיונים',        icon: '👑' },
-  { id: 'software-architect',  name: 'ארכיטקט התוכנה',       icon: '🏗️' },
-  { id: 'platform-architect',  name: 'ארכיטקט הפלטפורמות',   icon: '⚙️' },
-  { id: 'tender-writer',       name: 'כותב המכרזים',         icon: '📝' },
-  { id: 'salesforce',          name: 'Salesforce Killer',    icon: '⚡' },
-  { id: 'outsystems',          name: 'OutSystems Expert',    icon: '🔷' },
-  { id: 'storyteller',         name: 'מספר הסיפורים',        icon: '📖' },
-  { id: 'design-queen',        name: 'מלכת העיצובים',        icon: '🎨' },
-  { id: 'dev-champ',           name: 'אלוף הפיתוחים',        icon: '💻' },
-  { id: 'tester',              name: 'הבודק',                icon: '🔍' },
-  { id: 'security',            name: 'המאבטח',               icon: '🔒' },
+// All nav items in priority order — spec-viewer and mindmap use custom hrefs
+const NAV_ITEMS = [
+  { id: 'spec-king',           name: 'מלך האפיונים',          icon: '👑',  href: 'agent.html?id=spec-king' },
+  { id: 'spec-viewer',         name: 'מציג האפיונים',          icon: '📋',  href: 'spec-viewer.html' },
+  { id: 'briefer',             name: 'בריפר',                  icon: '📋',  href: 'agent.html?id=briefer' },
+  { id: 'requirements',        name: 'אוסף הדרישות',           icon: '📋',  href: 'agent.html?id=requirements' },
+  { id: 'project-manager',     name: 'מנהל הפרויקט',           icon: '📊',  href: 'agent.html?id=project-manager' },
+  { id: 'project-coordinator', name: 'רכזת הפרויקטים',         icon: '🗂️', href: 'agent.html?id=project-coordinator' },
+  { id: 'software-architect',  name: 'ארכיטקט התוכנה',         icon: '🏗️', href: 'agent.html?id=software-architect' },
+  { id: 'platform-architect',  name: 'ארכיטקט הפלטפורמות',     icon: '⚙️', href: 'agent.html?id=platform-architect' },
+  { id: 'design-queen',        name: 'מלכת העיצובים',          icon: '🎨',  href: 'agent.html?id=design-queen' },
+  { id: 'dev-champ',           name: 'אלוף הפיתוחים',          icon: '💻',  href: 'agent.html?id=dev-champ' },
+  { id: 'storyteller',         name: 'מספר הסיפורים',          icon: '📖',  href: 'agent.html?id=storyteller' },
+  { id: 'tester',              name: 'הבודק',                  icon: '🔍',  href: 'agent.html?id=tester' },
+  { id: 'security',            name: 'המאבטח',                 icon: '🔒',  href: 'agent.html?id=security' },
+  { id: 'tender-writer',       name: 'כותב המכרזים',           icon: '📝',  href: 'agent.html?id=tender-writer' },
+  { id: 'natural',             name: 'NATURAL',                icon: '🖥️', href: 'agent.html?id=natural' },
+  { id: 'summarizer',          name: 'המסכם',                  icon: '📝',  href: 'agent.html?id=summarizer' },
+  { id: 'json-gen',            name: 'הטכנולוג',               icon: '{ }', href: 'agent.html?id=json-gen' },
+  { id: 'dynamic',             name: 'סוכן דינמי',             icon: '🔮',  href: 'agent.html?id=dynamic' },
+  { id: 'salesforce',          name: 'Salesforce Killer',      icon: '⚡',  href: 'sf-agent.html' },
+  { id: 'outsystems',          name: 'OutSystems Expert',      icon: '🔷',  href: 'agent.html?id=outsystems' },
+  { id: 'mindmap',             name: 'פיתוח תוכנה',            icon: '🗺',  href: 'SDLCMindMap.html' },
 ];
 
 function getActiveId() {
@@ -39,43 +37,19 @@ function getActiveId() {
   if (page === 'agent.html') return new URLSearchParams(location.search).get('id');
   if (page === 'sf-agent.html') return 'salesforce';
   if (page === 'admin.html')    return 'salesforce';
+  if (page === 'spec-viewer.html') return 'spec-viewer';
   if (page === 'SDLCMindMap.html') return 'mindmap';
   return null;
 }
 
 function buildSidebar() {
   const activeId = getActiveId();
-  const page = location.pathname.split('/').pop() || 'index.html';
 
-  const toolItems = [
-    { href: 'agent.html?id=spec-king', icon: '👑', name: 'מלך האפיונים', active: activeId === 'spec-king' },
-    { href: 'spec-viewer.html',        icon: '📋', name: 'מציג האפיונים', active: page === 'spec-viewer.html' },
-    { href: 'SDLCMindMap.html',        icon: '🗺', name: 'פיתוח תוכנה',  active: activeId === 'mindmap' },
-  ].map(t => `
-    <a href="${t.href}" class="nav-item ${t.active ? 'nav-item-active' : ''}" title="${t.name}">
-      <span class="nav-icon">${t.icon}</span>
-      <span class="nav-name">${t.name}</span>
+  const navItems = NAV_ITEMS.map(item => `
+    <a href="${item.href}" class="nav-item ${item.id === activeId ? 'nav-item-active' : ''}" title="${item.name}">
+      <span class="nav-icon">${item.icon}</span>
+      <span class="nav-name">${item.name}</span>
     </a>`).join('');
-
-  const agentItems = AGENTS.map(a => {
-    const href   = agentHref(a.id);
-    const active = a.id === activeId;
-    if (href) {
-      return `
-        <a href="${href}" class="nav-item ${active ? 'nav-item-active' : ''}" title="${a.name}">
-          <span class="nav-icon">${a.icon}</span>
-          <span class="nav-name">${a.name}</span>
-        </a>`;
-    }
-    return `
-      <span class="nav-item nav-item-disabled" title="${a.name}">
-        <span class="nav-icon">${a.icon}</span>
-        <span class="nav-name">${a.name}</span>
-      </span>`;
-  }).join('');
-
-  // Open agents section if current page is one of the agents
-  const agentsOpen = activeId && activeId !== 'mindmap' && activeId !== 'spec-king';
 
   return `
     <div class="sidebar-inner">
@@ -85,16 +59,8 @@ function buildSidebar() {
           <span class="sidebar-title">אגם הסוכנים</span>
         </div>
       </a>
-      <div class="sidebar-section-label">כלים</div>
-      <nav class="sidebar-nav sidebar-nav-tools" aria-label="ניווט כלים">
-        ${toolItems}
-      </nav>
-      <button class="sidebar-collapse-btn ${agentsOpen ? 'open' : ''}" onclick="toggleSidebarAgents(this)" aria-expanded="${agentsOpen}">
-        <span>סוכנים</span>
-        <span class="sidebar-collapse-arrow">▸</span>
-      </button>
-      <nav class="sidebar-nav sidebar-agents-nav" aria-label="ניווט סוכנים" style="${agentsOpen ? '' : 'display:none'}">
-        ${agentItems}
+      <nav class="sidebar-nav" aria-label="ניווט ראשי">
+        ${navItems}
       </nav>
     </div>`;
 }
@@ -139,13 +105,6 @@ window.changeSiteFontSize = function (step) {
   localStorage.setItem('sdlc-font-size', next);
 };
 
-window.toggleSidebarAgents = function(btn) {
-  const nav = btn.nextElementSibling;
-  const open = nav.style.display === 'none';
-  nav.style.display = open ? '' : 'none';
-  btn.classList.toggle('open', open);
-  btn.setAttribute('aria-expanded', String(open));
-};
 
 function injectSidebar() {
   const existingContent = document.body.innerHTML;

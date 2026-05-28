@@ -1924,7 +1924,6 @@ body.light-mode .agent-active:hover {
   font-size: .92rem;
   line-height: 1.6;
   word-break: break-word;
-  white-space: pre-wrap;
 }
 
 .chat-msg-user .chat-bubble {
@@ -1932,6 +1931,7 @@ body.light-mode .agent-active:hover {
   color: #fff;
   border-bottom-left-radius: 4px;
   box-shadow: 0 2px 10px rgba(91,108,245,0.3);
+  white-space: pre-wrap;
 }
 
 .chat-msg-assistant .chat-bubble {
@@ -1940,6 +1940,79 @@ body.light-mode .agent-active:hover {
   border: 1px solid var(--border-soft);
   border-bottom-right-radius: 4px;
   box-shadow: var(--shadow-sm);
+  white-space: normal;
+}
+
+/* Markdown rendering inside assistant bubbles */
+.chat-msg-assistant .chat-bubble p { margin: 0 0 .55rem; }
+.chat-msg-assistant .chat-bubble p:last-child { margin-bottom: 0; }
+.chat-msg-assistant .chat-bubble h1,
+.chat-msg-assistant .chat-bubble h2,
+.chat-msg-assistant .chat-bubble h3,
+.chat-msg-assistant .chat-bubble h4 {
+  margin: .75rem 0 .3rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.chat-msg-assistant .chat-bubble ul,
+.chat-msg-assistant .chat-bubble ol {
+  margin: .3rem 0 .55rem;
+  padding-inline-start: 1.4rem;
+}
+.chat-msg-assistant .chat-bubble li { margin-bottom: .2rem; }
+.chat-msg-assistant .chat-bubble code {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: .1em .35em;
+  font-size: .85em;
+  font-family: monospace;
+  direction: ltr;
+  unicode-bidi: embed;
+}
+.chat-msg-assistant .chat-bubble pre {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  overflow-x: auto;
+  margin: .4rem 0 .55rem;
+  direction: ltr;
+  text-align: left;
+}
+.chat-msg-assistant .chat-bubble pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: .82rem;
+}
+.chat-msg-assistant .chat-bubble table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: .4rem 0 .55rem;
+  font-size: .85rem;
+}
+.chat-msg-assistant .chat-bubble th,
+.chat-msg-assistant .chat-bubble td {
+  border: 1px solid var(--border-soft);
+  padding: .3rem .6rem;
+  text-align: right;
+}
+.chat-msg-assistant .chat-bubble th {
+  background: var(--bg);
+  font-weight: 600;
+}
+.chat-msg-assistant .chat-bubble blockquote {
+  border-inline-start: 3px solid var(--brand);
+  margin: .4rem 0;
+  padding: .3rem .75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.chat-msg-assistant .chat-bubble a {
+  color: var(--brand);
+  text-decoration: underline;
 }
 
 .chat-msg-error .chat-bubble {

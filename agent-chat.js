@@ -18,7 +18,7 @@ const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini
 const MAX_FILE_MB       = 10;
 const MAX_OUTPUT_TOKENS = 65000;
 const CHUNK_SIZE        = 50000;  // chars per input chunk for large text files
-const DOWNLOAD_THRESHOLD = 3000; // responses longer than this are auto-downloaded
+const DOWNLOAD_THRESHOLD = 8000; // responses longer than this are auto-downloaded
 
 // ── State ─────────────────────────────────────────────────────────────────
 let apiKey          = localStorage.getItem(STORAGE_KEY) || '';
@@ -436,7 +436,8 @@ function buildUserParts(text, file) {
   if (natContext) {
     natPrefix = natContext.map(f =>
       `קובץ Natural: "${f.name}"\n\`\`\`natural\n${f.text}\n\`\`\``
-    ).join('\n\n') + '\n\n---\n\n';
+    ).join('\n\n') +
+      '\n\n---\n\nהוראה לכל שאלות ההמשך: ענה בתמציתיות — עד 5 פסקאות ברורות. תשובה ממוקדת בלבד, ללא מסמך ארוך.\n\n---\n\n';
     natContext = null;
     clearNatContextBanner();
   }
@@ -739,6 +740,11 @@ function autoResize(el) {
 }
 
 function formatText(text) {
+  if (window.marked) {
+    try {
+      return window.marked.parse(text, { breaks: true, gfm: true });
+    } catch {}
+  }
   return escHtml(text)
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')

@@ -5,6 +5,7 @@ const CHAT_AGENT_IDS = new Set([
   'software-architect', 'platform-architect', 'tender-writer', 'outsystems',
   'storyteller', 'design-queen', 'dev-champ', 'tester', 'security', 'natural',
   'summarizer',
+  'ui-explorer',
 ]);
 
 // All nav items in priority order — spec-viewer and mindmap use custom hrefs
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { id: 'tender-writer',       name: 'כותב המכרזים',           icon: '📝',  href: 'agent.html?id=tender-writer' },
   { id: 'natural',             name: 'NATURAL',                icon: '🖥️', href: 'agent.html?id=natural' },
   { id: 'summarizer',          name: 'המסכם',                  icon: '📝',  href: 'agent.html?id=summarizer' },
+  { id: 'ui-explorer',        name: 'חוקר ממשק המשתמש',      icon: '🔬',  href: 'agent.html?id=ui-explorer' },
   { id: 'json-gen',            name: 'הטכנולוג',               icon: '{ }', href: 'agent.html?id=json-gen' },
   { id: 'dynamic',             name: 'סוכן דינמי',             icon: '🔮',  href: 'agent.html?id=dynamic' },
   { id: 'salesforce',          name: 'Salesforce Killer',      icon: '⚡',  href: 'sf-agent.html' },

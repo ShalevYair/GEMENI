@@ -1,0 +1,4383 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>כרם — מערכת רישיונות יבואן</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+/* ============================================================
+   רישיון יבואנים — design system
+   Linear/Stripe-inspired, RTL Hebrew, calm professional SaaS
+   ============================================================ */
+
+:root {
+  /* Neutrals — warm-ish gray scale */
+  --bg: #ffffff;
+  --bg-subtle: #fafafa;
+  --bg-muted: #f5f5f6;
+  --panel: #ffffff;
+  --panel-hover: #f8f8f9;
+  --border: #ececef;
+  --border-strong: #d8d8dc;
+  --divider: #f0f0f2;
+
+  /* Text */
+  --text: #18181b;
+  --text-secondary: #50525a;
+  --text-muted: #7a7c85;
+  --text-disabled: #b4b6bd;
+
+  /* Brand / accent */
+  --accent: #5e6ad2;
+  --accent-hover: #4d58c0;
+  --accent-soft: #eef0fb;
+  --accent-text: #3640a4;
+
+  /* Status semantic */
+  --green: #1a7f4e;
+  --green-soft: #e6f4ec;
+  --amber: #b06b00;
+  --amber-soft: #fdf3df;
+  --red: #c1313b;
+  --red-soft: #fbeaec;
+  --blue: #1e64bd;
+  --blue-soft: #e7f0fb;
+  --purple: #7548c8;
+  --purple-soft: #f1ebfb;
+  --cyan: #0c7b89;
+  --cyan-soft: #e0f4f6;
+  --gray-soft: #f0f0f2;
+  --gray-text: #555560;
+
+  /* Shadows — subtle, Linear-style */
+  --shadow-sm: 0 1px 2px rgba(17, 17, 26, 0.04);
+  --shadow-md: 0 2px 6px rgba(17, 17, 26, 0.05), 0 1px 2px rgba(17, 17, 26, 0.06);
+  --shadow-lg: 0 8px 24px rgba(17, 17, 26, 0.08), 0 2px 6px rgba(17, 17, 26, 0.04);
+  --shadow-xl: 0 20px 48px rgba(17, 17, 26, 0.12), 0 4px 12px rgba(17, 17, 26, 0.06);
+
+  /* Radius */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+
+  /* Spacing scale */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* Layout */
+  --sidebar-w: 232px;
+  --topbar-h: 56px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-family: 'Heebo', 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: "ss01", "cv02";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  direction: rtl;
+  text-rendering: optimizeLegibility;
+}
+
+#root { min-height: 100vh; }
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  direction: rtl;
+}
+
+a { color: inherit; text-decoration: none; }
+
+.mono { font-family: 'JetBrains Mono', 'SFMono-Regular', monospace; font-size: 0.92em; letter-spacing: -0.01em; }
+
+/* ============================================================
+   App layout
+   ============================================================ */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+  background: var(--bg-subtle);
+}
+
+.app[data-external="true"] {
+  grid-template-columns: 1fr;
+}
+
+.app[data-external="true"] .sidebar { display: none; }
+
+/* Sidebar */
+.sidebar {
+  background: var(--bg);
+  border-inline-start: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--divider);
+  height: var(--topbar-h);
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #5e6ad2 0%, #7c4dff 100%);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0;
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,.1), 0 1px 2px rgba(94,106,210,.3);
+}
+
+.brand-text { font-weight: 600; font-size: 14px; color: var(--text); letter-spacing: -.005em; }
+.brand-sub { font-size: 11px; color: var(--text-muted); margin-top: -2px; }
+
+.sidebar-section { padding: 12px 10px 4px; }
+.sidebar-section-title {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-muted);
+  padding: 0 10px 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 1px;
+  transition: background .12s, color .12s;
+}
+
+.nav-item:hover { background: var(--bg-muted); color: var(--text); }
+.nav-item[aria-current="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.nav-item[aria-current="true"] svg { color: var(--accent); }
+
+.nav-item svg { width: 16px; height: 16px; color: var(--text-muted); flex-shrink: 0; }
+.nav-item[aria-current="true"] svg { color: var(--accent); }
+
+.nav-count {
+  margin-inline-start: auto;
+  font-size: 11px;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.nav-item[aria-current="true"] .nav-count {
+  background: rgba(94,106,210,.18);
+  color: var(--accent-text);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+/* Topbar */
+.topbar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--divider);
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.topbar-title { font-weight: 600; font-size: 14.5px; color: var(--text); }
+.topbar-sub { color: var(--text-muted); font-size: 13px; font-weight: 400; }
+
+.topbar-spacer { flex: 1; }
+
+.topbar-search {
+  position: relative;
+  width: 280px;
+}
+
+.topbar-search input {
+  width: 100%;
+  background: var(--bg-muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 30px 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: all .15s;
+}
+
+.topbar-search input:focus {
+  background: var(--bg);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.topbar-search svg {
+  position: absolute;
+  inset-inline-end: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+
+/* Role switcher */
+.role-switcher {
+  position: relative;
+}
+
+.role-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .12s;
+  user-select: none;
+}
+.role-pill:hover { background: var(--bg); border-color: var(--border-strong); }
+
+.role-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff8a4e, #d24f7f);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+}
+
+.role-info { display: flex; flex-direction: column; line-height: 1.15; }
+.role-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.role-title { font-size: 10.5px; color: var(--text-muted); }
+
+.role-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  width: 280px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: 50;
+}
+
+.role-dropdown-header {
+  padding: 8px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 500;
+  letter-spacing: .04em;
+  color: var(--text-muted);
+}
+
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background .1s;
+}
+.role-option:hover { background: var(--bg-muted); }
+.role-option[aria-selected="true"] { background: var(--accent-soft); }
+
+.role-option .role-avatar { width: 30px; height: 30px; font-size: 12px; }
+.role-option-text .role-name { font-size: 13px; }
+.role-option-text .role-title { font-size: 11.5px; }
+
+.role-divider {
+  height: 1px;
+  background: var(--divider);
+  margin: 4px 0;
+}
+
+/* Workspace */
+.workspace {
+  padding: 24px 28px 56px;
+  max-width: 1480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.workspace.narrow { max-width: 1100px; }
+
+/* Page header */
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+.page-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -.012em;
+  color: var(--text);
+}
+.page-subtitle {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ============================================================
+   Components
+   ============================================================ */
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: all .12s;
+  white-space: nowrap;
+  line-height: 1.3;
+  user-select: none;
+}
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn svg { width: 14px; height: 14px; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.12);
+}
+.btn-primary:hover { background: var(--accent-hover); }
+
+.btn-secondary {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.btn-secondary:hover { background: var(--bg-muted); border-color: var(--border-strong); }
+
+.btn-ghost { color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--bg-muted); color: var(--text); }
+
+.btn-danger {
+  background: var(--red);
+  color: #fff;
+}
+.btn-danger:hover { background: #a82731; }
+
+.btn-success {
+  background: var(--green);
+  color: #fff;
+}
+.btn-success:hover { background: #156a3f; }
+
+.btn-sm { padding: 4px 10px; font-size: 12.5px; }
+.btn-lg { padding: 9px 18px; font-size: 14px; }
+.btn-icon { padding: 6px; }
+.btn-icon svg { width: 15px; height: 15px; }
+
+.btn[disabled] { opacity: .5; cursor: not-allowed; pointer-events: none; }
+
+/* Badge / status pill */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.badge-gray   { background: var(--gray-soft);   color: var(--gray-text); }
+.badge-blue   { background: var(--blue-soft);   color: var(--blue); }
+.badge-green  { background: var(--green-soft);  color: var(--green); }
+.badge-amber  { background: var(--amber-soft);  color: var(--amber); }
+.badge-red    { background: var(--red-soft);    color: var(--red); }
+.badge-purple { background: var(--purple-soft); color: var(--purple); }
+.badge-cyan   { background: var(--cyan-soft);   color: var(--cyan); }
+.badge-indigo { background: var(--accent-soft); color: var(--accent-text); }
+
+/* Card / panel */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header {
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--divider);
+}
+.card-title { font-size: 14px; font-weight: 600; margin: 0; color: var(--text); letter-spacing: -.005em;}
+.card-subtitle { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.card-body { padding: 16px 18px; }
+.card-body.flush { padding: 0; }
+
+/* Stat tile */
+.stat {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+.stat-label { font-size: 12.5px; color: var(--text-muted); font-weight: 500; }
+.stat-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+.stat-num {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -.02em;
+  line-height: 1.1;
+}
+.stat-delta { font-size: 12px; font-weight: 500; }
+.stat-delta.up { color: var(--green); }
+.stat-delta.down { color: var(--red); }
+.stat-icon {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.stat-icon svg { width: 15px; height: 15px; }
+.stat-icon.blue { background: var(--blue-soft); color: var(--blue); }
+.stat-icon.green { background: var(--green-soft); color: var(--green); }
+.stat-icon.amber { background: var(--amber-soft); color: var(--amber); }
+.stat-icon.purple { background: var(--purple-soft); color: var(--purple); }
+.stat-icon.red { background: var(--red-soft); color: var(--red); }
+
+/* Table */
+.tbl-wrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.tbl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--panel);
+}
+
+.tbl-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  background: var(--bg-muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+}
+.tbl-filter:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
+.tbl-filter.active { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; }
+.tbl-filter svg { width: 12px; height: 12px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+}
+
+thead th {
+  text-align: start;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 9px 14px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--divider);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+
+tbody tr { border-bottom: 1px solid var(--divider); transition: background .08s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--bg-subtle); }
+tbody tr.clickable { cursor: pointer; }
+
+tbody td {
+  padding: 11px 14px;
+  font-size: 13px;
+  color: var(--text);
+  vertical-align: middle;
+}
+
+td.muted { color: var(--text-muted); }
+td.num { font-variant-numeric: tabular-nums; }
+
+td.cell-id .mono { background: var(--bg-muted); padding: 2px 6px; border-radius: 4px; color: var(--text-secondary); font-size: 12px; }
+
+.tbl-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--divider);
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.tbl-pager { display: inline-flex; gap: 2px; }
+.tbl-pager button {
+  width: 26px; height: 26px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+}
+.tbl-pager button:hover:not([disabled]) { background: var(--bg-muted); }
+.tbl-pager button[aria-current="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tbl-pager button[disabled] { opacity: .4; cursor: not-allowed; }
+.tbl-pager button svg { width: 12px; height: 12px; }
+
+/* Form fields */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.field-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.field-label .req { color: var(--red); margin-inline-start: 2px; }
+.field-hint { font-size: 12px; color: var(--text-muted); }
+.field-error { font-size: 12px; color: var(--red); margin-top: 2px; }
+
+.input, .select, .textarea {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13.5px;
+  color: var(--text);
+  outline: none;
+  transition: all .12s;
+  font-family: inherit;
+}
+.input:hover, .select:hover, .textarea:hover { border-color: var(--border-strong); }
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.input[readonly] { background: var(--bg-muted); color: var(--text-muted); }
+.input.has-error { border-color: var(--red); }
+.input.has-error:focus { box-shadow: 0 0 0 3px var(--red-soft); }
+.textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
+
+.select { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'><path d='M1 1l4 4 4-4' stroke='%237a7c85' stroke-width='1.5' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: left 12px center; padding-inline-start: 30px; }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 14px 16px;
+}
+.col-12 { grid-column: span 12; }
+.col-6 { grid-column: span 6; }
+.col-4 { grid-column: span 4; }
+.col-3 { grid-column: span 3; }
+
+@media (max-width: 720px) {
+  .form-grid > * { grid-column: span 12; }
+}
+
+/* Section heading inside form */
+.form-section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.form-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--bg-subtle);
+}
+.form-section-title { font-size: 13.5px; font-weight: 600; color: var(--text); margin: 0; }
+.form-section-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 1px; }
+.form-section-body { padding: 18px; }
+
+/* Stepper */
+.stepper {
+  display: flex;
+  gap: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 18px;
+  align-items: center;
+  margin-bottom: 18px;
+  box-shadow: var(--shadow-sm);
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+}
+.step.active { color: var(--text); }
+.step.active .step-num { background: var(--accent); color: #fff; border-color: var(--accent); }
+.step.done { color: var(--text-secondary); }
+.step.done .step-num { background: var(--green); color: #fff; border-color: var(--green); }
+.step-sep {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  margin: 0 12px;
+}
+.step.done + .step-sep { background: var(--green); }
+
+/* Filter chips / quick stat tabs */
+.tabs {
+  display: inline-flex;
+  background: var(--bg-muted);
+  padding: 3px;
+  border-radius: 8px;
+  gap: 2px;
+}
+.tab {
+  padding: 4px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: all .1s;
+}
+.tab[aria-selected="true"] { background: var(--bg); color: var(--text); box-shadow: var(--shadow-sm); }
+.tab:hover:not([aria-selected="true"]) { color: var(--text); }
+
+.tab-count {
+  margin-inline-start: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(0,0,0,.06);
+  padding: 0px 5px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+.tab[aria-selected="true"] .tab-count { background: var(--accent-soft); color: var(--accent-text); }
+
+/* Drawer / modal */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 17, 25, 0.32);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn .15s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  background: var(--bg);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xl);
+  width: min(560px, calc(100vw - 32px));
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalIn .2s cubic-bezier(.2,.7,.2,1);
+}
+@keyframes modalIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--divider);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-title { font-size: 15px; font-weight: 600; margin: 0; }
+.modal-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+.modal-close:hover { background: var(--bg-muted); color: var(--text); }
+.modal-body { padding: 18px 20px; overflow-y: auto; }
+.modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--divider);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: var(--bg-subtle);
+}
+
+/* Side drawer (for detail) */
+.drawer {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: min(640px, 100vw);
+  background: var(--bg);
+  z-index: 100;
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  animation: drawerIn .25s cubic-bezier(.2,.7,.2,1);
+}
+@keyframes drawerIn { from { transform: translateX(-30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* Charts */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+}
+
+.bar-row { display: flex; align-items: center; gap: 12px; padding: 4px 0; }
+.bar-label { font-size: 12.5px; color: var(--text-secondary); width: 170px; flex-shrink: 0; }
+.bar-track { flex: 1; height: 8px; background: var(--bg-muted); border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width .4s ease; }
+.bar-value { font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; width: 40px; text-align: end; font-weight: 500; }
+
+/* Donut chart wrapper */
+.donut-row {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.donut-legend { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.legend-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.legend-dot { width: 9px; height: 9px; border-radius: 2px; }
+.legend-label { color: var(--text-secondary); flex: 1; }
+.legend-value { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Activity feed item */
+.activity-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--divider);
+  align-items: flex-start;
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  color: #fff; font-size: 11px; font-weight: 600;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.activity-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+.activity-text .who { font-weight: 600; }
+.activity-text .what { color: var(--text-secondary); }
+.activity-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+
+/* Tag / chip selection */
+.chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+}
+.chip:hover { background: var(--bg); border-color: var(--border-strong); }
+.chip.selected { background: var(--accent-soft); color: var(--accent-text); border-color: rgba(94,106,210,.3); }
+.chip svg { width: 11px; height: 11px; }
+.chip-x { color: var(--text-muted); cursor: pointer; }
+.chip-x:hover { color: var(--red); }
+
+/* Choice card (request type, importer type) */
+.choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.choice {
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  cursor: pointer;
+  background: var(--bg);
+  transition: all .12s;
+  position: relative;
+}
+.choice:hover { border-color: var(--accent); background: var(--accent-soft); }
+.choice.selected { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px rgba(94,106,210,.12); }
+.choice-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--bg-muted);
+  display: grid; place-items: center;
+  margin-bottom: 10px;
+}
+.choice-icon svg { width: 16px; height: 16px; color: var(--text-secondary); }
+.choice.selected .choice-icon { background: rgba(94,106,210,.18); }
+.choice.selected .choice-icon svg { color: var(--accent); }
+.choice-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.choice-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+
+.choice-check {
+  position: absolute;
+  top: 10px;
+  inset-inline-start: 12px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: grid; place-items: center;
+  opacity: 0; transform: scale(.7);
+  transition: all .15s;
+}
+.choice.selected .choice-check { opacity: 1; transform: scale(1); }
+.choice-check svg { width: 11px; height: 11px; color: #fff; }
+
+/* Empty state */
+.empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.empty-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.empty-desc { font-size: 13px; }
+
+/* Layout helpers */
+.row { display: flex; align-items: center; gap: 10px; }
+.row.between { justify-content: space-between; }
+.col { display: flex; flex-direction: column; gap: 10px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.grid-12 { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+
+.gap-1 { gap: 4px; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; } .gap-6 { gap: 24px; }
+.mt-1 { margin-top: 4px; } .mt-2 { margin-top: 8px; } .mt-3 { margin-top: 12px; } .mt-4 { margin-top: 16px; } .mt-6 { margin-top: 24px; }
+.mb-1 { margin-bottom: 4px; } .mb-2 { margin-bottom: 8px; } .mb-3 { margin-bottom: 12px; } .mb-4 { margin-bottom: 16px; } .mb-6 { margin-bottom: 24px; }
+
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+.text-sm { font-size: 12.5px; }
+.text-xs { font-size: 11.5px; }
+.text-lg { font-size: 16px; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+
+.divider-h { height: 1px; background: var(--divider); margin: 12px 0; }
+
+/* Detail layout */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .detail-grid { grid-template-columns: 1fr; }
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 6px 14px;
+}
+.kv-grid dt { font-size: 12.5px; color: var(--text-muted); }
+.kv-grid dd { margin: 0; font-size: 13px; color: var(--text); }
+
+/* Tabs (full tab bar on detail page) */
+.subnav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--divider);
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+.subnav-tab {
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.subnav-tab:hover { color: var(--text); }
+.subnav-tab[aria-selected="true"] { color: var(--accent-text); border-color: var(--accent); }
+.subnav-tab .tab-count { background: var(--bg-muted); }
+
+/* Toast / notification (success/error) */
+.toast-wrap { position: fixed; top: 16px; inset-inline-start: 16px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 280px;
+  animation: toastIn .25s cubic-bezier(.2,.7,.2,1);
+  border-inline-start: 3px solid var(--accent);
+}
+.toast.success { border-inline-start-color: var(--green); }
+.toast.error { border-inline-start-color: var(--red); }
+@keyframes toastIn { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.toast-text { font-size: 13px; flex: 1; }
+
+/* File upload box */
+.upload {
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-subtle);
+  cursor: pointer;
+  transition: all .12s;
+}
+.upload:hover { border-color: var(--accent); background: var(--accent-soft); }
+.upload-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--bg-muted); display: grid; place-items: center; flex-shrink: 0; color: var(--text-secondary); }
+.upload-icon svg { width: 16px; height: 16px; }
+.upload-text { flex: 1; }
+.upload-title { font-size: 13px; font-weight: 500; color: var(--text); }
+.upload-hint { font-size: 12px; color: var(--text-muted); }
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  margin-bottom: 6px;
+}
+.file-icon {
+  width: 30px; height: 30px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.file-icon svg { width: 15px; height: 15px; }
+.file-name { font-size: 13px; font-weight: 500; color: var(--text); }
+.file-meta { font-size: 11.5px; color: var(--text-muted); }
+.file-actions { display: inline-flex; gap: 4px; margin-inline-start: auto; }
+
+/* Timeline */
+.timeline { position: relative; padding-inline-start: 18px; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-start: 6px;
+  width: 2px;
+  background: var(--divider);
+}
+.tl-item { position: relative; padding-bottom: 14px; }
+.tl-dot {
+  position: absolute;
+  inset-inline-start: -18px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--border-strong);
+}
+.tl-item.current .tl-dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tl-item.done .tl-dot { background: var(--green); border-color: var(--green); }
+.tl-title { font-size: 13px; font-weight: 500; color: var(--text); }
+.tl-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.tl-comment { font-size: 12.5px; color: var(--text-secondary); margin-top: 4px; line-height: 1.55; }
+
+/* External user — top header (no sidebar) */
+.ext-header {
+  background: var(--bg);
+  border-bottom: 1px solid var(--divider);
+  padding: 0 28px;
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ext-header .brand { display: flex; align-items: center; gap: 10px; }
+.ext-nav { display: inline-flex; gap: 2px; margin-inline-start: 24px; }
+.ext-nav-item {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  cursor: pointer;
+}
+.ext-nav-item:hover { background: var(--bg-muted); color: var(--text); }
+.ext-nav-item[aria-current="true"] { color: var(--accent-text); background: var(--accent-soft); }
+
+/* Decision action bar (sticky) */
+.action-bar {
+  position: sticky;
+  bottom: 0;
+  margin-top: 18px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-md);
+  z-index: 5;
+}
+
+/* Hero / cta for empty drafts */
+.hero-card {
+  background: linear-gradient(140deg, #f4f5ff 0%, #f6f0fb 100%);
+  border: 1px solid #e3e5fa;
+  padding: 28px;
+  border-radius: var(--r-lg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Help text small */
+.helper { font-size: 12px; color: var(--text-muted); }
+
+/* Animation for entering page content */
+.page-enter { animation: pageIn .22s cubic-bezier(.2,.7,.2,1); }
+@keyframes pageIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,.08); border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.16); }
+::-webkit-scrollbar-track { background: transparent; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" data-presets="env,react">
+// icons.jsx — inline SVG icons (Lucide-style, 24x24 viewbox)
+
+const I = (path, opts = {}) => {
+  const Icon = ({ size = 16, color = 'currentColor', strokeWidth = 1.75, style }) => (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={style}
+      dangerouslySetInnerHTML={{ __html: path }}
+    />
+  );
+  return Icon;
+};
+
+const Icons = {
+  // dashboard
+  Dashboard: I('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
+  Inbox: I('<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/>'),
+  ClipboardList: I('<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 11h6M9 15h4M9 19h6"/>'),
+  Award: I('<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>'),
+  Building: I('<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4M10 10h4M10 14h4M10 18h4"/>'),
+  Users: I('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+  User: I('<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+  FileText: I('<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>'),
+  Bell: I('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'),
+  Search: I('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'),
+  Filter: I('<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>'),
+  Plus: I('<path d="M5 12h14M12 5v14"/>'),
+  X: I('<path d="M18 6 6 18M6 6l12 12"/>'),
+  Check: I('<path d="M20 6 9 17l-5-5"/>'),
+  CheckCircle: I('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>'),
+  XCircle: I('<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>'),
+  AlertCircle: I('<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>'),
+  AlertTriangle: I('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/>'),
+  Clock: I('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),
+  Calendar: I('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>'),
+  ChevronDown: I('<polyline points="6 9 12 15 18 9"/>'),
+  ChevronUp: I('<polyline points="18 15 12 9 6 15"/>'),
+  ChevronLeft: I('<polyline points="15 18 9 12 15 6"/>'),
+  ChevronRight: I('<polyline points="9 18 15 12 9 6"/>'),
+  ArrowRight: I('<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>'),
+  ArrowLeft: I('<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>'),
+  Upload: I('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'),
+  Download: I('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+  Paperclip: I('<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>'),
+  Eye: I('<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'),
+  EyeOff: I('<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M2 2l20 20"/>'),
+  Pen: I('<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>'),
+  Edit: I('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>'),
+  Trash: I('<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),
+  Send: I('<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>'),
+  Logout: I('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),
+  Settings: I('<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>'),
+  Package: I('<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>'),
+  Tag: I('<path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'),
+  History: I('<path d="M3 12a9 9 0 1 0 9-9 9.74 9.74 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>'),
+  Mail: I('<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/>'),
+  Phone: I('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>'),
+  CreditCard: I('<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>'),
+  MoreH: I('<circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/>'),
+  Sparkles: I('<path d="m12 3-1.9 5.8L4 10l5.7 1.9L12 17l1.9-5.8L20 9l-5.7-1.9z"/><path d="M19 4l.5 1.5L21 6l-1.5.5L19 8l-.5-1.5L17 6l1.5-.5z"/><path d="M19 16l.5 1.5L21 18l-1.5.5L19 20l-.5-1.5L17 18l1.5-.5z"/>'),
+  Refresh: I('<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>'),
+  Briefcase: I('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'),
+  TrendingUp: I('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>'),
+  TrendingDown: I('<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>'),
+  Globe: I('<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'),
+  Map: I('<polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>'),
+  Info: I('<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'),
+  Save: I('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>'),
+  ExternalLink: I('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>'),
+  Sun: I('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>'),
+  PlayCircle: I('<circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>'),
+  Pause: I('<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>'),
+  HelpCircle: I('<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>'),
+  Bookmark: I('<path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>'),
+  Activity: I('<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'),
+  PieChart: I('<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>'),
+  Layers: I('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>'),
+};
+
+window.Icons = Icons;
+  </script>
+  <script type="text/babel" data-presets="env,react">
+// data.jsx — realistic mock data for the Importer License system
+
+// ============================================================
+// Status helpers
+// ============================================================
+
+const REQUEST_STATUS = {
+  draft:           { id: 1, label: 'טיוטה',                       badge: 'gray' },
+  submitted:       { id: 2, label: 'נקלטה',                       badge: 'blue' },
+  in_review:       { id: 3, label: 'בבחינת גורמי המקצוע',         badge: 'indigo' },
+  awaiting_data:   { id: 4, label: 'ממתינה להשלמת נתונים',        badge: 'amber' },
+  rejected:        { id: 5, label: 'נדחתה',                       badge: 'red' },
+  pending_manager: { id: 6, label: 'ממתינה לאישור מנהל',           badge: 'purple' },
+  pending_issue:   { id: 7, label: 'ממתינה להפקת רישיון',          badge: 'cyan' },
+  approved:        { id: 8, label: 'מאושרת',                       badge: 'green' },
+};
+
+const REQUEST_TYPES = [
+  { id: 'new',          label: 'רישיון חדש',            desc: 'בקשה לרישיון יבואן חדש', icon: 'Sparkles' },
+  { id: 'add_product',  label: 'הוספת תוצר',            desc: 'הוספת תוצר חדש לרישיון קיים', icon: 'Plus' },
+  { id: 'update_class', label: 'עדכון סיווג בתוצר',     desc: 'עדכון סיווגים לתוצר קיים', icon: 'Edit' },
+  { id: 'renew',        label: 'חידוש תוצר',            desc: 'חידוש תוקף לתוצר ברישיון', icon: 'Refresh' },
+];
+
+const IMPORTER_TYPES = [
+  { id: 'direct',   label: 'יבואן ישיר',  desc: 'מייבא ישירות מיצרן הרכב במדינת חוץ', icon: 'Globe' },
+  { id: 'indirect', label: 'יבואן עקיף',  desc: 'מייבא דרך סוכן או יבואן ראשי', icon: 'Users' },
+  { id: 'small',    label: 'יבואן זעיר',  desc: 'ייבוא בהיקפים קטנים – ללא תוצר ייעודי', icon: 'Briefcase' },
+];
+
+const ENTITY_TYPES = [
+  { id: 'company',     label: 'תאגיד רשום' },
+  { id: 'partnership', label: 'שותפות רשומה' },
+  { id: 'dealer',      label: 'עוסק מורשה' },
+];
+
+const PRODUCTS = [
+  { code: 'toyota',     label: 'טויוטה',   manufacturer: 'Toyota Motor Corporation' },
+  { code: 'ford',       label: 'FORD',     manufacturer: 'Ford Motor Company' },
+  { code: 'mini',       label: 'מיני',     manufacturer: 'BMW Group' },
+  { code: 'mitsubishi', label: 'מיצובישי', manufacturer: 'Mitsubishi Motors' },
+  { code: 'mercedes',   label: 'מרצדס',    manufacturer: 'Mercedes-Benz Group' },
+  { code: 'citroen',    label: 'סיטרואן',  manufacturer: 'Stellantis N.V.' },
+  { code: 'skoda',      label: 'סקודה',    manufacturer: 'Škoda Auto a.s.' },
+  { code: 'landrover',  label: 'לנד רובר', manufacturer: 'Jaguar Land Rover' },
+  { code: 'lamborghini',label: 'למבורגיני',manufacturer: 'Automobili Lamborghini S.p.A.' },
+];
+
+const CLASSIFICATIONS = [
+  'L', 'L7', 'M1', 'M1 חשמלי', 'M2', 'M2 חשמלי', 'M3', 'M3 חשמלי',
+  'N1', 'N1 חשמלי', 'N2', 'N2 חשמלי', 'N3', 'N3 חשמלי',
+  'O1', 'O2', 'O3', 'O4',
+  'T1 טרקטור משא', 'T2 טרקטורון', 'T2 רכב שטח',
+];
+
+const APPROVAL_TYPES = [
+  { code: 'economist',    label: 'אישור כלכלן',         role: 'economist' },
+  { code: 'garage',       label: 'אישור תחום מוסכים',   role: 'garage_department' },
+  { code: 'import',       label: 'אישור תחום יבוא',     role: 'import_manager' },
+  { code: 'department',   label: 'אישור מנהל אגף',      role: 'department_manager' },
+];
+
+// ============================================================
+// Roles & users
+// ============================================================
+
+const ROLES = [
+  { id: 'representative',    label: 'מייצג',                       category: 'external', desc: 'יבואן / מייצג היבואן' },
+  { id: 'import_manager',    label: 'מנהל תחום יבוא',              category: 'internal', desc: 'אחראי על בדיקה ואישור בקשות' },
+  { id: 'economist',         label: 'כלכלן',                       category: 'internal', desc: 'בדיקת מסמכי הון עצמי' },
+  { id: 'garage_department', label: 'תחום מוסכים',                 category: 'internal', desc: 'בדיקת מסמכי שירותי תחזוקה' },
+  { id: 'department_manager',label: 'מנהל אגף א – שירותי תחזוקה',  category: 'internal', desc: 'אישור סופי לרישיונות' },
+];
+
+const USERS = {
+  representative:     { name: 'דנה ארד',       initials: 'דא', company: 'אוטו טריידינג בע״מ', color: '#d24f7f' },
+  import_manager:     { name: 'אבישי גולדמן',  initials: 'אג', dept: 'תחום יבוא',           color: '#5e6ad2' },
+  economist:          { name: 'שירה כהן',      initials: 'שכ', dept: 'אגף כלכלה',            color: '#0c7b89' },
+  garage_department:  { name: 'רונן ישראלי',   initials: 'רי', dept: 'תחום מוסכים',          color: '#b06b00' },
+  department_manager: { name: 'דליה אברהמי',   initials: 'דא', dept: 'אגף א',               color: '#7548c8' },
+};
+
+// ============================================================
+// Mock importer / request / permit data
+// ============================================================
+
+const COMPANIES = [
+  'אוטו טריידינג בע״מ',
+  'כרמל מוטורס בע״מ',
+  'דלק רכב בע״מ',
+  'יוניברסל מוטורס ישראל',
+  'אלקטריק קארס ישראל בע״מ',
+  'מובילי דרך בע״מ',
+  'דרום ייבוא רכב בע״מ',
+  'גלובל אוטו 2019 בע״מ',
+  'סופר רכב הישראלי בע״מ',
+  'איקס-מוטורס בע״מ',
+  'אוטוטק חדשנות בע״מ',
+  'נווה מוטורס בע״מ',
+];
+
+const APPLICANTS = [
+  { first: 'דנה',    last: 'ארד',       id: '312987654', phone: '054-1234567', email: 'dana@autotrading.co.il' },
+  { first: 'אבי',    last: 'מזרחי',    id: '028765432', phone: '050-9876543', email: 'avi.m@carmel-motors.co.il' },
+  { first: 'נועה',   last: 'רוזנברג',  id: '316543210', phone: '052-3456789', email: 'noa@delek-rechev.co.il' },
+  { first: 'יואב',   last: 'בן-דוד',   id: '203456789', phone: '054-7654321', email: 'yoav.bd@universal.co.il' },
+  { first: 'מיכל',   last: 'פרידמן',   id: '305678912', phone: '050-2345678', email: 'michal@electric-cars.co.il' },
+  { first: 'אסף',    last: 'גולן',     id: '037654321', phone: '053-4567890', email: 'asaf@movilei-derech.co.il' },
+  { first: 'תמר',    last: 'כהן',      id: '215678943', phone: '054-9876543', email: 'tamar@darom.co.il' },
+  { first: 'גיל',    last: 'אברהם',    id: '301234567', phone: '050-1212121', email: 'gil@global-auto.co.il' },
+  { first: 'יעל',    last: 'לוי',      id: '328765432', phone: '052-3434343', email: 'yael@super-rechev.co.il' },
+  { first: 'אורי',   last: 'שמיר',     id: '029876543', phone: '054-5656565', email: 'uri@xmotors.co.il' },
+  { first: 'שירלי',  last: 'דהן',      id: '317654321', phone: '050-7878787', email: 'shirly@autotech.co.il' },
+  { first: 'אייל',   last: 'מאיר',     id: '203876543', phone: '052-8989898', email: 'eyal@nave.co.il' },
+];
+
+const DOC_TYPES = [
+  { code: 'request_letter',       label: 'מכתב בקשה חתום',                                required: true },
+  { code: 'incorporation',        label: 'תעודת התאגדות',                                  required: true },
+  { code: 'company_extract',      label: 'נסח חברה עדכני',                                required: true },
+  { code: 'attorney_confirmation',label: 'אישור עו״ד על זהות מנכ״ל ומורשי חתימה',          required: true },
+  { code: 'ceo_id',               label: 'צילום ת.ז של מנכ״ל החברה',                       required: true },
+  { code: 'consent_letter',       label: 'כתב הסכמה – חתימת מורשי חתימה',                  required: true },
+  { code: 'manufacturer_agreement',label:'הסכם התקשרות עם יצרן רכב (3 שנים)',              required: true },
+  { code: 'manufacturer_cert',    label: 'אישור הסמכת יצרן',                              required: true },
+  { code: 'declaration_foreign',  label: 'הצהרת יצרן רכב במדינת חוץ',                     required: false },
+  { code: 'commitment_letter',    label: 'כתב התחייבות',                                  required: true },
+  { code: 'consultation_declaration',label:'תצהיר לקביעת חובת היוועצות',                  required: true },
+  { code: 'maintenance_agreement',label: 'הסדרת שירותי תחזוקה',                            required: true },
+  { code: 'capital_documents',    label: 'מסמכי הון עצמי',                                required: true },
+];
+
+const DOC_STATUS = {
+  not_attached:{ label: 'לא מצורף',  badge: 'gray',   icon: 'Paperclip' },
+  attached:    { label: 'מצורף',      badge: 'blue',   icon: 'FileText'},
+  rejected:    { label: 'לא מאושר',   badge: 'red',    icon: 'XCircle'},
+  approved:    { label: 'מאושר',      badge: 'green',  icon: 'CheckCircle'},
+};
+
+// ============================================================
+// Generate realistic dataset
+// ============================================================
+
+function pick(arr, i) { return arr[i % arr.length]; }
+function pickRandom(arr, seed) { return arr[Math.abs(seed) % arr.length]; }
+
+const SEEDED_RAND = (() => {
+  let s = 8472;
+  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+})();
+
+function randPick(arr) { return arr[Math.floor(SEEDED_RAND() * arr.length)]; }
+function randInt(min, max) { return Math.floor(SEEDED_RAND() * (max - min + 1)) + min; }
+
+function fmtDate(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`;
+}
+function fmtDateTime(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${fmtDate(dt)} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+}
+function daysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString();
+}
+function daysFromNow(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString();
+}
+
+// Pre-built specific request examples for visual richness
+const REQUESTS_SEED = [
+  { idx: 0, type: 'new',          importerType: 'direct',   status: 'in_review',       company: 0, applicant: 0, products: ['toyota'], created: -2, manager: 'אבישי גולדמן' },
+  { idx: 1, type: 'new',          importerType: 'indirect', status: 'pending_manager', company: 1, applicant: 1, products: ['mercedes', 'mini'], created: -5, manager: 'אבישי גולדמן' },
+  { idx: 2, type: 'add_product',  importerType: 'direct',   status: 'awaiting_data',   company: 2, applicant: 2, products: ['ford'], created: -8, manager: 'אבישי גולדמן' },
+  { idx: 3, type: 'new',          importerType: 'direct',   status: 'pending_issue',   company: 3, applicant: 3, products: ['skoda'], created: -12, manager: 'אבישי גולדמן' },
+  { idx: 4, type: 'update_class', importerType: 'direct',   status: 'approved',        company: 4, applicant: 4, products: ['toyota'], created: -18, manager: 'אבישי גולדמן' },
+  { idx: 5, type: 'new',          importerType: 'small',    status: 'submitted',       company: 5, applicant: 5, products: [], created: -1, manager: 'אבישי גולדמן' },
+  { idx: 6, type: 'new',          importerType: 'indirect', status: 'in_review',       company: 6, applicant: 6, products: ['citroen'], created: -3, manager: 'אבישי גולדמן' },
+  { idx: 7, type: 'renew',        importerType: 'direct',   status: 'pending_manager', company: 7, applicant: 7, products: ['landrover'], created: -7, manager: 'אבישי גולדמן' },
+  { idx: 8, type: 'new',          importerType: 'direct',   status: 'rejected',        company: 8, applicant: 8, products: ['mitsubishi'], created: -22, manager: 'אבישי גולדמן' },
+  { idx: 9, type: 'add_product',  importerType: 'indirect', status: 'in_review',       company: 9, applicant: 9, products: ['toyota', 'ford'], created: -4, manager: 'אבישי גולדמן' },
+  { idx: 10,type: 'new',          importerType: 'direct',   status: 'approved',        company: 10,applicant: 10,products: ['mercedes'], created: -30, manager: 'אבישי גולדמן' },
+  { idx: 11,type: 'update_class', importerType: 'direct',   status: 'awaiting_data',   company: 11,applicant: 11,products: ['skoda'], created: -9, manager: 'אבישי גולדמן' },
+  { idx: 12,type: 'new',          importerType: 'indirect', status: 'draft',           company: 0, applicant: 0, products: ['lamborghini'], created: 0, manager: '' },
+];
+
+function buildDocs(reqIdx, statusGroup) {
+  // status group determines completion of documents
+  const total = DOC_TYPES.length;
+  const required = DOC_TYPES.filter(d => d.required);
+  let attachedCount, approvedCount, rejectedCount;
+  if (statusGroup === 'draft')              { attachedCount = 3; approvedCount = 0; rejectedCount = 0; }
+  else if (statusGroup === 'submitted')     { attachedCount = total; approvedCount = 0; rejectedCount = 0; }
+  else if (statusGroup === 'in_review')     { attachedCount = total; approvedCount = 4; rejectedCount = 0; }
+  else if (statusGroup === 'awaiting_data') { attachedCount = total; approvedCount = 6; rejectedCount = 2; }
+  else if (statusGroup === 'rejected')      { attachedCount = total; approvedCount = 5; rejectedCount = 3; }
+  else if (statusGroup === 'pending_manager'){ attachedCount = total; approvedCount = total - 2; rejectedCount = 0; }
+  else if (statusGroup === 'pending_issue') { attachedCount = total; approvedCount = total; rejectedCount = 0; }
+  else                                       { attachedCount = total; approvedCount = total; rejectedCount = 0; }
+
+  return DOC_TYPES.map((dt, i) => {
+    let status = 'not_attached';
+    if (i < attachedCount) status = 'attached';
+    if (i < approvedCount) status = 'approved';
+    if (i >= attachedCount - rejectedCount && i < attachedCount && statusGroup !== 'pending_issue') status = 'rejected';
+    return {
+      id: `DOC-${reqIdx + 1}-${i + 1}`,
+      type_code: dt.code,
+      label: dt.label,
+      required: dt.required,
+      file_name: status !== 'not_attached' ? `${dt.code.replace(/_/g,'-')}.pdf` : null,
+      size_kb: status !== 'not_attached' ? randInt(120, 4800) : null,
+      status,
+      uploaded_at: status !== 'not_attached' ? daysAgo(randInt(1, 18)) : null,
+      status_at: ['approved','rejected'].includes(status) ? daysAgo(randInt(1, 12)) : null,
+      comment: status === 'rejected' ? 'יש להגיש מסמך מעודכן וחתום' : null,
+    };
+  });
+}
+
+function buildApprovals(reqIdx, status) {
+  const list = [];
+  const order = ['economist', 'garage', 'import', 'department'];
+  const stages = {
+    in_review:       1,
+    awaiting_data:   1,
+    rejected:        1,
+    pending_manager: 3,
+    pending_issue:   4,
+    approved:        4,
+  };
+  const stage = stages[status] || 0;
+  order.slice(0, stage).forEach((code, i) => {
+    const ap = APPROVAL_TYPES.find(a => a.code === code);
+    list.push({
+      id: `AP-${reqIdx + 1}-${i + 1}`,
+      code,
+      label: ap.label,
+      role: ap.role,
+      user: USERS[ap.role].name,
+      date: daysAgo(stages[status] === 4 ? randInt(1, 5) : randInt(1, 8)),
+    });
+  });
+  return list;
+}
+
+function buildLog(reqIdx, status, createdDaysAgo) {
+  const path = ['draft', 'submitted', 'in_review'];
+  if (status === 'awaiting_data') path.push('awaiting_data');
+  if (status === 'pending_manager') path.push('pending_manager');
+  if (status === 'pending_issue') path.push('pending_manager', 'pending_issue');
+  if (status === 'approved') path.push('pending_manager', 'pending_issue', 'approved');
+  if (status === 'rejected') path.push('awaiting_data', 'rejected');
+  if (status === 'submitted') {} // just submitted
+
+  return path.map((s, i) => ({
+    status: s,
+    label: REQUEST_STATUS[s].label,
+    date: daysAgo(Math.max(0, -createdDaysAgo - i * 2)),
+    comment: s === 'rejected' ? 'נמצאו פערים מהותיים במסמכי ההון העצמי' :
+             s === 'awaiting_data' ? 'נדרשת השלמת מסמכי הון עצמי + הסכם תחזוקה מעודכן' :
+             s === 'in_review' ? 'הבקשה הועברה לבחינה של גורמי המקצוע' :
+             null,
+  }));
+}
+
+function buildAgents(seed, importerType) {
+  if (importerType !== 'indirect') return [];
+  return [
+    { id: `AG-${seed.idx}-1`, primary: 'גרשון לוי', secondary: 'שלום אבני' },
+  ];
+}
+
+const REQUESTS = REQUESTS_SEED.map((s, i) => {
+  const company = COMPANIES[s.company];
+  const applicant = APPLICANTS[s.applicant];
+  const isSmall = s.importerType === 'small';
+  const products = s.products.map((code, pi) => {
+    const p = PRODUCTS.find(pp => pp.code === code) || PRODUCTS[0];
+    return {
+      id: `PRD-${i + 1}-${pi + 1}`,
+      code: p.code,
+      label: p.label,
+      manufacturer: p.manufacturer,
+      classifications: pickRandom([
+        ['M1', 'M1 חשמלי'],
+        ['M1', 'M2', 'N1'],
+        ['N1', 'N2'],
+        ['M1'],
+        ['M1', 'M1 חשמלי', 'M2'],
+      ], i + pi),
+      status: s.status === 'approved' || s.status === 'pending_issue' ? 'approved' :
+              s.status === 'rejected' ? 'rejected' :
+              s.status === 'awaiting_data' && pi === 0 ? 'awaiting' :
+              'reviewing',
+      restriction: pi === 0 && i % 4 === 0 ? 'מוגבל לדגמי שנת ייצור 2023 ואילך בלבד.' : null,
+    };
+  });
+
+  const reqNumber = `BCS-${String(2026100 + i).padStart(7,'0')}`;
+  const docs = buildDocs(i, s.status);
+  const approvals = buildApprovals(i, s.status);
+  const log = buildLog(i, s.status, s.created);
+
+  return {
+    id: reqNumber,
+    request_type: s.type,
+    request_type_label: REQUEST_TYPES.find(rt => rt.id === s.type).label,
+    importer_type: s.importerType,
+    importer_type_label: IMPORTER_TYPES.find(it => it.id === s.importerType).label,
+    company,
+    company_id: `5${randInt(10000000, 99999999)}`,
+    entity_type: 'company',
+    applicant,
+    created_at: daysAgo(-s.created),
+    updated_at: daysAgo(randInt(0, Math.abs(s.created))),
+    status: s.status,
+    products,
+    agents: buildAgents(s, s.importerType),
+    documents: docs,
+    approvals,
+    log,
+    internal_remark: s.status === 'awaiting_data' ? 'יש לקבל אישור כלכלן לפני המשך טיפול.' : '',
+    general_remark: '',
+    manager: s.manager,
+    permit_id: ['approved', 'pending_issue'].includes(s.status) ? `PMT-${String(2025100 + i).padStart(7,'0')}` : null,
+  };
+});
+
+// Permits — derived from approved requests + a few extras
+const PERMITS = [
+  ...REQUESTS.filter(r => ['approved'].includes(r.status)).map((r, i) => ({
+    id: r.permit_id || `PMT-${String(2025200 + i).padStart(7,'0')}`,
+    company: r.company,
+    company_id: r.company_id,
+    importer_type: r.importer_type,
+    importer_type_label: r.importer_type_label,
+    applicant: r.applicant,
+    created_at: r.updated_at,
+    expires_at: daysFromNow(365 - randInt(0, 60)),
+    products: r.products,
+    status: 'active',
+    request_id: r.id,
+  })),
+  // a few historical permits for extra realism
+  { id: 'PMT-2025100043', company: 'אלקטריק קארס ישראל בע״מ', company_id: '514567890', importer_type: 'direct', importer_type_label: 'יבואן ישיר', applicant: APPLICANTS[4], created_at: daysAgo(180), expires_at: daysFromNow(28), products: [{ id: 'P1', code: 'toyota', label: 'טויוטה', classifications: ['M1','M1 חשמלי'] }], status: 'active' },
+  { id: 'PMT-2025100061', company: 'נווה מוטורס בע״מ',         company_id: '516789012', importer_type: 'indirect', importer_type_label: 'יבואן עקיף', applicant: APPLICANTS[11], created_at: daysAgo(220), expires_at: daysFromNow(45), products: [{ id: 'P1', code: 'mercedes', label: 'מרצדס', classifications: ['M1','M2','N1'] }, { id: 'P2', code: 'mini', label: 'מיני', classifications: ['M1'] }], status: 'active' },
+  { id: 'PMT-2024100098', company: 'מובילי דרך בע״מ',          company_id: '515678901', importer_type: 'direct', importer_type_label: 'יבואן ישיר', applicant: APPLICANTS[5], created_at: daysAgo(310), expires_at: daysFromNow(155), products: [{ id: 'P1', code: 'skoda', label: 'סקודה', classifications: ['M1','M2'] }], status: 'active' },
+  { id: 'PMT-2024100124', company: 'דרום ייבוא רכב בע״מ',      company_id: '517890123', importer_type: 'direct', importer_type_label: 'יבואן ישיר', applicant: APPLICANTS[6], created_at: daysAgo(420), expires_at: daysFromNow(12), products: [{ id: 'P1', code: 'citroen', label: 'סיטרואן', classifications: ['M1'] }], status: 'active' },
+  { id: 'PMT-2024100156', company: 'גלובל אוטו 2019 בע״מ',     company_id: '518901234', importer_type: 'small', importer_type_label: 'יבואן זעיר', applicant: APPLICANTS[7], created_at: daysAgo(190), expires_at: daysFromNow(310), products: [], status: 'active' },
+];
+
+// Distinct importers list
+const IMPORTERS = COMPANIES.map((c, i) => ({
+  id: `IMP-${String(1000 + i).padStart(5,'0')}`,
+  name: c,
+  company: c,
+  entity_type: ['company','company','partnership','dealer'][i % 4],
+  entity_type_label: ENTITY_TYPES[i % 3].label,
+  company_id: `5${randInt(10000000, 99999999)}`,
+  email: APPLICANTS[i % APPLICANTS.length].email.replace(/^[^@]+/, 'office'),
+  phone: APPLICANTS[i % APPLICANTS.length].phone.replace(/^054/, '03-95').replace(/-\d+/, '-3344556'),
+  permits_count: PERMITS.filter(p => p.company === c).length || (i % 3 === 0 ? 1 : 0),
+  status: 'active',
+}));
+
+// ============================================================
+// Activity / notifications
+// ============================================================
+
+const ACTIVITY = [
+  { user: 'דנה ארד',      role: 'representative',     action: 'הגישה בקשה חדשה',         target: 'BCS-2026100', when: '12 דק׳' },
+  { user: 'שירה כהן',     role: 'economist',          action: 'אישרה מסמכי הון עצמי ל-', target: 'BCS-2026099', when: '24 דק׳' },
+  { user: 'אבישי גולדמן', role: 'import_manager',     action: 'החזיר להשלמת מסמכים ל-',  target: 'BCS-2026098', when: '1 שעה' },
+  { user: 'רונן ישראלי',  role: 'garage_department',  action: 'דחה מסמך תחזוקה ב-',      target: 'BCS-2026096', when: '2 שעות' },
+  { user: 'דליה אברהמי',  role: 'department_manager', action: 'אישרה את',                target: 'BCS-2026091', when: '3 שעות' },
+  { user: 'אבי מזרחי',    role: 'representative',     action: 'העלה מסמך חדש ל-',         target: 'BCS-2026093', when: '4 שעות' },
+  { user: 'נועה רוזנברג', role: 'representative',     action: 'שילמה אגרה עבור',          target: 'BCS-2026088', when: '6 שעות' },
+  { user: 'שירה כהן',     role: 'economist',          action: 'התחילה לבחון את',           target: 'BCS-2026101', when: '8 שעות' },
+];
+
+// helper: badge for request status by id
+const statusBadge = (status) => {
+  const s = REQUEST_STATUS[status] || REQUEST_STATUS.draft;
+  return { label: s.label, badge: s.badge };
+};
+
+window.AppData = {
+  REQUEST_STATUS, REQUEST_TYPES, IMPORTER_TYPES, ENTITY_TYPES, PRODUCTS,
+  CLASSIFICATIONS, APPROVAL_TYPES, DOC_TYPES, DOC_STATUS,
+  ROLES, USERS, REQUESTS, PERMITS, IMPORTERS, ACTIVITY,
+  fmtDate, fmtDateTime, daysAgo, daysFromNow, statusBadge,
+};
+  </script>
+  <script type="text/babel" data-presets="env,react">
+// components.jsx — shared UI components
+
+const { useState, useEffect, useRef, useMemo, createContext, useContext } = React;
+
+// ---------- Status badge ----------
+function StatusBadge({ status, size }) {
+  const { statusBadge } = window.AppData;
+  const s = statusBadge(status);
+  return (
+    <span className={`badge badge-${s.badge}`}>
+      <span className="badge-dot" />
+      {s.label}
+    </span>
+  );
+}
+
+function Badge({ tone = 'gray', children, dot = false, icon }) {
+  return (
+    <span className={`badge badge-${tone}`}>
+      {dot && <span className="badge-dot" />}
+      {icon}
+      {children}
+    </span>
+  );
+}
+
+// ---------- Button ----------
+function Button({ variant = 'secondary', size, icon, iconEnd, children, onClick, disabled, type = 'button', className = '', title }) {
+  return (
+    <button
+      type={type}
+      className={`btn btn-${variant} ${size ? 'btn-' + size : ''} ${className}`}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+    >
+      {icon}
+      {children}
+      {iconEnd}
+    </button>
+  );
+}
+
+// ---------- Field ----------
+function Field({ label, required, hint, error, children, span = 6 }) {
+  return (
+    <div className={`field col-${span}`}>
+      {label && (
+        <label className="field-label">
+          {label}{required && <span className="req">*</span>}
+        </label>
+      )}
+      {children}
+      {hint && !error && <div className="field-hint">{hint}</div>}
+      {error && <div className="field-error">{error}</div>}
+    </div>
+  );
+}
+
+function Input({ value, onChange, placeholder, type = 'text', disabled, readOnly, error, dir = 'rtl', ...rest }) {
+  return (
+    <input
+      type={type}
+      className={`input ${error ? 'has-error' : ''}`}
+      value={value || ''}
+      onChange={e => onChange && onChange(e.target.value)}
+      placeholder={placeholder}
+      disabled={disabled}
+      readOnly={readOnly}
+      dir={dir}
+      {...rest}
+    />
+  );
+}
+
+function Select({ value, onChange, options = [], placeholder, disabled }) {
+  return (
+    <select
+      className="select"
+      value={value || ''}
+      onChange={e => onChange && onChange(e.target.value)}
+      disabled={disabled}
+    >
+      {placeholder && <option value="" disabled>{placeholder}</option>}
+      {options.map((opt) => {
+        const o = typeof opt === 'string' ? { value: opt, label: opt } : opt;
+        return <option key={o.value} value={o.value}>{o.label}</option>;
+      })}
+    </select>
+  );
+}
+
+function Textarea({ value, onChange, placeholder, rows = 3, disabled }) {
+  return (
+    <textarea
+      className="textarea"
+      value={value || ''}
+      onChange={e => onChange && onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      disabled={disabled}
+    />
+  );
+}
+
+// ---------- Modal ----------
+function Modal({ title, children, onClose, footer, width }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose && onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ width }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 className="modal-title">{title}</h3>
+          <button className="modal-close" onClick={onClose}>
+            <Icons.X size={16} />
+          </button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className="modal-footer">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Stepper ----------
+function Stepper({ steps, current }) {
+  return (
+    <div className="stepper">
+      {steps.map((s, i) => (
+        <React.Fragment key={i}>
+          <div className={`step ${i === current ? 'active' : ''} ${i < current ? 'done' : ''}`}>
+            <span className="step-num">{i < current ? <Icons.Check size={11} /> : i + 1}</span>
+            <span>{s}</span>
+          </div>
+          {i < steps.length - 1 && <div className="step-sep" />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Tabs ----------
+function Tabs({ tabs, active, onChange }) {
+  return (
+    <div className="tabs">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          className="tab"
+          aria-selected={active === t.id}
+          onClick={() => onChange(t.id)}
+        >
+          {t.label}
+          {t.count !== undefined && <span className="tab-count">{t.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SubnavTabs({ tabs, active, onChange }) {
+  return (
+    <div className="subnav">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          className="subnav-tab"
+          aria-selected={active === t.id}
+          onClick={() => onChange(t.id)}
+        >
+          {t.icon}
+          {t.label}
+          {t.count !== undefined && <span className="tab-count">{t.count}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Card ----------
+function Card({ title, subtitle, headerEnd, children, flush, footer, className = '' }) {
+  return (
+    <div className={`card ${className}`}>
+      {(title || headerEnd) && (
+        <div className="card-header">
+          <div>
+            {title && <h3 className="card-title">{title}</h3>}
+            {subtitle && <div className="card-subtitle">{subtitle}</div>}
+          </div>
+          {headerEnd}
+        </div>
+      )}
+      <div className={`card-body ${flush ? 'flush' : ''}`}>{children}</div>
+      {footer}
+    </div>
+  );
+}
+
+// ---------- Stat tile ----------
+function Stat({ label, value, delta, deltaDir, icon, iconTone = 'blue' }) {
+  return (
+    <div className="stat">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">
+        <span className="stat-num">{value}</span>
+        {delta && (
+          <span className={`stat-delta ${deltaDir || ''}`}>
+            {deltaDir === 'up' ? '↑' : deltaDir === 'down' ? '↓' : ''} {delta}
+          </span>
+        )}
+      </div>
+      {icon && <div className={`stat-icon ${iconTone}`}>{icon}</div>}
+    </div>
+  );
+}
+
+// ---------- Pagination ----------
+function Pager({ page, pages, onChange, total, pageSize, label = 'רשומות' }) {
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  return (
+    <div className="tbl-footer">
+      <div>{total > 0 ? `${start}-${end} מתוך ${total} ${label}` : `אין ${label}`}</div>
+      <div className="tbl-pager">
+        <button disabled={page <= 1} onClick={() => onChange(page - 1)}><Icons.ChevronRight size={11} /></button>
+        {Array.from({ length: pages }, (_, i) => (
+          <button key={i} aria-current={page === i + 1} onClick={() => onChange(i + 1)}>{i + 1}</button>
+        ))}
+        <button disabled={page >= pages} onClick={() => onChange(page + 1)}><Icons.ChevronLeft size={11} /></button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Donut chart (SVG) ----------
+function Donut({ data, size = 130 }) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+  const radius = size / 2 - 12;
+  const cx = size / 2, cy = size / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  const segs = data.map((d, i) => {
+    const len = (d.value / total) * circumference;
+    const dash = `${len} ${circumference - len}`;
+    const dashOffset = -offset;
+    offset += len;
+    return { dash, dashOffset, color: d.color || '#5e6ad2', key: i };
+  });
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={cx} cy={cy} r={radius} fill="none" stroke="#f0f0f2" strokeWidth="14" />
+      {segs.map(s => (
+        <circle
+          key={s.key}
+          cx={cx} cy={cy} r={radius}
+          fill="none"
+          stroke={s.color}
+          strokeWidth="14"
+          strokeDasharray={s.dash}
+          strokeDashoffset={s.dashOffset}
+          style={{ transition: 'stroke-dashoffset .4s' }}
+        />
+      ))}
+      <text
+        x={cx} y={cy + 5}
+        textAnchor="middle"
+        fontSize="20"
+        fontWeight="600"
+        fill="#18181b"
+        style={{ transform: 'rotate(90deg)', transformOrigin: 'center' }}
+      >{total}</text>
+    </svg>
+  );
+}
+
+// ---------- Bar chart row ----------
+function BarRow({ label, value, max, color = 'var(--accent)' }) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
+  return (
+    <div className="bar-row">
+      <div className="bar-label">{label}</div>
+      <div className="bar-track">
+        <div className="bar-fill" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <div className="bar-value">{value}</div>
+    </div>
+  );
+}
+
+// ---------- Toast ----------
+const ToastContext = createContext(null);
+
+function ToastProvider({ children }) {
+  const [items, setItems] = useState([]);
+  const show = (text, type = 'info') => {
+    const id = Math.random();
+    setItems(s => [...s, { id, text, type }]);
+    setTimeout(() => setItems(s => s.filter(x => x.id !== id)), 3200);
+  };
+  return (
+    <ToastContext.Provider value={{ show }}>
+      {children}
+      <div className="toast-wrap">
+        {items.map(i => (
+          <div key={i.id} className={`toast ${i.type}`}>
+            {i.type === 'success' && <Icons.CheckCircle size={16} color="var(--green)" />}
+            {i.type === 'error' && <Icons.XCircle size={16} color="var(--red)" />}
+            {i.type === 'info' && <Icons.Info size={16} color="var(--accent)" />}
+            <div className="toast-text">{i.text}</div>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+function useToast() { return useContext(ToastContext); }
+
+// ---------- File row ----------
+function FileRow({ file, onRemove, onPreview, status }) {
+  return (
+    <div className="file-row">
+      <div className="file-icon"><Icons.FileText size={15} /></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="file-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+        <div className="file-meta">{file.size}</div>
+      </div>
+      {status && <Badge tone={window.AppData.DOC_STATUS[status]?.badge || 'gray'} dot>{window.AppData.DOC_STATUS[status]?.label}</Badge>}
+      <div className="file-actions">
+        {onPreview && <Button variant="ghost" size="sm" icon={<Icons.Eye size={14}/>} onClick={onPreview} />}
+        {onRemove && <Button variant="ghost" size="sm" icon={<Icons.Trash size={14}/>} onClick={onRemove} />}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Avatar ----------
+function Avatar({ user, size = 28 }) {
+  const u = typeof user === 'string' ? { name: user, initials: user.split(' ').slice(0, 2).map(s => s[0]).join(''), color: '#5e6ad2' } : user;
+  return (
+    <div
+      className="role-avatar"
+      style={{ width: size, height: size, background: `linear-gradient(135deg, ${u.color}, ${u.color}aa)`, fontSize: size * 0.4 }}
+    >{u.initials || u.name?.[0]}</div>
+  );
+}
+
+// expose
+Object.assign(window, {
+  StatusBadge, Badge, Button, Field, Input, Select, Textarea,
+  Modal, Stepper, Tabs, SubnavTabs, Card, Stat, Pager,
+  Donut, BarRow, ToastProvider, useToast, FileRow, Avatar,
+  ToastContext,
+});
+  </script>
+  <script type="text/babel" data-presets="env,react">
+// dashboard.jsx — Internal management dashboard
+
+const { useState: dUseState, useMemo: dUseMemo } = React;
+
+function Dashboard({ onNavigate }) {
+  const { REQUESTS, PERMITS, REQUEST_STATUS, IMPORTER_TYPES, REQUEST_TYPES, ACTIVITY, USERS, fmtDate, statusBadge } = window.AppData;
+
+  // Compute KPIs
+  const pendingStatuses = ['submitted','in_review','awaiting_data','pending_manager','pending_issue'];
+  const pendingRequests = REQUESTS.filter(r => pendingStatuses.includes(r.status));
+  const approvedRequests = REQUESTS.filter(r => r.status === 'approved');
+  const activePermits = PERMITS.filter(p => p.status === 'active');
+
+  // Distribution by status
+  const statusCounts = Object.entries(REQUEST_STATUS).map(([k, v]) => ({
+    key: k,
+    label: v.label,
+    color: ({ gray:'#bbbcc2', blue:'#3b82f6', indigo:'#5e6ad2', amber:'#e0a235', red:'#d9534f', purple:'#8b5cf6', cyan:'#06b6d4', green:'#22c55e' })[v.badge] || '#5e6ad2',
+    value: REQUESTS.filter(r => r.status === k).length,
+  })).filter(d => d.value > 0);
+
+  // By importer type
+  const importerTypeCounts = IMPORTER_TYPES.map((t, i) => ({
+    label: t.label,
+    value: REQUESTS.filter(r => r.importer_type === t.id && r.status !== 'draft').length,
+    color: ['#5e6ad2','#22c55e','#e0a235'][i],
+  }));
+
+  const requestTypeCounts = REQUEST_TYPES.map((t, i) => ({
+    label: t.label,
+    value: REQUESTS.filter(r => r.request_type === t.id && r.status !== 'draft').length,
+    color: ['#5e6ad2','#22c55e','#e0a235','#8b5cf6'][i],
+  }));
+
+  const expiringSoon = PERMITS
+    .filter(p => {
+      const expDate = new Date(p.expires_at);
+      const diff = (expDate - Date.now()) / (1000 * 60 * 60 * 24);
+      return diff <= 60 && diff > 0 && p.status === 'active';
+    })
+    .sort((a, b) => new Date(a.expires_at) - new Date(b.expires_at))
+    .slice(0, 5);
+
+  const docsAwaitingReview = REQUESTS
+    .flatMap(r => r.documents.filter(d => d.status === 'attached').map(d => ({ ...d, request: r })))
+    .slice(0, 6);
+
+  const totalDocsPending = REQUESTS.flatMap(r => r.documents.filter(d => d.status === 'attached')).length;
+  const totalApprovals = pendingRequests.filter(r => r.status === 'pending_manager').length;
+
+  // ============================================================
+  return (
+    <div className="workspace page-enter">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">דשבורד ניהולי</h1>
+          <div className="page-subtitle">סקירה ניהולית של בקשות ורישיונות יבואן</div>
+        </div>
+        <div className="row gap-2">
+          <Button variant="ghost" icon={<Icons.Refresh size={14}/>}>רענן נתונים</Button>
+          <Button variant="secondary" icon={<Icons.Download size={14}/>}>ייצוא דוח</Button>
+        </div>
+      </div>
+
+      {/* KPI tiles */}
+      <div className="grid-4 mb-4">
+        <Stat
+          label="בקשות ממתינות לטיפול"
+          value={pendingRequests.length}
+          delta="3 חדשות היום"
+          deltaDir="up"
+          icon={<Icons.Inbox size={15} />}
+          iconTone="blue"
+        />
+        <Stat
+          label='סה"כ רישיונות פעילים'
+          value={activePermits.length}
+          delta="+2 השבוע"
+          deltaDir="up"
+          icon={<Icons.Award size={15} />}
+          iconTone="green"
+        />
+        <Stat
+          label="ממתינות לאישור מנהל"
+          value={totalApprovals}
+          delta="זמן חציוני 3.4 ימים"
+          icon={<Icons.AlertCircle size={15} />}
+          iconTone="amber"
+        />
+        <Stat
+          label="מסמכים לבחינה"
+          value={totalDocsPending}
+          delta={`ב-${docsAwaitingReview.length} בקשות`}
+          icon={<Icons.FileText size={15} />}
+          iconTone="purple"
+        />
+      </div>
+
+      {/* Main charts row */}
+      <div className="grid-12 mb-4">
+        <div style={{ gridColumn: 'span 7' }}>
+          <Card
+            title="בקשות לפי סטטוס"
+            subtitle="כל הבקשות שאינן בסטטוס מאושר"
+            headerEnd={<Tabs tabs={[{id:'30',label:'30 ימים'},{id:'90',label:'90 ימים'},{id:'all',label:'הכל'}]} active="30" onChange={()=>{}} />}
+          >
+            <div className="col gap-3">
+              {statusCounts.map(s => (
+                <BarRow key={s.key} label={s.label} value={s.value} max={Math.max(...statusCounts.map(x => x.value))} color={s.color} />
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        <div style={{ gridColumn: 'span 5' }}>
+          <Card title="בקשות לפי סוג יבואן" subtitle="התפלגות פעילה">
+            <div className="donut-row">
+              <Donut data={importerTypeCounts} size={140} />
+              <div className="donut-legend">
+                {importerTypeCounts.map((d, i) => (
+                  <div className="legend-row" key={i}>
+                    <div className="legend-dot" style={{ background: d.color }} />
+                    <div className="legend-label">{d.label}</div>
+                    <div className="legend-value">{d.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Secondary widgets */}
+      <div className="grid-12 mb-4">
+        <div style={{ gridColumn: 'span 5' }}>
+          <Card title="בקשות לפי סוג בקשה" subtitle="התפלגות בקשות פעילות">
+            <div className="col gap-2">
+              {requestTypeCounts.map((d, i) => (
+                <BarRow key={i} label={d.label} value={d.value} max={Math.max(...requestTypeCounts.map(x => x.value))} color={d.color} />
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        <div style={{ gridColumn: 'span 7' }}>
+          <Card title="רישיונות עומדים לפוג תוקף" subtitle="תוך 60 הימים הקרובים" headerEnd={<Button variant="ghost" size="sm" iconEnd={<Icons.ArrowLeft size={12}/>} onClick={() => onNavigate('permits')}>כל הרישיונות</Button>} flush>
+            <table>
+              <thead>
+                <tr>
+                  <th>מספר רישיון</th>
+                  <th>חברה</th>
+                  <th>תוצרים</th>
+                  <th>תוקף עד</th>
+                  <th>ימים נותרו</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expiringSoon.map(p => {
+                  const days = Math.ceil((new Date(p.expires_at) - Date.now()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <tr key={p.id} className="clickable">
+                      <td className="cell-id"><span className="mono">{p.id}</span></td>
+                      <td>{p.company}</td>
+                      <td className="muted">{p.products.map(pp => pp.label).join(', ') || '—'}</td>
+                      <td className="num">{fmtDate(p.expires_at)}</td>
+                      <td>
+                        <Badge tone={days < 30 ? 'red' : days < 45 ? 'amber' : 'blue'} dot>{days} ימים</Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      </div>
+
+      {/* Activity feed + Pending review */}
+      <div className="grid-12">
+        <div style={{ gridColumn: 'span 8' }}>
+          <Card
+            title="בקשות ממתינות לטיפול"
+            subtitle="עדיפות לטיפול לפי תאריך עדכון סטטוס"
+            headerEnd={<Button variant="ghost" size="sm" iconEnd={<Icons.ArrowLeft size={12}/>} onClick={() => onNavigate('requests')}>לכל הבקשות</Button>}
+            flush
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th>מספר בקשה</th>
+                  <th>חברה</th>
+                  <th>סוג בקשה</th>
+                  <th>סוג יבואן</th>
+                  <th>תוצרים</th>
+                  <th>סטטוס</th>
+                  <th>עודכן</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingRequests.slice(0, 7).map(r => (
+                  <tr key={r.id} className="clickable" onClick={() => onNavigate(`request:${r.id}`)}>
+                    <td className="cell-id"><span className="mono">{r.id}</span></td>
+                    <td>{r.company}</td>
+                    <td className="muted">{r.request_type_label}</td>
+                    <td className="muted">{r.importer_type_label}</td>
+                    <td>{r.products.length || <span className="text-muted">—</span>}</td>
+                    <td><StatusBadge status={r.status} /></td>
+                    <td className="muted text-sm">{fmtDate(r.updated_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+
+        <div style={{ gridColumn: 'span 4' }}>
+          <Card title="פעילות אחרונה" subtitle="עדכונים מצוות הטיפול">
+            <div>
+              {ACTIVITY.map((a, i) => {
+                const u = window.AppData.USERS[a.role] || { color: '#5e6ad2', initials: a.user.split(' ').slice(0,2).map(s=>s[0]).join('') };
+                return (
+                  <div className="activity-item" key={i}>
+                    <Avatar user={{ name: a.user, initials: u.initials || a.user.split(' ').slice(0,2).map(s=>s[0]).join(''), color: u.color }} size={26} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="activity-text">
+                        <span className="who">{a.user}</span>{' '}
+                        <span className="what">{a.action}</span>{' '}
+                        <span className="mono" style={{ color: 'var(--accent-text)' }}>{a.target}</span>
+                      </div>
+                      <div className="activity-meta">לפני {a.when}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+window.Dashboard = Dashboard;
+  </script>
+  <script type="text/babel" data-presets="env,react">
+// requests-list.jsx — list of requests (internal + external variants)
+
+function RequestsList({ context, currentUser, onNavigate }) {
+  const { REQUESTS, REQUEST_STATUS, REQUEST_TYPES, IMPORTER_TYPES, fmtDate, fmtDateTime, statusBadge } = window.AppData;
+
+  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [typeFilter, setTypeFilter] = React.useState('all');
+  const [search, setSearch] = React.useState('');
+  const [page, setPage] = React.useState(1);
+  const pageSize = 10;
+
+  const isExternal = context === 'external';
+
+  // For external — only show current user's requests (simulate by filtering for first 3 or so)
+  let baseList = REQUESTS;
+  if (isExternal) {
+    // user is representative — only their own (first company)
+    baseList = REQUESTS.filter(r => r.applicant.email === currentUser.applicant?.email || r.company === currentUser.company);
+  }
+
+  // Counts for tabs
+  const tabs = [
+    { id: 'all',  label: 'הכל',                 count: baseList.length },
+    { id: 'open', label: 'בטיפול',              count: baseList.filter(r => !['approved','rejected','draft'].includes(r.status)).length },
+    { id: 'draft',label: 'טיוטות',              count: baseList.filter(r => r.status === 'draft').length },
+    { id: 'approved', label: 'מאושרות',         count: baseList.filter(r => r.status === 'approved').length },
+    { id: 'rejected', label: 'נדחו',           count: baseList.filter(r => r.status === 'rejected').length },
+  ];
+
+  const filtered = baseList.filter(r => {
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'open' && ['approved','rejected','draft'].includes(r.status)) return false;
+      if (statusFilter === 'draft' && r.status !== 'draft') return false;
+      if (statusFilter === 'approved' && r.status !== 'approved') return false;
+      if (statusFilter === 'rejected' && r.status !== 'rejected') return false;
+    }
+    if (typeFilter !== 'all' && r.request_type !== typeFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (!r.id.toLowerCase().includes(q) && !r.company.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageItems = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  return (
+    <div className="workspace page-enter">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{isExternal ? 'הבקשות שלי' : 'בקשות ממתינות לטיפול'}</h1>
+          <div className="page-subtitle">
+            {isExternal
+              ? 'בקשות לרישיון יבואן שהגשת או שמורות כטיוטה'
+              : 'כל הבקשות במערכת — סנן לפי סטטוס וסוג'}
+          </div>
+        </div>
+        <div className="row gap-2">
+          {isExternal && (
+            <Button variant="primary" icon={<Icons.Plus size={14}/>} onClick={() => onNavigate('new-request')}>
+              בקשה חדשה
+            </Button>
+          )}
+          {!isExternal && (
+            <>
+              <Button variant="ghost" icon={<Icons.Filter size={14}/>}>סינון מתקדם</Button>
+              <Button variant="secondary" icon={<Icons.Download size={14}/>}>ייצוא</Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="card mb-4" style={{ overflow: 'visible' }}>
+        <div className="tbl-toolbar">
+          <Tabs tabs={tabs} active={statusFilter} onChange={(id) => { setStatusFilter(id); setPage(1); }} />
+          <div style={{ flex: 1 }} />
+          <div className="topbar-search" style={{ width: 240 }}>
+            <input
+              placeholder="חיפוש לפי מספר בקשה או חברה..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+            />
+            <Icons.Search size={13} />
+          </div>
+          <select
+            className="select"
+            style={{ width: 'auto', padding: '6px 26px 6px 12px', fontSize: 12.5 }}
+            value={typeFilter}
+            onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
+          >
+            <option value="all">כל סוגי הבקשה</option>
+            {REQUEST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style={{ width: 130 }}>מספר בקשה</th>
+              <th>חברה</th>
+              <th>סוג בקשה</th>
+              <th>סוג יבואן</th>
+              <th>מגיש</th>
+              <th>תוצרים</th>
+              <th>מסמכים</th>
+              <th>סטטוס</th>
+              <th>עודכן</th>
+              {!isExternal && <th style={{ width: 36 }}></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {pageItems.map(r => {
+              const docsApproved = r.documents.filter(d => d.status === 'approved').length;
+              const docsAttached = r.documents.filter(d => d.status !== 'not_attached').length;
+              return (
+                <tr key={r.id} className="clickable" onClick={() => onNavigate(`request:${r.id}`)}>
+                  <td className="cell-id"><span className="mono">{r.id}</span></td>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{r.company}</div>
+                    <div className="text-xs text-muted">{r.company_id}</div>
+                  </td>
+                  <td className="muted">{r.request_type_label}</td>
+                  <td><Badge tone="gray">{r.importer_type_label}</Badge></td>
+                  <td>
+                    <div>{r.applicant.first} {r.applicant.last}</div>
+                    <div className="text-xs text-muted">{r.applicant.email}</div>
+                  </td>
+                  <td className="num">{r.products.length || <span className="text-muted">—</span>}</td>
+                  <td className="num">
+                    <span className="text-secondary">{docsApproved}</span>
+                    <span className="text-muted">/{r.documents.length}</span>
+                  </td>
+                  <td><StatusBadge status={r.status} /></td>
+                  <td className="muted text-sm">{fmtDate(r.updated_at)}</td>
+                  {!isExternal && (
+                    <td>
+                      <Icons.ChevronLeft size={14} color="var(--text-muted)" />
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+            {pageItems.length === 0 && (
+              <tr><td colSpan={isExternal ? 9 : 10}>
+                <div className="empty">
+                  <div className="empty-title">לא נמצאו בקשות</div>
+                  <div className="empty-desc">נסה לשנות את הסינונים או מילת החיפוש</div>
+                </div>
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+
+        <Pager
+          page={page}
+          pages={pages}
+          onChange={setPage}
+          total={filtered.length}
+          pageSize={pageSize}
+          label="בקשות"
+        />
+      </div>
+    </div>
+  );
+}
+
+window.RequestsList = RequestsList;
+  </script>
+  <script type="text/babel" data-presets="env,react">
+// request-detail.jsx — request review (internal) + view (external)
+
+function RequestDetail({ requestId, context, currentUser, onNavigate, onUpdateRequest }) {
+  const data = window.AppData;
+  const { REQUESTS, REQUEST_STATUS, PRODUCTS, CLASSIFICATIONS, DOC_STATUS, USERS, fmtDate, fmtDateTime } = data;
+
+  const [request, setRequest] = React.useState(() => REQUESTS.find(r => r.id === requestId));
+  const [tab, setTab] = React.useState('data');
+  const [showApproveModal, setShowApproveModal] = React.useState(false);
+  const [showRejectModal, setShowRejectModal] = React.useState(false);
+  const [showReturnModal, setShowReturnModal] = React.useState(false);
+  const [showApprovalDialog, setShowApprovalDialog] = React.useState(null);
+  const [showProductModal, setShowProductModal] = React.useState(null);
+  const [actionComment, setActionComment] = React.useState('');
+  const toast = useToast();
+
+  if (!request) {
+    return (
+      <div className="workspace">
+        <div className="empty">
+          <div className="empty-title">בקשה לא נמצאה</div>
+          <Button variant="primary" onClick={() => onNavigate('requests')}>חזרה לרשימה</Button>
+        </div>
+      </div>
+    );
+  }
+
+  const isExternal = context === 'external';
+  const isInternal = !isExternal;
+  const role = currentUser.role;
+
+  // Determine what actions current role can take
+  const isImportManager = role === 'import_manager';
+  const isEconomist = role === 'economist';
+  const isGarage = role === 'garage_department';
+  const isDeptManager = role === 'department_manager';
+  const canDecide = isImportManager && ['in_review','awaiting_data'].includes(request.status);
+  const canFinalApprove = isDeptManager && request.status === 'pending_manager';
+  const canApproveDocs = isImportManager || isEconomist || isGarage;
+
+  // ============================================================
+  // Update helpers
+  // ============================================================
+
+  function updateRequest(patch) {
+    const next = { ...request, ...patch, updated_at: new Date().toISOString() };
+    setRequest(next);
+    onUpdateRequest && onUpdateRequest(next);
+  }
+
+  function setDocStatus(docId, status, comment) {
+    const docs = request.documents.map(d =>
+      d.id === docId
+        ? { ...d, status, comment: comment || d.comment, status_at: new Date().toISOString() }
+        : d
+    );
+    updateRequest({ documents: docs });
+    toast.show(`סטטוס המסמך עודכן: ${DOC_STATUS[status].label}`, 'success');
+  }
+
+  function setProductStatus(productId, status) {
+    const products = request.products.map(p =>
+      p.id === productId ? { ...p, status } : p
+    );
+    updateRequest({ products });
+  }
+
+  function updateStatus(newStatus, comment) {
+    const log = [
+      ...request.log,
+      { status: newStatus, label: REQUEST_STATUS[newStatus].label, date: new Date().toISOString(), comment: comment || null },
+    ];
+    updateRequest({ status: newStatus, log });
+  }
+
+  function approveAsRole(approvalCode, label) {
+    const approval = {
+      id: `AP-${Date.now()}`,
+      code: approvalCode,
+      label,
+      role,
+      user: USERS[role].name,
+      date: new Date().toISOString(),
+    };
+    updateRequest({ approvals: [...request.approvals, approval] });
+    toast.show(`האישור נרשם: ${label}`, 'success');
+    setShowApprovalDialog(null);
+  }
+
+  function handleSendForCompletion() {
+    updateStatus('awaiting_data', actionComment);
+    setShowReturnModal(false);
+    setActionComment('');
+    toast.show('הבקשה הוחזרה למייצג להשלמת נתונים', 'success');
+  }
+
+  function handleReject() {
+    updateStatus('rejected', actionComment);
+    setShowRejectModal(false);
+    setActionComment('');
+    toast.show('הבקשה נדחתה', 'error');
+  }
+
+  function handleApprove() {
+    if (canDecide) {
+      updateStatus('pending_manager', actionComment || 'הועברה לאישור מנהל אגף');
+      approveAsRole('import', 'אישור תחום יבוא');
+    } else if (canFinalApprove) {
+      updateStatus('pending_issue', actionComment || 'אושר על ידי מנהל אגף');
+      approveAsRole('department', 'אישור מנהל אגף');
+    }
+    setShowApproveModal(false);
+    setActionComment('');
+    toast.show('הבקשה אושרה', 'success');
+  }
+
+  function handleIssuePermit() {
+    updateStatus('approved', 'הרישיון הופק ונשלח ליבואן');
+    const permitId = `PMT-${String(2025900 + Math.floor(Math.random() * 100)).padStart(7,'0')}`;
+    updateRequest({ permit_id: permitId });
+    toast.show(`הרישיון ${permitId} הופק בהצלחה`, 'success');
+  }
+
+  // ============================================================
+  // Stats
+  // ============================================================
+  const docsApproved = request.documents.filter(d => d.status === 'approved').length;
+  const docsRejected = request.documents.filter(d => d.status === 'rejected').length;
+  const docsTotal = request.documents.length;
+  const productsApproved = request.products.filter(p => p.status === 'approved').length;
+
+  const subtabs = [
+    { id: 'data',     label: 'נתוני בקשה',           icon: <Icons.User size={14}/> },
+    { id: 'products', label: 'תוצרים וסיווגים',       icon: <Icons.Package size={14}/>, count: request.products.length },
+    { id: 'documents',label: 'מסמכים',                icon: <Icons.FileText size={14}/>, count: `${docsApproved}/${docsTotal}` },
+    ...(isInternal ? [{ id: 'approvals', label: 'אישורים',  icon: <Icons.CheckCircle size={14}/>, count: request.approvals.length }] : []),
+    { id: 'timeline', label: 'היסטוריה',              icon: <Icons.History size={14}/> },
+    ...(isInternal ? [{ id: 'decision', label: 'החלטה והפקה', icon: <Icons.Award size={14}/> }] : []),
+  ];
+
+  // ============================================================
+  return (
+    <div className="workspace page-enter">
+      {/* Header */}
+      <div className="page-header">
+        <div>
+          <div className="row gap-2 mb-1">
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate(isExternal ? 'my-requests' : 'requests')}>
+              <Icons.ArrowRight size={14} />
+              חזרה לרשימה
+            </button>
+            <StatusBadge status={request.status} />
+            {request.permit_id && (
+              <Badge tone="indigo" dot>
+                <Icons.Award size={11} />
+                רישיון <span className="mono" style={{ marginInlineStart: 4 }}>{request.permit_id}</span>
+              </Badge>
+            )}
+          </div>
+          <h1 className="page-title">
+            <span className="mono" style={{ background:'var(--bg-muted)', padding:'2px 8px', borderRadius:6, fontSize:18, marginInlineEnd:8 }}>{request.id}</span>
+            {request.company}
+          </h1>
+          <div className="page-subtitle">
+            {request.request_type_label} · {request.importer_type_label} · נוצרה {fmtDateTime(request.created_at)}
+          </div>
+        </div>
+        <div className="row gap-2">
+          <Button variant="ghost" icon={<Icons.Download size={14}/>}>הורד PDF</Button>
+          {isInternal && <Button variant="secondary" icon={<Icons.Mail size={14}/>}>שלח תזכורת</Button>}
+        </div>
+      </div>
+
+      <SubnavTabs tabs={subtabs} active={tab} onChange={setTab} />
+
+      <div className="detail-grid">
+        <div>
+          {tab === 'data' && <DataTab request={request} isExternal={isExternal} updateRequest={updateRequest} />}
+          {tab === 'products' && <ProductsTab request={request} isInternal={isInternal} canDecide={canDecide} setProductStatus={setProductStatus} onOpenProduct={setShowProductModal} />}
+          {tab === 'documents' && <DocumentsTab request={request} isInternal={isInternal} canApproveDocs={canApproveDocs} role={role} setDocStatus={setDocStatus} />}
+          {tab === 'approvals' && isInternal && <ApprovalsTab request={request} role={role} canDecide={canDecide} canFinalApprove={canFinalApprove} onApprove={setShowApprovalDialog} />}
+          {tab === 'timeline' && <TimelineTab request={request} />}
+          {tab === 'decision' && isInternal && (
+            <DecisionTab
+              request={request}
+              role={role}
+              canDecide={canDecide}
+              canFinalApprove={canFinalApprove}
+              onApprove={() => setShowApproveModal(true)}
+              onReject={() => setShowRejectModal(true)}
+              onReturn={() => setShowReturnModal(true)}
+              onIssue={handleIssuePermit}
+              onRemarkChange={(v) => updateRequest({ internal_remark: v })}
+            />
+          )}
+        </div>
+
+        <RequestSidebar request={request} isInternal={isInternal} />
+      </div>
+
+      {/* Action bar for internal users with decision power */}
+      {isInternal && (canDecide || canFinalApprove) && tab !== 'decision' && (
+        <div className="action-bar">
+          <div>
+            <div className="font-semibold">{canDecide ? 'הבקשה ממתינה להחלטתך' : 'נדרש אישור סופי מנהל אגף'}</div>
+            <div className="text-sm text-muted">בחן את כל הסעיפים והחלט: אישור, החזרה להשלמה, או דחייה</div>
+          </div>
+          <div className="row gap-2">
+            <Button variant="ghost" onClick={() => setShowReturnModal(true)} icon={<Icons.ArrowRight size={14}/>}>החזרה להשלמה</Button>
+            <Button variant="ghost" onClick={() => setShowRejectModal(true)} icon={<Icons.XCircle size={14}/>}>דחה</Button>
+            <Button variant="primary" onClick={() => setShowApproveModal(true)} icon={<Icons.CheckCircle size={14}/>}>אשר בקשה</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
+      {showApproveModal && (
+        <Modal
+          title="אישור בקשה"
+          onClose={() => setShowApproveModal(false)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowApproveModal(false)}>ביטול</Button>
+              <Button variant="primary" onClick={handleApprove} icon={<Icons.CheckCircle size={14}/>}>אשר ועבר הלאה</Button>
+            </>
+          }
+        >
+          <p className="text-secondary mb-3">
+            {canFinalApprove
+              ? 'אישור סופי של בקשה זו יעביר אותה להפקת רישיון יבואן.'
+              : 'אישור בקשה זו יעביר אותה לאישור סופי של מנהל אגף.'}
+          </p>
+          <Field label="הערה (אופציונלי)">
+            <Textarea value={actionComment} onChange={setActionComment} rows={3} placeholder="הערה פנימית להחלטה..." />
+          </Field>
+        </Modal>
+      )}
+
+      {showRejectModal && (
+        <Modal
+          title="דחיית בקשה"
+          onClose={() => setShowRejectModal(false)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowRejectModal(false)}>ביטול</Button>
+              <Button variant="danger" onClick={handleReject} icon={<Icons.XCircle size={14}/>}>אישור דחייה</Button>
+            </>
+          }
+        >
+          <div className="mb-3" style={{ padding:12, background:'var(--red-soft)', color:'var(--red)', borderRadius:8, fontSize:13 }}>
+            <Icons.AlertTriangle size={14} style={{ verticalAlign:-2, marginInlineEnd:6 }}/>
+            דחיית הבקשה היא פעולה סופית. המייצג יקבל הודעה אוטומטית במייל.
+          </div>
+          <Field label="סיבת הדחייה" required>
+            <Textarea value={actionComment} onChange={setActionComment} rows={4} placeholder="פרט את הסיבה לדחיית הבקשה..." />
+          </Field>
+        </Modal>
+      )}
+
+      {showReturnModal && (
+        <Modal
+          title="החזרה להשלמת נתונים/מסמכים"
+          onClose={() => setShowReturnModal(false)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowReturnModal(false)}>ביטול</Button>
+              <Button variant="primary" onClick={handleSendForCompletion} icon={<Icons.Send size={14}/>}>שלח למייצג</Button>
+            </>
+          }
+        >
+          <p className="text-secondary mb-3">
+            הבקשה תוחזר למייצג להשלמת המסמכים/נתונים החסרים. המייצג יקבל הודעה במייל.
+          </p>
+          <Field label="פירוט מה נדרש להשלים" required>
+            <Textarea value={actionComment} onChange={setActionComment} rows={4} placeholder="פרט אילו מסמכים או שדות נדרשים להשלמה..." />
+          </Field>
+        </Modal>
+      )}
+
+      {showApprovalDialog && (
+        <Modal
+          title={`רישום ${showApprovalDialog.label}`}
+          onClose={() => setShowApprovalDialog(null)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setShowApprovalDialog(null)}>ביטול</Button>
+              <Button variant="success" onClick={() => approveAsRole(showApprovalDialog.code, showApprovalDialog.label)} icon={<Icons.CheckCircle size={14}/>}>אשר</Button>
+            </>
+          }
+        >
+          <p className="text-secondary mb-3">
+            על ידי לחיצה על "אשר", תרשום אישור רשמי בבקשה זו.
+          </p>
+          <Field label="הערה (אופציונלי)">
+            <Textarea rows={3} placeholder="הוסף הערה..." />
+          </Field>
+        </Modal>
+      )}
+
+      {showProductModal && (
+        <Modal
+          title={`עדכון תוצר: ${showProductModal.label}`}
+          onClose={() => setShowProductModal(null)}
+          width="640px"
+        >
+          <ProductReviewView product={showProductModal} canDecide={canDecide} setProductStatus={(s) => { setProductStatus(showProductModal.id, s); setShowProductModal(null); }} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Sub-views
+// ============================================================
+
+function DataTab({ request, isExternal, updateRequest }) {
+  const { fmtDate, fmtDateTime } = window.AppData;
+  const a = request.applicant;
+  return (
+    <>
+      <div className="form-section">
+        <div className="form-section-header">
+          <div>
+            <h3 className="form-section-title">פרטי מבקש הבקשה</h3>
+            <div className="form-section-sub">מורשה חתימה / נציג החברה</div>
+          </div>
+        </div>
+        <div className="form-section-body">
+          <div className="form-grid">
+            <Field label="שם פרטי" span={4}><Input value={a.first} readOnly /></Field>
+            <Field label="שם משפחה" span={4}><Input value={a.last} readOnly /></Field>
+            <Field label="מספר זהות" span={4}><Input value={a.id} readOnly /></Field>
+            <Field label="דוא״ל" span={6}><Input value={a.email} readOnly type="email" /></Field>
+            <Field label="טלפון" span={6}><Input value={a.phone} readOnly type="tel" /></Field>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <div className="form-section-header">
+          <div>
+            <h3 className="form-section-title">פרטי החברה / היבואן</h3>
+            <div className="form-section-sub">מתבסס על אימות מול רשם החברות ורשות המסים</div>
+          </div>
+          <Badge tone="green" dot icon={<Icons.CheckCircle size={11}/>}>אומת מול רשם החברות</Badge>
+        </div>
+        <div className="form-section-body">
+          <div className="form-grid">
+            <Field label="שם החברה / עוסק" span={6}><Input value={request.company} readOnly /></Field>
+            <Field label="ח״פ / ע״מ" span={3}><Input value={request.company_id} readOnly /></Field>
+            <Field label="סוג ישות" span={3}><Input value="תאגיד רשום" readOnly /></Field>
+            <Field label="סוג יבואן" span={6}><Input value={request.importer_type_label} readOnly /></Field>
+            <Field label="סוג בקשה" span={6}><Input value={request.request_type_label} readOnly /></Field>
+          </div>
+        </div>
+      </div>
+
+      {request.agents && request.agents.length > 0 && (
+        <div className="form-section">
+          <div className="form-section-header">
+            <div>
+              <h3 className="form-section-title">סוכנים מורשים</h3>
+              <div className="form-section-sub">מורשים מטעם היבואן הראשי</div>
+            </div>
+          </div>
+          <div className="form-section-body">
+            {request.agents.map(ag => (
+              <div className="form-grid" key={ag.id}>
+                <Field label="סוכן מורשה ראשי" span={6}><Input value={ag.primary} readOnly /></Field>
+                <Field label="סוכן מורשה משני" span={6}><Input value={ag.secondary} readOnly /></Field>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isExternal && request.internal_remark && (
+        <div className="form-section">
+          <div className="form-section-header">
+            <h3 className="form-section-title">הערה פנימית</h3>
+          </div>
+          <div className="form-section-body">
+            <div className="text-secondary" style={{ background: 'var(--amber-soft)', padding: 12, borderRadius: 7, color: 'var(--amber)' }}>
+              {request.internal_remark}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function ProductsTab({ request, isInternal, canDecide, setProductStatus, onOpenProduct }) {
+  if (request.importer_type === 'small') {
+    return (
+      <div className="card">
+        <div className="card-body">
+          <div className="empty">
+            <Icons.Briefcase size={32} color="var(--text-muted)" />
+            <div className="empty-title" style={{ marginTop: 10 }}>יבואן זעיר ללא תוצרים</div>
+            <div className="empty-desc">יבואני זעירים אינם מחויבים בהגדרת תוצרים ספציפיים ברישיון</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const statusBadgeMap = {
+    approved: { label: 'מאושר', badge: 'green' },
+    rejected: { label: 'נדחה', badge: 'red' },
+    awaiting: { label: 'ממתין להשלמה', badge: 'amber' },
+    reviewing: { label: 'בבדיקה', badge: 'blue' },
+  };
+
+  return (
+    <div className="form-section">
+      <div className="form-section-header">
+        <div>
+          <h3 className="form-section-title">תוצרים בבקשה</h3>
+          <div className="form-section-sub">{request.products.length} תוצרים, כל אחד עם סיווגי רכב משלו</div>
+        </div>
+      </div>
+      <div className="card-body flush">
+        {request.products.map((p, i) => {
+          const sb = statusBadgeMap[p.status] || statusBadgeMap.reviewing;
+          return (
+            <div key={p.id} style={{ padding: '14px 18px', borderBottom: i < request.products.length - 1 ? '1px solid var(--divider)' : 'none' }}>
+              <div className="row between mb-3">
+                <div className="row gap-3">
+                  <div style={{ width:36, height:36, borderRadius:8, background:'var(--accent-soft)', display:'grid', placeItems:'center' }}>
+                    <Icons.Package size={16} color="var(--accent)" />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:14 }}>{p.label}</div>
+                    <div className="text-xs text-muted">{p.manufacturer}</div>
+                  </div>
+                </div>
+                <div className="row gap-2">
+                  <Badge tone={sb.badge} dot>{sb.label}</Badge>
+                  {isInternal && canDecide && (
+                    <Button variant="ghost" size="sm" icon={<Icons.Edit size={13}/>} onClick={() => onOpenProduct(p)}>בחן</Button>
+                  )}
+                </div>
+              </div>
+              <div className="chip-group mb-2">
+                {p.classifications.map(c => <span key={c} className="chip selected">{c}</span>)}
+              </div>
+              {p.restriction && (
+                <div className="text-sm text-muted" style={{ background: 'var(--bg-subtle)', padding: 8, borderRadius: 6 }}>
+                  <Icons.AlertCircle size={12} style={{ verticalAlign:-2, marginInlineEnd:4 }}/>
+                  הגבלה: {p.restriction}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ProductReviewView({ product, canDecide, setProductStatus }) {
+  return (
+    <div>
+      <div className="kv-grid mb-4">
+        <dt>שם תוצר</dt><dd className="font-semibold">{product.label}</dd>
+        <dt>יצרן</dt><dd>{product.manufacturer}</dd>
+        <dt>סיווגים</dt><dd><div className="chip-group">{product.classifications.map(c => <span key={c} className="chip selected">{c}</span>)}</div></dd>
+        {product.restriction && (<><dt>הגבלות</dt><dd className="text-muted">{product.restriction}</dd></>)}
+      </div>
+      <div className="divider-h" />
+      <Field label="הערה" span={12}>
+        <Textarea rows={3} placeholder="הערה על התוצר..." />
+      </Field>
+      {canDecide && (
+        <div className="row gap-2 mt-3">
+          <Button variant="success" icon={<Icons.CheckCircle size={14}/>} onClick={() => setProductStatus('approved')}>אשר תוצר</Button>
+          <Button variant="ghost" icon={<Icons.AlertCircle size={14}/>} onClick={() => setProductStatus('awaiting')}>החזר להשלמה</Button>
+          <Button variant="danger" icon={<Icons.XCircle size={14}/>} onClick={() => setProductStatus('rejected')}>דחה</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocumentsTab({ request, isInternal, canApproveDocs, role, setDocStatus }) {
+  const { DOC_STATUS, fmtDate, fmtDateTime } = window.AppData;
+  return (
+    <div className="form-section">
+      <div className="form-section-header">
+        <div>
+          <h3 className="form-section-title">מסמכי הבקשה</h3>
+          <div className="form-section-sub">{request.documents.filter(d => d.status === 'approved').length} מאושרים, {request.documents.filter(d => d.status === 'rejected').length} נדחו, מתוך {request.documents.length}</div>
+        </div>
+        {isInternal && canApproveDocs && <Button variant="secondary" size="sm" icon={<Icons.Plus size={13}/>}>הוסף מסמך נדרש</Button>}
+      </div>
+      <div className="card-body flush">
+        {request.documents.map((d, i) => {
+          const ds = DOC_STATUS[d.status];
+          return (
+            <div key={d.id} style={{ padding:'14px 18px', borderBottom: i < request.documents.length-1 ? '1px solid var(--divider)' : 'none' }}>
+              <div className="row between" style={{ alignItems:'flex-start' }}>
+                <div className="row gap-3" style={{ flex:1, alignItems:'flex-start' }}>
+                  <div className={`file-icon`} style={{ background: d.status === 'approved' ? 'var(--green-soft)' : d.status === 'rejected' ? 'var(--red-soft)' : d.status === 'attached' ? 'var(--blue-soft)' : 'var(--bg-muted)', color: d.status === 'approved' ? 'var(--green)' : d.status === 'rejected' ? 'var(--red)' : d.status === 'attached' ? 'var(--blue)' : 'var(--text-muted)' }}>
+                    <Icons.FileText size={15} />
+                  </div>
+                  <div style={{ flex:1, minWidth: 0 }}>
+                    <div style={{ fontWeight:500, fontSize:13.5 }}>
+                      {d.label}
+                      {d.required && <span style={{ color:'var(--red)', marginInlineStart:4 }}>*</span>}
+                    </div>
+                    <div className="row gap-3 text-xs text-muted mt-1">
+                      {d.file_name ? (
+                        <>
+                          <span className="mono">{d.file_name}</span>
+                          <span>·</span>
+                          <span>{(d.size_kb / 1024).toFixed(1)} MB</span>
+                          {d.uploaded_at && <><span>·</span><span>הועלה {fmtDate(d.uploaded_at)}</span></>}
+                        </>
+                      ) : (
+                        <span>טרם הועלה</span>
+                      )}
+                    </div>
+                    {d.comment && (
+                      <div className="text-sm" style={{ background: d.status === 'rejected' ? 'var(--red-soft)' : 'var(--bg-muted)', color: d.status === 'rejected' ? 'var(--red)' : 'var(--text-secondary)', padding:'6px 10px', borderRadius:6, marginTop:8, fontSize:12.5 }}>
+                        <Icons.AlertCircle size={11} style={{verticalAlign:-1, marginInlineEnd:4}}/>
+                        {d.comment}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="row gap-2">
+                  <Badge tone={ds.badge} dot>{ds.label}</Badge>
+                  {d.file_name && <Button variant="ghost" size="sm" icon={<Icons.Eye size={13}/>} title="תצוגה מקדימה" />}
+                  {d.file_name && <Button variant="ghost" size="sm" icon={<Icons.Download size={13}/>} title="הורד" />}
+                  {isInternal && canApproveDocs && d.status === 'attached' && (
+                    <>
+                      <Button variant="ghost" size="sm" icon={<Icons.CheckCircle size={13}/>} onClick={() => setDocStatus(d.id, 'approved')} title="אשר מסמך" />
+                      <Button variant="ghost" size="sm" icon={<Icons.XCircle size={13}/>} onClick={() => setDocStatus(d.id, 'rejected', 'יש להגיש מסמך מעודכן')} title="דחה מסמך" />
+                    </>
+                  )}
+                  {isInternal && d.status === 'approved' && (
+                    <Button variant="ghost" size="sm" icon={<Icons.Refresh size={13}/>} onClick={() => setDocStatus(d.id, 'attached')} title="החזר לבדיקה" />
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ApprovalsTab({ request, role, canDecide, canFinalApprove, onApprove }) {
+  const { APPROVAL_TYPES, USERS, fmtDateTime } = window.AppData;
+
+  const myAvailable = APPROVAL_TYPES.filter(a => {
+    if (request.approvals.some(ex => ex.code === a.code)) return false;
+    return a.role === role;
+  });
+
+  return (
+    <>
+      <div className="form-section">
+        <div className="form-section-header">
+          <h3 className="form-section-title">אישורים שנרשמו ({request.approvals.length})</h3>
+        </div>
+        <div className="card-body flush">
+          {request.approvals.length === 0 ? (
+            <div className="empty"><div className="empty-desc">טרם נרשמו אישורים</div></div>
+          ) : (
+            request.approvals.map((ap, i) => {
+              const u = USERS[ap.role] || { color: '#5e6ad2', initials: '?', name: ap.user };
+              return (
+                <div key={ap.id} style={{ padding: '12px 18px', borderBottom: i < request.approvals.length-1 ? '1px solid var(--divider)' : 'none' }}>
+                  <div className="row gap-3">
+                    <Avatar user={u} size={32} />
+                    <div style={{ flex: 1 }}>
+                      <div className="row between">
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{ap.label}</div>
+                          <div className="text-xs text-muted">{ap.user}</div>
+                        </div>
+                        <div className="text-xs text-muted">{fmtDateTime(ap.date)}</div>
+                      </div>
+                    </div>
+                    <Badge tone="green" dot icon={<Icons.CheckCircle size={11}/>}>אושר</Badge>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {myAvailable.length > 0 && (
+        <div className="form-section">
+          <div className="form-section-header">
+            <h3 className="form-section-title">אישורים שאתה רשאי לרשום</h3>
+          </div>
+          <div className="card-body">
+            {myAvailable.map(a => (
+              <div key={a.code} className="row between" style={{ padding: '10px 0', borderBottom: '1px solid var(--divider)' }}>
+                <div>
+                  <div className="font-semibold">{a.label}</div>
+                  <div className="text-xs text-muted">דרוש לקבלת אישור סופי לרישיון</div>
+                </div>
+                <Button variant="success" size="sm" icon={<Icons.CheckCircle size={13}/>} onClick={() => onApprove(a)}>רשום אישור</Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function TimelineTab({ request }) {
+  const { fmtDateTime } = window.AppData;
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div>
+          <h3 className="card-title">היסטוריית סטטוסים</h3>
+          <div className="card-subtitle">מעבר בין סטטוסים, מי, ומתי</div>
+        </div>
+      </div>
+      <div className="card-body">
+        <div className="timeline">
+          {request.log.map((entry, i) => (
+            <div key={i} className={`tl-item ${i === request.log.length - 1 ? 'current' : 'done'}`}>
+              <div className="tl-dot" />
+              <div className="tl-title">{entry.label}</div>
+              <div className="tl-meta">{fmtDateTime(entry.date)}</div>
+              {entry.comment && <div className="tl-comment">{entry.comment}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DecisionTab({ request, role, canDecide, canFinalApprove, onApprove, onReject, onReturn, onIssue, onRemarkChange }) {
+  const allDocsOk = request.documents.filter(d => d.required).every(d => d.status === 'approved');
+  const allProductsOk = request.products.every(p => p.status === 'approved') || request.products.length === 0;
+
+  return (
+    <>
+      <div className="form-section">
+        <div className="form-section-header">
+          <h3 className="form-section-title">סיכום הבקשה לקראת החלטה</h3>
+        </div>
+        <div className="card-body">
+          <div className="grid-2">
+            <div className="row between" style={{ padding:'10px 12px', background:'var(--bg-subtle)', borderRadius:8 }}>
+              <span className="text-secondary">מסמכים מאושרים</span>
+              <Badge tone={allDocsOk ? 'green' : 'amber'} dot>
+                {request.documents.filter(d => d.status === 'approved').length} / {request.documents.length}
+              </Badge>
+            </div>
+            <div className="row between" style={{ padding:'10px 12px', background:'var(--bg-subtle)', borderRadius:8 }}>
+              <span className="text-secondary">תוצרים מאושרים</span>
+              <Badge tone={allProductsOk ? 'green' : 'amber'} dot>
+                {request.products.filter(p => p.status === 'approved').length} / {request.products.length || '—'}
+              </Badge>
+            </div>
+            <div className="row between" style={{ padding:'10px 12px', background:'var(--bg-subtle)', borderRadius:8 }}>
+              <span className="text-secondary">אישורים שנדרשים</span>
+              <Badge tone={request.approvals.length >= 3 ? 'green' : 'amber'} dot>
+                {request.approvals.length} / 3
+              </Badge>
+            </div>
+            <div className="row between" style={{ padding:'10px 12px', background:'var(--bg-subtle)', borderRadius:8 }}>
+              <span className="text-secondary">בדיקות אוטומטיות</span>
+              <Badge tone="green" dot icon={<Icons.CheckCircle size={11}/>}>הושלמו</Badge>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <div className="form-section-header">
+          <h3 className="form-section-title">הערה פנימית להחלטה</h3>
+        </div>
+        <div className="card-body">
+          <Textarea
+            rows={4}
+            value={request.internal_remark || ''}
+            onChange={onRemarkChange}
+            placeholder="הוסף הערות פנימיות לתיק הבקשה..."
+          />
+        </div>
+      </div>
+
+      {/* Final action */}
+      {canDecide && (
+        <div className="card">
+          <div className="card-body">
+            <div className="row between">
+              <div>
+                <div className="font-semibold">החלטת מנהל תחום יבוא</div>
+                <div className="text-sm text-muted">אישור יעביר את הבקשה לאישור סופי של מנהל אגף</div>
+              </div>
+              <div className="row gap-2">
+                <Button variant="ghost" onClick={onReturn} icon={<Icons.ArrowRight size={14}/>}>החזרה להשלמה</Button>
+                <Button variant="ghost" onClick={onReject} icon={<Icons.XCircle size={14}/>}>דחה</Button>
+                <Button variant="primary" onClick={onApprove} icon={<Icons.CheckCircle size={14}/>}>אשר ועבר למנהל אגף</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canFinalApprove && (
+        <div className="card">
+          <div className="card-body">
+            <div className="row between">
+              <div>
+                <div className="font-semibold">אישור סופי מנהל אגף</div>
+                <div className="text-sm text-muted">אישורך יעביר את הבקשה לתשלום אגרה ולהפקת רישיון</div>
+              </div>
+              <div className="row gap-2">
+                <Button variant="ghost" onClick={onReject} icon={<Icons.XCircle size={14}/>}>דחה</Button>
+                <Button variant="success" onClick={onApprove} icon={<Icons.Award size={14}/>}>אשר ושלח להפקה</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {request.status === 'pending_issue' && (
+        <div className="card">
+          <div className="card-body">
+            <div className="row between">
+              <div>
+                <div className="font-semibold">הפקת רישיון</div>
+                <div className="text-sm text-muted">אגרת הרישיון שולמה. ניתן להפיק את הרישיון ולשדרו ליבואן.</div>
+              </div>
+              <Button variant="primary" onClick={onIssue} icon={<Icons.Award size={14}/>}>הפק רישיון ושלח</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!canDecide && !canFinalApprove && request.status !== 'pending_issue' && (
+        <div className="card">
+          <div className="card-body">
+            <div className="empty">
+              <Icons.Info size={28} color="var(--text-muted)" />
+              <div className="empty-title" style={{marginTop:8}}>אין פעולות זמינות בתפקיד שלך</div>
+              <div className="empty-desc">החלטת הבקשה נמצאת אצל גורם אחר.</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function RequestSidebar({ request, isInternal }) {
+  const { fmtDate, fmtDateTime, USERS } = window.AppData;
+  return (
+    <div className="col gap-4">
+      <Card title="פרטי בקשה" flush>
+        <dl className="kv-grid" style={{ padding: 16 }}>
+          <dt>מספר בקשה</dt><dd className="mono" style={{fontSize:12.5}}>{request.id}</dd>
+          <dt>סטטוס</dt><dd><StatusBadge status={request.status} /></dd>
+          <dt>תאריך הגשה</dt><dd>{fmtDate(request.created_at)}</dd>
+          <dt>עודכנה לאחרונה</dt><dd>{fmtDate(request.updated_at)}</dd>
+          <dt>סוג בקשה</dt><dd>{request.request_type_label}</dd>
+          <dt>סוג יבואן</dt><dd>{request.importer_type_label}</dd>
+          {request.permit_id && (<><dt>מספר רישיון</dt><dd className="mono">{request.permit_id}</dd></>)}
+        </dl>
+      </Card>
+
+      {isInternal && (
+        <Card title="צוות טיפול" flush>
+          <div style={{ padding: 16 }}>
+            {[
+              { role: 'import_manager', label: 'מנהל תחום יבוא' },
+              { role: 'economist', label: 'כלכלן' },
+              { role: 'garage_department', label: 'תחום מוסכים' },
+              { role: 'department_manager', label: 'מנהל אגף' },
+            ].map(r => {
+              const u = USERS[r.role];
+              const hasApproved = request.approvals.some(a => a.role === r.role);
+              return (
+                <div key={r.role} className="row gap-3" style={{ padding: '6px 0' }}>
+                  <Avatar user={u} size={28} />
+                  <div style={{ flex: 1 }}>
+                    <div className="text-sm font-medium">{u.name}</div>
+                    <div className="text-xs text-muted">{r.label}</div>
+                  </div>
+                  {hasApproved && <Icons.CheckCircle size={14} color="var(--green)" />}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      <Card title="פעולות מהירות" flush>
+        <div style={{ padding: 8 }}>
+          {[
+            { label: 'בדיקת רשם החברות', icon: <Icons.Building size={14}/>, status: 'green' },
+            { label: 'בדיקת רשות המסים',   icon: <Icons.CreditCard size={14}/>, status: 'green' },
+            { label: 'רישום פלילי',         icon: <Icons.AlertCircle size={14}/>, status: 'green' },
+          ].map((c, i) => (
+            <div key={i} className="row between" style={{ padding: '7px 10px', borderRadius: 6, cursor: 'pointer' }}>
+              <div className="row gap-2 text-sm">{c.icon}<span>{c.label}</span></div>
+              <Badge tone={c.status} dot icon={<Icons.CheckCircle size={11}/>}>תקין</Badge>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+window.RequestDetail = RequestDetail;
+  </script>
+  <script type="text/babel" data-presets="env,react">
+// submission-wizard.jsx — multi-step request submission flow (external)
+
+function SubmissionWizard({ onComplete, onCancel, currentUser }) {
+  const data = window.AppData;
+  const { REQUEST_TYPES, IMPORTER_TYPES, ENTITY_TYPES, PRODUCTS, CLASSIFICATIONS, DOC_TYPES, fmtDate } = data;
+  const toast = useToast();
+
+  const [step, setStep] = React.useState(0);
+  const [form, setForm] = React.useState({
+    requestType: '',
+    importerType: '',
+    entityType: 'company',
+    applicantFirst: 'דנה',
+    applicantLast: 'ארד',
+    applicantId: '312987654',
+    applicantEmail: 'dana@autotrading.co.il',
+    applicantPhone: '054-1234567',
+    companyName: 'אוטו טריידינג בע״מ',
+    companyId: '514567823',
+    products: [],
+    agents: { primary: '', secondary: '' },
+    docs: {},
+    remark: '',
+    saving: false,
+  });
+
+  function update(patch) { setForm(f => ({ ...f, ...patch })); }
+
+  const steps = ['סוג בקשה', 'פרטי מבקש', 'תוצרים וסיווגים', 'מסמכים', 'סקירה והגשה'];
+  // Indirect adds an "agents" step before products
+  const showAgents = form.importerType === 'indirect';
+  const skipProducts = form.importerType === 'small';
+  const actualSteps = showAgents ? ['סוג בקשה', 'פרטי מבקש', 'סוכנים', 'תוצרים וסיווגים', 'מסמכים', 'סקירה והגשה'] : steps;
+  if (skipProducts) {
+    // remove products step
+    const filt = actualSteps.filter(s => s !== 'תוצרים וסיווגים');
+    while (actualSteps.length > filt.length) actualSteps.pop();
+    filt.forEach((s, i) => actualSteps[i] = s);
+  }
+
+  function next() { setStep(s => Math.min(actualSteps.length - 1, s + 1)); }
+  function prev() { setStep(s => Math.max(0, s - 1)); }
+
+  function canProceed() {
+    const s = actualSteps[step];
+    if (s === 'סוג בקשה') return form.requestType && form.importerType;
+    if (s === 'פרטי מבקש') return form.applicantFirst && form.applicantLast && form.applicantId && form.applicantEmail && form.companyName && form.companyId;
+    if (s === 'סוכנים') return form.agents.primary;
+    if (s === 'תוצרים וסיווגים') return form.products.length > 0 && form.products.every(p => p.code && p.classifications.length > 0);
+    if (s === 'מסמכים') {
+      const required = DOC_TYPES.filter(d => d.required);
+      return required.every(d => form.docs[d.code]);
+    }
+    return true;
+  }
+
+  function handleSubmit() {
+    update({ saving: true });
+    setTimeout(() => {
+      toast.show('הבקשה נקלטה בהצלחה!', 'success');
+      onComplete && onComplete({ ...form });
+    }, 900);
+  }
+
+  function handleSaveDraft() {
+    toast.show('הטיוטה נשמרה', 'info');
+  }
+
+  const current = actualSteps[step];
+
+  return (
+    <div className="workspace narrow page-enter">
+      <div className="page-header">
+        <div>
+          <div className="row gap-2 mb-1">
+            <button className="btn btn-ghost btn-sm" onClick={onCancel}>
+              <Icons.ArrowRight size={14} />
+              חזרה לרשימת הבקשות
+            </button>
+            <Badge tone="gray" dot>טיוטה</Badge>
+          </div>
+          <h1 className="page-title">הגשת בקשה לרישיון יבואן</h1>
+          <div className="page-subtitle">מלא את הסעיפים ועבור בין השלבים. ניתן לשמור כטיוטה ולחזור בהמשך.</div>
+        </div>
+        <Button variant="ghost" icon={<Icons.Save size={14}/>} onClick={handleSaveDraft}>שמור טיוטה</Button>
+      </div>
+
+      <Stepper steps={actualSteps} current={step} />
+
+      {/* Step content */}
+      {current === 'סוג בקשה' && (
+        <RequestTypeStep form={form} update={update} />
+      )}
+
+      {current === 'פרטי מבקש' && (
+        <ApplicantStep form={form} update={update} />
+      )}
+
+      {current === 'סוכנים' && (
+        <AgentsStep form={form} update={update} />
+      )}
+
+      {current === 'תוצרים וסיווגים' && (
+        <ProductsStep form={form} update={update} />
+      )}
+
+      {current === 'מסמכים' && (
+        <DocumentsStep form={form} update={update} />
+      )}
+
+      {current === 'סקירה והגשה' && (
+        <ReviewStep form={form} actualSteps={actualSteps} />
+      )}
+
+      <div className="action-bar">
+        <Button variant="ghost" disabled={step === 0} onClick={prev} icon={<Icons.ChevronRight size={14}/>}>
+          חזרה
+        </Button>
+        <div className="text-sm text-muted">
+          שלב {step + 1} מתוך {actualSteps.length} · {current}
+        </div>
+        {step < actualSteps.length - 1 ? (
+          <Button variant="primary" onClick={next} disabled={!canProceed()} iconEnd={<Icons.ChevronLeft size={14}/>}>
+            הבא
+          </Button>
+        ) : (
+          <Button variant="primary" onClick={handleSubmit} disabled={form.saving} icon={<Icons.Send size={14}/>}>
+            {form.saving ? 'שולח...' : 'הגש בקשה'}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Steps
+// ============================================================
+
+function RequestTypeStep({ form, update }) {
+  const { REQUEST_TYPES, IMPORTER_TYPES } = window.AppData;
+  return (
+    <>
+      <div className="form-section">
+        <div className="form-section-header">
+          <div>
+            <h3 className="form-section-title">בחר סוג בקשה</h3>
+            <div className="form-section-sub">איזו פעולה ברצונך לבצע?</div>
+          </div>
+        </div>
+        <div className="form-section-body">
+          <div className="choice-grid">
+            {REQUEST_TYPES.map(rt => (
+              <div
+                key={rt.id}
+                className={`choice ${form.requestType === rt.id ? 'selected' : ''}`}
+                onClick={() => update({ requestType: rt.id })}
+              >
+                <div className="choice-check"><Icons.Check size={11}/></div>
+                <div className="choice-icon">{React.createElement(Icons[rt.icon] || Icons.Sparkles, { size: 16 })}</div>
+                <div className="choice-title">{rt.label}</div>
+                <div className="choice-desc">{rt.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <div className="form-section-header">
+          <div>
+            <h3 className="form-section-title">סוג היבואן</h3>
+            <div className="form-section-sub">בחר את הסטטוס המתאים ליבואן</div>
+          </div>
+        </div>
+        <div className="form-section-body">
+          <div className="choice-grid">
+            {IMPORTER_TYPES.map(it => (
+              <div
+                key={it.id}
+                className={`choice ${form.importerType === it.id ? 'selected' : ''}`}
+                onClick={() => update({ importerType: it.id })}
+              >
+                <div className="choice-check"><Icons.Check size={11}/></div>
+                <div className="choice-icon">{React.createElement(Icons[it.icon] || Icons.User, { size: 16 })}</div>
+                <div className="choice-title">{it.label}</div>
+                <div className="choice-desc">{it.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ApplicantStep({ form, update }) {
+  const { ENTITY_TYPES } = window.AppData;
+  const [verified, setVerified] = React.useState(true);
+  return (
+    <>
+      <div className="form-section">
+        <div className="form-section-header">
+          <div>
+            <h3 className="form-section-title">פרטי מגיש הבקשה</h3>
+            <div className="form-section-sub">מורשה החתימה מטעם החברה</div>
+          </div>
+        </div>
+        <div className="form-section-body">
+          <div className="form-grid">
+            <Field label="שם פרטי" required span={4}>
+              <Input value={form.applicantFirst} onChange={v => update({ applicantFirst: v })} placeholder="לדוגמה: דנה" />
+            </Field>
+            <Field label="שם משפחה" required span={4}>
+              <Input value={form.applicantLast} onChange={v => update({ applicantLast: v })} placeholder="לדוגמה: ארד" />
+            </Field>
+            <Field label="מספר זהות" required span={4} hint="9 ספרות, ללא מקפים">
+              <Input value={form.applicantId} onChange={v => update({ applicantId: v })} />
+            </Field>
+            <Field label="דוא״ל" required span={6}>
+              <Input value={form.applicantEmail} onChange={v => update({ applicantEmail: v })} type="email" />
+            </Field>
+            <Field label="טלפון נייד" required span={6}>
+              <Input value={form.applicantPhone} onChange={v => update({ applicantPhone: v })} type="tel" />
+            </Field>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <div className="form-section-header">
+          <div>
+            <h3 className="form-section-title">פרטי החברה / היבואן</h3>
+            <div className="form-section-sub">נתונים אלו ייאומתו אוטומטית מול רשם החברות ורשות המסים</div>
+          </div>
+          {verified && <Badge tone="green" dot icon={<Icons.CheckCircle size={11}/>}>אומת ברשם החברות</Badge>}
+        </div>
+        <div className="form-section-body">
+          <div className="form-grid">
+            <Field label="סוג ישות" required span={6}>
+              <Select value={form.entityType} onChange={v => update({ entityType: v })} options={ENTITY_TYPES.map(e => ({ value: e.id, label: e.label }))} />
+            </Field>
+            <Field label="ח״פ / מספר עוסק מורשה" required span={6} hint="המערכת תאמת אוטומטית מול רשם החברות">
+              <div style={{ position: 'relative' }}>
+                <Input value={form.companyId} onChange={v => { update({ companyId: v }); setVerified(v.length >= 9); }} />
+                {verified && <Icons.CheckCircle size={14} color="var(--green)" style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }}/>}
+              </div>
+            </Field>
+            <Field label="שם החברה" required span={12}>
+              <Input value={form.companyName} onChange={v => update({ companyName: v })} />
+            </Field>
+          </div>
+
+          {verified && (
+            <div className="mt-3" style={{ padding:'10px 12px', background:'var(--green-soft)', color:'var(--green)', borderRadius:8, fontSize:12.5 }}>
+              <Icons.CheckCircle size={13} style={{ verticalAlign:-2, marginInlineEnd:6 }}/>
+              <strong>אומת ברשם החברות:</strong> אוטו טריידינג בע״מ, ח״פ 514567823, סטטוס: פעילה, רשומה מ-12/03/2018.
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function AgentsStep({ form, update }) {
+  return (
+    <div className="form-section">
+      <div className="form-section-header">
+        <div>
+          <h3 className="form-section-title">סוכנים מורשים מטעם היבואן</h3>
+          <div className="form-section-sub">פרטי הסוכנים שאתה מורשה לפעול דרכם (יבואן עקיף)</div>
+        </div>
+      </div>
+      <div className="form-section-body">
+        <div className="form-grid">
+          <Field label="שם סוכן מורשה ראשי" required span={6}>
+            <Input value={form.agents.primary} onChange={v => update({ agents: { ...form.agents, primary: v } })} placeholder="לדוגמה: גרשון לוי" />
+          </Field>
+          <Field label="שם סוכן מורשה משני" span={6}>
+            <Input value={form.agents.secondary} onChange={v => update({ agents: { ...form.agents, secondary: v } })} placeholder="לדוגמה: שלום אבני" />
+          </Field>
+        </div>
+        <div className="mt-3" style={{ padding:'10px 12px', background:'var(--blue-soft)', color:'var(--blue)', borderRadius:8, fontSize:12.5 }}>
+          <Icons.Info size={13} style={{ verticalAlign:-2, marginInlineEnd:6 }}/>
+          ביבואן עקיף, הקשר עם היצרן נעשה דרך סוכן מורשה. יש להגיש מסמכי הסמכה לכל סוכן.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductsStep({ form, update }) {
+  const { PRODUCTS, CLASSIFICATIONS } = window.AppData;
+  const [editingIdx, setEditingIdx] = React.useState(form.products.length === 0 ? 'new' : null);
+  const [draft, setDraft] = React.useState({ code: '', manufacturer: '', classifications: [] });
+
+  function addProduct() {
+    setEditingIdx('new');
+    setDraft({ code: '', manufacturer: '', classifications: [] });
+  }
+  function saveProduct() {
+    const product = PRODUCTS.find(p => p.code === draft.code);
+    const newP = {
+      id: `P-${Date.now()}`,
+      code: draft.code,
+      label: product?.label || draft.code,
+      manufacturer: draft.manufacturer || product?.manufacturer || '',
+      classifications: draft.classifications,
+    };
+    if (editingIdx === 'new') {
+      update({ products: [...form.products, newP] });
+    } else {
+      const next = [...form.products];
+      next[editingIdx] = newP;
+      update({ products: next });
+    }
+    setEditingIdx(null);
+  }
+  function removeProduct(i) {
+    update({ products: form.products.filter((_, x) => x !== i) });
+  }
+  function editProduct(i) {
+    setDraft(form.products[i]);
+    setEditingIdx(i);
+  }
+
+  return (
+    <>
+      <div className="form-section">
+        <div className="form-section-header">
+          <div>
+            <h3 className="form-section-title">תוצרים בבקשה</h3>
+            <div className="form-section-sub">הוסף תוצר אחד או יותר עם הסיווגים המתאימים</div>
+          </div>
+          {editingIdx === null && <Button variant="primary" size="sm" icon={<Icons.Plus size={13}/>} onClick={addProduct}>הוסף תוצר</Button>}
+        </div>
+
+        <div className="card-body flush">
+          {form.products.length === 0 && editingIdx !== 'new' && (
+            <div className="empty">
+              <Icons.Package size={28} color="var(--text-muted)" />
+              <div className="empty-title" style={{ marginTop:8 }}>לא נוספו תוצרים</div>
+              <div className="empty-desc">לחץ "הוסף תוצר" להתחיל</div>
+            </div>
+          )}
+
+          {form.products.map((p, i) => editingIdx === i ? (
+            <ProductEditor key={i} draft={draft} setDraft={setDraft} onSave={saveProduct} onCancel={() => setEditingIdx(null)} />
+          ) : (
+            <div key={i} style={{ padding:'14px 18px', borderBottom: '1px solid var(--divider)' }}>
+              <div className="row between">
+                <div className="row gap-3">
+                  <div style={{ width:32, height:32, borderRadius:7, background:'var(--accent-soft)', display:'grid', placeItems:'center' }}>
+                    <Icons.Package size={15} color="var(--accent)" />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 500 }}>{p.label}</div>
+                    <div className="text-xs text-muted">{p.manufacturer}</div>
+                  </div>
+                </div>
+                <div className="row gap-2">
+                  <Button variant="ghost" size="sm" icon={<Icons.Edit size={13}/>} onClick={() => editProduct(i)} />
+                  <Button variant="ghost" size="sm" icon={<Icons.Trash size={13}/>} onClick={() => removeProduct(i)} />
+                </div>
+              </div>
+              <div className="chip-group mt-2">
+                {p.classifications.map(c => <span key={c} className="chip selected">{c}</span>)}
+              </div>
+            </div>
+          ))}
+
+          {editingIdx === 'new' && (
+            <ProductEditor draft={draft} setDraft={setDraft} onSave={saveProduct} onCancel={() => setEditingIdx(null)} />
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ProductEditor({ draft, setDraft, onSave, onCancel }) {
+  const { PRODUCTS, CLASSIFICATIONS } = window.AppData;
+  const product = PRODUCTS.find(p => p.code === draft.code);
+
+  function toggleClass(c) {
+    setDraft({
+      ...draft,
+      classifications: draft.classifications.includes(c)
+        ? draft.classifications.filter(x => x !== c)
+        : [...draft.classifications, c],
+    });
+  }
+
+  return (
+    <div style={{ padding:18, background:'var(--bg-subtle)', borderBottom:'1px solid var(--divider)' }}>
+      <div className="form-grid">
+        <Field label="תוצר (יצרן)" required span={6}>
+          <Select
+            value={draft.code}
+            onChange={v => {
+              const p = PRODUCTS.find(pp => pp.code === v);
+              setDraft({ ...draft, code: v, manufacturer: p?.manufacturer || '' });
+            }}
+            placeholder="בחר תוצר..."
+            options={PRODUCTS.map(p => ({ value: p.code, label: p.label }))}
+          />
+        </Field>
+        <Field label="שם יצרן" span={6}>
+          <Input value={draft.manufacturer} onChange={v => setDraft({ ...draft, manufacturer: v })} placeholder="ימולא אוטומטית" />
+        </Field>
+      </div>
+
+      <div className="mt-3">
+        <label className="field-label mb-2" style={{ display:'block', marginBottom:6 }}>
+          סיווגי רכב <span className="req">*</span>
+        </label>
+        <div className="chip-group">
+          {CLASSIFICATIONS.map(c => (
+            <button
+              key={c}
+              type="button"
+              className={`chip ${draft.classifications.includes(c) ? 'selected' : ''}`}
+              onClick={() => toggleClass(c)}
+            >
+              {draft.classifications.includes(c) && <Icons.Check size={11} />}
+              {c}
+            </button>
+          ))}
+        </div>
+        <div className="field-hint mt-2">{draft.classifications.length} סיווגים נבחרו</div>
+      </div>
+
+      <div className="row gap-2 mt-3" style={{ justifyContent:'flex-end' }}>
+        <Button variant="ghost" onClick={onCancel}>ביטול</Button>
+        <Button variant="primary" onClick={onSave} disabled={!draft.code || draft.classifications.length === 0}>
+          שמור תוצר
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DocumentsStep({ form, update }) {
+  const { DOC_TYPES } = window.AppData;
+
+  function attachDoc(code) {
+    update({
+      docs: {
+        ...form.docs,
+        [code]: { name: code.replace(/_/g,'-') + '.pdf', size: '1.4 MB', uploaded: new Date().toISOString() },
+      },
+    });
+  }
+  function removeDoc(code) {
+    const next = { ...form.docs };
+    delete next[code];
+    update({ docs: next });
+  }
+
+  const attached = Object.keys(form.docs).length;
+  const required = DOC_TYPES.filter(d => d.required);
+  const requiredAttached = required.filter(d => form.docs[d.code]).length;
+
+  return (
+    <div className="form-section">
+      <div className="form-section-header">
+        <div>
+          <h3 className="form-section-title">מסמכים נדרשים</h3>
+          <div className="form-section-sub">{requiredAttached} מתוך {required.length} מסמכי חובה הועלו</div>
+        </div>
+        <Badge tone={requiredAttached === required.length ? 'green' : 'amber'} dot>
+          {requiredAttached}/{required.length}
+        </Badge>
+      </div>
+      <div className="card-body flush">
+        {DOC_TYPES.map((d, i) => {
+          const attachedDoc = form.docs[d.code];
+          return (
+            <div key={d.code} style={{ padding: '14px 18px', borderBottom: i < DOC_TYPES.length - 1 ? '1px solid var(--divider)' : 'none' }}>
+              <div className="row between">
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div className="row gap-2">
+                    <div style={{ fontSize: 13.5, fontWeight: 500 }}>
+                      {d.label}
+                      {d.required && <span style={{ color:'var(--red)', marginInlineStart:4 }}>*</span>}
+                    </div>
+                    {!d.required && <Badge tone="gray">רשות</Badge>}
+                  </div>
+                  {attachedDoc && (
+                    <div className="row gap-2 mt-2">
+                      <div className="file-icon" style={{ width: 26, height: 26 }}>
+                        <Icons.FileText size={13} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">{attachedDoc.name}</div>
+                        <div className="text-xs text-muted">{attachedDoc.size}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  {attachedDoc ? (
+                    <div className="row gap-1">
+                      <Button variant="ghost" size="sm" icon={<Icons.Eye size={13}/>} />
+                      <Button variant="ghost" size="sm" icon={<Icons.Trash size={13}/>} onClick={() => removeDoc(d.code)} />
+                    </div>
+                  ) : (
+                    <Button variant="secondary" size="sm" icon={<Icons.Upload size={13}/>} onClick={() => attachDoc(d.code)}>
+                      העלה קובץ
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ReviewStep({ form, actualSteps }) {
+  const { REQUEST_TYPES, IMPORTER_TYPES, DOC_TYPES } = window.AppData;
+  const rt = REQUEST_TYPES.find(r => r.id === form.requestType);
+  const it = IMPORTER_TYPES.find(i => i.id === form.importerType);
+  const required = DOC_TYPES.filter(d => d.required);
+  const requiredAttached = required.filter(d => form.docs[d.code]).length;
+  return (
+    <>
+      <div className="mb-4" style={{ padding:'14px 16px', background:'var(--accent-soft)', borderRadius:10, border:'1px solid rgba(94,106,210,.2)' }}>
+        <div className="row gap-3">
+          <div style={{ width:40, height:40, borderRadius:10, background:'var(--accent)', color:'#fff', display:'grid', placeItems:'center' }}>
+            <Icons.CheckCircle size={20} />
+          </div>
+          <div>
+            <div className="font-semibold">סקירת הבקשה לפני הגשה</div>
+            <div className="text-sm text-secondary">בדוק שכל הפרטים נכונים. לאחר ההגשה, ההחזרה תחייב פתיחת בקשה חדשה.</div>
+          </div>
+        </div>
+      </div>
+
+      <Card title="סוג הבקשה" className="mb-4">
+        <dl className="kv-grid">
+          <dt>סוג בקשה</dt><dd>{rt?.label}</dd>
+          <dt>סוג יבואן</dt><dd>{it?.label}</dd>
+        </dl>
+      </Card>
+
+      <Card title="פרטי מבקש" className="mb-4">
+        <dl className="kv-grid">
+          <dt>שם מלא</dt><dd>{form.applicantFirst} {form.applicantLast}</dd>
+          <dt>מספר זהות</dt><dd className="mono">{form.applicantId}</dd>
+          <dt>דוא״ל</dt><dd>{form.applicantEmail}</dd>
+          <dt>טלפון</dt><dd>{form.applicantPhone}</dd>
+        </dl>
+      </Card>
+
+      <Card title="פרטי החברה" className="mb-4">
+        <dl className="kv-grid">
+          <dt>שם החברה</dt><dd>{form.companyName}</dd>
+          <dt>ח״פ</dt><dd className="mono">{form.companyId}</dd>
+        </dl>
+      </Card>
+
+      {form.agents.primary && (
+        <Card title="סוכנים מורשים" className="mb-4">
+          <dl className="kv-grid">
+            <dt>סוכן ראשי</dt><dd>{form.agents.primary}</dd>
+            {form.agents.secondary && (<><dt>סוכן משני</dt><dd>{form.agents.secondary}</dd></>)}
+          </dl>
+        </Card>
+      )}
+
+      {form.products.length > 0 && (
+        <Card title={`תוצרים (${form.products.length})`} flush className="mb-4">
+          {form.products.map((p, i) => (
+            <div key={i} style={{ padding:'12px 18px', borderBottom: i < form.products.length - 1 ? '1px solid var(--divider)' : 'none' }}>
+              <div className="row between">
+                <div>
+                  <div className="font-semibold text-sm">{p.label}</div>
+                  <div className="text-xs text-muted">{p.manufacturer}</div>
+                </div>
+                <div className="chip-group">
+                  {p.classifications.map(c => <span key={c} className="chip selected">{c}</span>)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <Card title={`מסמכים (${requiredAttached}/${required.length} חובה)`} flush>
+        <div style={{ padding: 16 }}>
+          {Object.keys(form.docs).map((code, i) => {
+            const dt = DOC_TYPES.find(d => d.code === code);
+            return (
+              <div key={code} className="row gap-2" style={{ padding: '4px 0' }}>
+                <Icons.CheckCircle size={13} color="var(--green)" />
+                <span className="text-sm">{dt?.label || code}</span>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </>
+  );
+}
+
+window.SubmissionWizard = SubmissionWizard;
+  </script>
+  <script type="text/babel" data-presets="env,react">
+// permits-list.jsx — list of importer permits
+
+function PermitsList({ context, currentUser, onNavigate }) {
+  const { PERMITS, IMPORTER_TYPES, fmtDate } = window.AppData;
+  const [search, setSearch] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [page, setPage] = React.useState(1);
+  const pageSize = 10;
+
+  const isExternal = context === 'external';
+
+  let baseList = PERMITS;
+  if (isExternal) {
+    baseList = PERMITS.filter(p => p.company === currentUser.company);
+  }
+
+  const now = Date.now();
+  const expCount = baseList.filter(p => {
+    const d = (new Date(p.expires_at) - now) / (1000 * 60 * 60 * 24);
+    return d <= 60 && d > 0;
+  }).length;
+
+  const tabs = [
+    { id: 'all',    label: 'הכל',         count: baseList.length },
+    { id: 'active', label: 'פעילים',       count: baseList.filter(p => p.status === 'active').length },
+    { id: 'expiring', label: 'פגי תוקף קרוב', count: expCount },
+  ];
+
+  const filtered = baseList.filter(p => {
+    if (statusFilter === 'active' && p.status !== 'active') return false;
+    if (statusFilter === 'expiring') {
+      const d = (new Date(p.expires_at) - now) / (1000 * 60 * 60 * 24);
+      if (!(d <= 60 && d > 0)) return false;
+    }
+    if (search && !p.id.includes(search) && !p.company.includes(search)) return false;
+    return true;
+  });
+
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageItems = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  return (
+    <div className="workspace page-enter">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{isExternal ? 'הרישיונות שלי' : 'רישיונות יבואן'}</h1>
+          <div className="page-subtitle">
+            {isExternal ? 'הרישיונות הפעילים שלך ותוקפם' : 'כל הרישיונות שהונפקו במערכת'}
+          </div>
+        </div>
+        <div className="row gap-2">
+          <Button variant="secondary" icon={<Icons.Download size={14}/>}>ייצוא</Button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="tbl-toolbar">
+          <Tabs tabs={tabs} active={statusFilter} onChange={(id) => { setStatusFilter(id); setPage(1); }} />
+          <div style={{ flex: 1 }} />
+          <div className="topbar-search" style={{ width: 240 }}>
+            <input
+              placeholder="חיפוש לפי מספר רישיון או חברה..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+            />
+            <Icons.Search size={13} />
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style={{width: 130}}>מספר רישיון</th>
+              <th>חברה</th>
+              <th>סוג יבואן</th>
+              <th>תוצרים</th>
+              <th>הופק</th>
+              <th>תוקף עד</th>
+              <th>סטטוס</th>
+              <th style={{width: 36}}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageItems.map(p => {
+              const days = Math.ceil((new Date(p.expires_at) - now) / (1000 * 60 * 60 * 24));
+              const expiringSoon = days <= 60 && days > 0;
+              const expired = days <= 0;
+              return (
+                <tr key={p.id} className="clickable">
+                  <td className="cell-id"><span className="mono">{p.id}</span></td>
+                  <td>
+                    <div style={{fontWeight: 500}}>{p.company}</div>
+                    <div className="text-xs text-muted">{p.company_id}</div>
+                  </td>
+                  <td><Badge tone="gray">{p.importer_type_label}</Badge></td>
+                  <td>
+                    {p.products.length === 0 ? (
+                      <span className="text-muted">—</span>
+                    ) : (
+                      <span className="text-sm">{p.products.map(pp => pp.label).join(', ')}</span>
+                    )}
+                  </td>
+                  <td className="muted text-sm">{fmtDate(p.created_at)}</td>
+                  <td className="text-sm">{fmtDate(p.expires_at)}</td>
+                  <td>
+                    {expired ? (
+                      <Badge tone="red" dot>פג תוקף</Badge>
+                    ) : expiringSoon ? (
+                      <Badge tone="amber" dot>פוג בעוד {days} ימים</Badge>
+                    ) : (
+                      <Badge tone="green" dot>פעיל</Badge>
+                    )}
+                  </td>
+                  <td><Icons.ChevronLeft size={14} color="var(--text-muted)"/></td>
+                </tr>
+              );
+            })}
+            {pageItems.length === 0 && (
+              <tr><td colSpan={8}>
+                <div className="empty">
+                  <div className="empty-title">לא נמצאו רישיונות</div>
+                  <div className="empty-desc">נסה לשנות את הסינונים או מילת החיפוש</div>
+                </div>
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+
+        <Pager page={page} pages={pages} onChange={setPage} total={filtered.length} pageSize={pageSize} label="רישיונות" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Importers list
+// ============================================================
+
+function ImportersList({ onNavigate }) {
+  const { IMPORTERS, ENTITY_TYPES } = window.AppData;
+  const [search, setSearch] = React.useState('');
+
+  const filtered = IMPORTERS.filter(i =>
+    !search ||
+    i.name.toLowerCase().includes(search.toLowerCase()) ||
+    i.company_id.includes(search)
+  );
+
+  return (
+    <div className="workspace page-enter">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">יבואנים רשומים</h1>
+          <div className="page-subtitle">כל היבואנים הפעילים במערכת</div>
+        </div>
+        <div className="row gap-2">
+          <Button variant="ghost" icon={<Icons.Filter size={14}/>}>סינון</Button>
+          <Button variant="secondary" icon={<Icons.Download size={14}/>}>ייצוא</Button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="tbl-toolbar">
+          <div className="topbar-search" style={{ width: 280 }}>
+            <input
+              placeholder="חיפוש לפי שם חברה או ח״פ..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <Icons.Search size={13} />
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style={{width: 110}}>מזהה</th>
+              <th>שם חברה</th>
+              <th>ח״פ / ע״מ</th>
+              <th>סוג ישות</th>
+              <th>דוא״ל</th>
+              <th>טלפון</th>
+              <th>רישיונות</th>
+              <th>סטטוס</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(i => (
+              <tr key={i.id} className="clickable">
+                <td className="cell-id"><span className="mono">{i.id}</span></td>
+                <td style={{fontWeight: 500}}>{i.name}</td>
+                <td className="mono text-sm">{i.company_id}</td>
+                <td><Badge tone="gray">{i.entity_type_label}</Badge></td>
+                <td className="text-sm text-muted">{i.email}</td>
+                <td className="text-sm text-muted">{i.phone}</td>
+                <td className="num">{i.permits_count}</td>
+                <td><Badge tone="green" dot>פעיל</Badge></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+window.PermitsList = PermitsList;
+window.ImportersList = ImportersList;
+  </script>
+  <script type="text/babel" data-presets="env,react">
+// app.jsx — main shell with role switching and routing
+
+const { useState: aUseState, useEffect: aUseEffect, useMemo: aUseMemo } = React;
+
+function App() {
+  const { ROLES, USERS, REQUESTS } = window.AppData;
+
+  // Persist role + page
+  const [roleId, setRoleId] = React.useState(() => localStorage.getItem('kerem-role') || 'import_manager');
+  const [page, setPage] = React.useState(() => localStorage.getItem('kerem-page') || 'dashboard');
+  const [requestData, setRequestData] = React.useState(window.AppData.REQUESTS);
+  const [roleMenuOpen, setRoleMenuOpen] = React.useState(false);
+
+  React.useEffect(() => { localStorage.setItem('kerem-role', roleId); }, [roleId]);
+  React.useEffect(() => { localStorage.setItem('kerem-page', page); }, [page]);
+
+  const role = ROLES.find(r => r.id === roleId);
+  const user = USERS[roleId];
+  const isExternal = role.category === 'external';
+
+  // For external user, force pages they can access
+  React.useEffect(() => {
+    if (isExternal && !['my-requests', 'my-permits', 'new-request'].includes(page) && !page.startsWith('request:')) {
+      setPage('my-requests');
+    }
+    if (!isExternal && ['my-requests', 'my-permits', 'new-request'].includes(page)) {
+      setPage('dashboard');
+    }
+  }, [isExternal, page]);
+
+  function navigate(p) {
+    setPage(p);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function switchRole(newRoleId) {
+    setRoleId(newRoleId);
+    setRoleMenuOpen(false);
+    const newRole = ROLES.find(r => r.id === newRoleId);
+    if (newRole.category === 'external') setPage('my-requests');
+    else setPage('dashboard');
+  }
+
+  function updateRequestInList(updated) {
+    setRequestData(list => list.map(r => r.id === updated.id ? updated : r));
+    // also patch in global data so other screens see it
+    window.AppData.REQUESTS = window.AppData.REQUESTS.map(r => r.id === updated.id ? updated : r);
+  }
+
+  const currentUser = isExternal
+    ? { ...user, role: roleId, applicant: { email: user.name === 'דנה ארד' ? 'dana@autotrading.co.il' : '' }, company: user.company }
+    : { ...user, role: roleId };
+
+  // Build page content
+  let content;
+  if (page === 'dashboard') {
+    content = <Dashboard onNavigate={navigate} />;
+  } else if (page === 'requests') {
+    content = <RequestsList context="internal" currentUser={currentUser} onNavigate={navigate} />;
+  } else if (page === 'permits') {
+    content = <PermitsList context="internal" currentUser={currentUser} onNavigate={navigate} />;
+  } else if (page === 'importers') {
+    content = <ImportersList onNavigate={navigate} />;
+  } else if (page === 'my-requests') {
+    content = <RequestsList context="external" currentUser={currentUser} onNavigate={(p) => p === 'new-request' ? setPage('new-request') : navigate(p)} />;
+  } else if (page === 'my-permits') {
+    content = <PermitsList context="external" currentUser={currentUser} onNavigate={navigate} />;
+  } else if (page === 'new-request') {
+    content = <SubmissionWizard
+      currentUser={currentUser}
+      onCancel={() => setPage('my-requests')}
+      onComplete={() => setPage('my-requests')}
+    />;
+  } else if (page.startsWith('request:')) {
+    const id = page.split(':')[1];
+    content = (
+      <RequestDetail
+        requestId={id}
+        context={isExternal ? 'external' : 'internal'}
+        currentUser={currentUser}
+        onNavigate={navigate}
+        onUpdateRequest={updateRequestInList}
+      />
+    );
+  } else {
+    content = <Dashboard onNavigate={navigate} />;
+  }
+
+  // Internal nav
+  const internalNav = [
+    { id: 'dashboard', label: 'דשבורד',         icon: <Icons.Dashboard size={16}/> },
+    { id: 'requests',  label: 'בקשות',           icon: <Icons.Inbox size={16}/>,        count: requestData.filter(r => !['approved','rejected','draft'].includes(r.status)).length },
+    { id: 'permits',   label: 'רישיונות',         icon: <Icons.Award size={16}/>,        count: window.AppData.PERMITS.length },
+    { id: 'importers', label: 'יבואנים',          icon: <Icons.Building size={16}/>,    count: window.AppData.IMPORTERS.length },
+  ];
+
+  // External nav (top bar style)
+  const externalNav = [
+    { id: 'my-requests', label: 'הבקשות שלי' },
+    { id: 'my-permits',  label: 'הרישיונות שלי' },
+  ];
+
+  return (
+    <div className="app" data-external={isExternal}>
+      {/* Internal sidebar */}
+      {!isExternal && (
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <div className="brand-mark">כ</div>
+            <div>
+              <div className="brand-text">כרם</div>
+              <div className="brand-sub">רישיונות יבואן</div>
+            </div>
+          </div>
+
+          <div className="sidebar-section">
+            <div className="sidebar-section-title">ניהול</div>
+            {internalNav.map(n => (
+              <div
+                key={n.id}
+                className="nav-item"
+                aria-current={page === n.id || (n.id === 'requests' && page.startsWith('request:'))}
+                onClick={() => navigate(n.id)}
+              >
+                {n.icon}
+                <span>{n.label}</span>
+                {n.count !== undefined && <span className="nav-count">{n.count}</span>}
+              </div>
+            ))}
+          </div>
+
+          <div className="sidebar-section">
+            <div className="sidebar-section-title">תפעול</div>
+            <div className="nav-item"><Icons.Mail size={16}/><span>תבניות מייל</span></div>
+            <div className="nav-item"><Icons.History size={16}/><span>לוגים</span></div>
+            <div className="nav-item"><Icons.Users size={16}/><span>תפקידים והרשאות</span></div>
+            <div className="nav-item"><Icons.Settings size={16}/><span>הגדרות מערכת</span></div>
+          </div>
+
+          <div className="sidebar-footer">
+            <div className="row gap-2">
+              <Avatar user={user} size={28} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="text-sm font-medium" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</div>
+                <div className="text-xs text-muted">{user.dept}</div>
+              </div>
+              <Button variant="ghost" size="sm" icon={<Icons.Logout size={14}/>} title="התנתקות" />
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* Main column */}
+      <div>
+        {isExternal ? (
+          <div className="ext-header">
+            <div className="brand">
+              <div className="brand-mark">כ</div>
+              <div>
+                <div className="brand-text">כרם</div>
+                <div className="brand-sub">פורטל יבואנים</div>
+              </div>
+            </div>
+            <div className="ext-nav">
+              {externalNav.map(n => (
+                <div
+                  key={n.id}
+                  className="ext-nav-item"
+                  aria-current={page === n.id || (n.id === 'my-requests' && (page === 'new-request' || page.startsWith('request:')))}
+                  onClick={() => navigate(n.id)}
+                >{n.label}</div>
+              ))}
+            </div>
+            <div className="topbar-spacer" />
+            <RoleSwitcher roleId={roleId} role={role} user={user} isOpen={roleMenuOpen} setOpen={setRoleMenuOpen} onSwitch={switchRole} />
+          </div>
+        ) : (
+          <div className="topbar">
+            <div>
+              <div className="topbar-title">
+                {page === 'dashboard' && 'דשבורד ניהולי'}
+                {page === 'requests' && 'בקשות'}
+                {page === 'permits' && 'רישיונות'}
+                {page === 'importers' && 'יבואנים'}
+                {page.startsWith('request:') && 'בחינת בקשה'}
+              </div>
+            </div>
+            <div className="topbar-spacer" />
+            <div className="topbar-search">
+              <input placeholder="חיפוש בקשות, רישיונות, יבואנים..." />
+              <Icons.Search size={13} />
+            </div>
+            <Button variant="ghost" size="sm" icon={<Icons.Bell size={15}/>} title="התראות" />
+            <Button variant="ghost" size="sm" icon={<Icons.HelpCircle size={15}/>} title="עזרה" />
+            <RoleSwitcher roleId={roleId} role={role} user={user} isOpen={roleMenuOpen} setOpen={setRoleMenuOpen} onSwitch={switchRole} />
+          </div>
+        )}
+
+        {content}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Role Switcher
+// ============================================================
+
+function RoleSwitcher({ roleId, role, user, isOpen, setOpen, onSwitch }) {
+  const { ROLES, USERS } = window.AppData;
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    function onClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  return (
+    <div className="role-switcher" ref={ref}>
+      <div className="role-pill" onClick={() => setOpen(o => !o)}>
+        <div className="role-info">
+          <span className="role-name">{user.name}</span>
+          <span className="role-title">{role.label}</span>
+        </div>
+        <Avatar user={user} size={28} />
+      </div>
+      {isOpen && (
+        <div className="role-dropdown">
+          <div className="role-dropdown-header">החלף תפקיד (לצורך הדגמה)</div>
+          {ROLES.map(r => {
+            const u = USERS[r.id];
+            return (
+              <div
+                key={r.id}
+                className="role-option"
+                aria-selected={r.id === roleId}
+                onClick={() => onSwitch(r.id)}
+              >
+                <Avatar user={u} size={30} />
+                <div className="role-option-text" style={{ flex: 1 }}>
+                  <div className="role-name">{u.name}</div>
+                  <div className="role-title">{r.label}</div>
+                </div>
+                {r.id === roleId && <Icons.Check size={14} color="var(--accent)" />}
+              </div>
+            );
+          })}
+          <div className="role-divider" />
+          <div className="role-dropdown-header" style={{ paddingBottom: 4 }}>
+            <span className="text-xs">תפקידים פנימיים = משרד התחבורה. מייצג = פורטל היבואן.</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Mount
+// ============================================================
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <ToastProvider>
+    <App />
+  </ToastProvider>
+);
+  </script>
+</body>
+</html>

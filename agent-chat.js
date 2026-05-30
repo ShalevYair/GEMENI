@@ -11,6 +11,7 @@ import { initNaturalModal }      from './modals/natural-modal.js';
 import { initDynamicModal }     from './modals/dynamic-modal.js';
 import { initJsonModal }        from './modals/json-modal.js';
 import { initSummarizerModal }  from './modals/summarizer-modal.js';
+import { initUiExplorerModal } from './modals/ui-explorer-modal.js';
 import { initBrieferModal }    from './modals/briefer-modal.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
@@ -73,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (agentId === 'dynamic')            initDynamicModal();
   if (agentId === 'json-gen')           initJsonModal();
   if (agentId === 'summarizer')         initSummarizerModal();
+  if (agentId === 'ui-explorer')        initUiExplorerModal();
   if (agentId === 'briefer')            initBrieferModal();
   if (apiKey) showChatReady();
   bindEvents();
@@ -203,6 +205,9 @@ function renderEmptyState() {
         : ''}
       ${agentId === 'summarizer'
         ? `<button class="chip chip--generate" onclick="window.openSummarizerModal()">📝 סכם מסמך ל-Excel</button>`
+        : ''}
+      ${agentId === 'ui-explorer'
+        ? `<button class="chip chip--generate" onclick="window.openUiExplorerModal()">🔬 חקור ממשק HTML</button>`
         : ''}
       ${agentId === 'briefer'
         ? `<button class="chip chip--generate" onclick="window.openBrieferModal()">📋 הורד שאלון + הפק בריף</button>`

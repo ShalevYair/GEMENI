@@ -343,39 +343,88 @@ window.dynExecute = async function () {
   window.closeDynamicModal();
   deps.hideEmpty();
   deps.setLoading(true);
-  const pid = deps.appendTyping();
 
-  const numCalls = { basic: 1, normal: 2, high: 3 }[execDepth] || 2;
-  const prompts  = buildExecPrompts(mdInstFile.text, inputFiles, execDepth, numCalls);
-  let   mIdx     = deps.getModelIdx();
-  const results  = [];
+  const numCalls   = { basic: 1, normal: 2, high: 3 }[execDepth] || 2;
+  const depthLabel = { basic: 'בסיסי', normal: 'רגיל', high: 'גבוה' }[execDepth];
+  const estTime    = { basic: '2–5 דקות', normal: '5–15 דקות', high: '10–25 דקות' }[execDepth];
+
+  const STEP_LABELS = {
+    basic:  ['⚙️ מבצע עיבוד ומפיק פלט'],
+    normal: ['🔍 שלב א מתוך 2 — מנתח קבצי קלט ומכין תכנית', '📝 שלב ב מתוך 2 — מפיק קבצי פלט'],
+    high:   ['🔍 שלב א מתוך 3 — ניתוח מעמיק של הקלט', '📝 שלב ב מתוך 3 — מפיק קבצי פלט מלאים', '✨ שלב ג מתוך 3 — בודק, משפר ומוסיף תרשימים'],
+  }[execDepth] || [];
+
+  deps.appendMessage('assistant',
+    `⚡ **הסוכן הדינמי מתחיל לעבוד** (עומק: ${depthLabel}, ${numCalls} קריאות API)\n\n` +
+    `📄 ${mdInstFile.name}` +
+    (inputFiles.length ? ` · ${inputFiles.map(f => f.name).join(', ')}` : '') + '\n\n' +
+    `⏳ **זמן עיבוד משוער: ${estTime}** — לפעמים אף יותר מ-20 דקות.\nאנא המתן בסבלנות ואל תסגור את הדף.`
+  );
+
+  const pid       = deps.appendTyping();
+  const startTime = Date.now();
+  let   curStep   = 0;
+
+  function fmtElapsed() {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(s / 60);
+    return m > 0 ? `${m}:${String(s % 60).padStart(2, '0')}` : `0:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  const timerInterval = setInterval(() => {
+    const label = STEP_LABELS[curStep] || `מעבד שלב ${curStep + 1} מתוך ${numCalls}…`;
+    deps.updateTyping(pid, `${label} · ⏱️ ${fmtElapsed()}`);
+  }, 5000);
+
+  const prompts = buildExecPrompts(mdInstFile.text, inputFiles, execDepth, numCalls);
+  let   mIdx    = deps.getModelIdx();
+  const results = [];
 
   try {
     for (let i = 0; i < prompts.length; i++) {
-      deps.updateTyping(pid, `מעבד… (${i + 1}/${prompts.length})`);
-      results.push(await dynCallWithFallback(prompts[i], mIdx));
+      curStep = i;
+      const stepLabel = STEP_LABELS[i] || `שלב ${i + 1} מתוך ${numCalls}`;
+      deps.updateTyping(pid, `${stepLabel} · ⏱️ ${fmtElapsed()}`);
+
+      const result = await dynCallWithFallback(prompts[i], mIdx);
+      results.push(result);
+
+      // After intermediate steps, show a brief preview snippet
+      if (i < prompts.length - 1) {
+        const clean   = result.replace(/===FILE_START[\s\S]*?===FILE_END===/g, '').trim();
+        const snippet = clean.substring(0, 250);
+        if (snippet) {
+          deps.appendMessage('assistant',
+            `✅ **${stepLabel.replace(/^[^\s]+\s/, '')} הושלם** (${fmtElapsed()})\n\n` +
+            `> ${snippet.replace(/\n/g, '\n> ')}${clean.length > 250 ? '\n> …' : ''}`
+          );
+        }
+      }
     }
   } catch (err) {
+    clearInterval(timerInterval);
     deps.removeTyping(pid);
     deps.setLoading(false);
     deps.appendMessage('error', '❌ שגיאה: ' + err.message);
     return;
   }
 
+  clearInterval(timerInterval);
   deps.removeTyping(pid);
   deps.setLoading(false);
+
+  const totalSec  = Math.floor((Date.now() - startTime) / 1000);
+  const totalMins = Math.floor(totalSec / 60);
+  const totalStr  = totalMins > 0 ? `${totalMins} דק' ${totalSec % 60} שנ'` : `${totalSec} שניות`;
 
   const lastResult = results[results.length - 1];
   const files = parseOutputFiles(lastResult);
   if (!files.length) files.push({ name: 'פלט-סוכן.md', content: lastResult });
   outputFiles = files;
 
-  const depthLabel = { basic: 'בסיסי', normal: 'רגיל', high: 'גבוה' }[execDepth];
   deps.appendMessage('assistant',
-    `✅ **הסוכן הדינמי סיים** — עומק: ${depthLabel}\n\n` +
-    `📄 מסמך הפעלה: ${mdInstFile.name}\n` +
-    (inputFiles.length ? `📁 קבצי קלט: ${inputFiles.map(f => f.name).join(', ')}\n` : '') +
-    `\n---\n\n📥 **נוצרו ${outputFiles.length} קבצי פלט:**\n` +
+    `✅ **הסוכן הדינמי סיים** — עומק: ${depthLabel} · זמן כולל: ${totalStr}\n\n` +
+    `📥 **נוצרו ${outputFiles.length} קבצי פלט:**\n` +
     outputFiles.map(f => `- ${f.name}`).join('\n')
   );
 

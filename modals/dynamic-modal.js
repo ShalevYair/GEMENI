@@ -374,7 +374,7 @@ window.dynExecute = async function () {
   const timerInterval = setInterval(() => {
     const label = STEP_LABELS[curStep] || `מעבד שלב ${curStep + 1} מתוך ${numCalls}…`;
     deps.updateTyping(pid, `${label} · ⏱️ ${fmtElapsed()}`);
-  }, 500);
+  }, 5000);
 
   const prompts = buildExecPrompts(mdInstFile.text, inputFiles, execDepth, numCalls);
   let   mIdx    = deps.getModelIdx();

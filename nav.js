@@ -1,6 +1,6 @@
 // All agent IDs that have a dedicated page via agent.html?id=<id>
 const CHAT_AGENT_IDS = new Set([
-  'json-gen', 'briefer', 'dynamic',
+  'json-gen', 'briefer', 'dynamic', 'shraga',
   'requirements', 'project-manager', 'project-coordinator', 'spec-king',
   'software-architect', 'platform-architect', 'tender-writer', 'outsystems',
   'storyteller', 'design-queen', 'dev-champ', 'tester', 'security', 'natural',
@@ -12,6 +12,7 @@ const CHAT_AGENT_IDS = new Set([
 const NAV_ITEMS = [
   { id: 'spec-king',           name: 'מלך האפיונים',          icon: '👑',  href: 'agent.html?id=spec-king' },
   { id: 'spec-viewer',         name: 'מציג האפיונים',          icon: '📋',  href: 'spec-viewer.html' },
+  { id: 'shraga',               name: 'שרגא',                   icon: '🧠',  href: 'agent.html?id=shraga' },
   { id: 'briefer',             name: 'בריפר',                  icon: '📋',  href: 'agent.html?id=briefer' },
   { id: 'requirements',        name: 'אוסף הדרישות',           icon: '📋',  href: 'agent.html?id=requirements' },
   { id: 'project-manager',     name: 'מנהל הפרויקט',           icon: '📊',  href: 'agent.html?id=project-manager' },

@@ -13,6 +13,7 @@ import { initJsonModal }        from './modals/json-modal.js';
 import { initSummarizerModal }  from './modals/summarizer-modal.js';
 import { initUiExplorerModal } from './modals/ui-explorer-modal.js';
 import { initBrieferModal }    from './modals/briefer-modal.js';
+import { initShragaModal }     from './modals/shraga-modal.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
 const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
@@ -76,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (agentId === 'summarizer')         initSummarizerModal();
   if (agentId === 'ui-explorer')        initUiExplorerModal();
   if (agentId === 'briefer')            initBrieferModal();
+  if (agentId === 'shraga')             initShragaModal();
   if (apiKey) showChatReady();
   bindEvents();
 });
@@ -211,6 +213,9 @@ function renderEmptyState() {
         : ''}
       ${agentId === 'briefer'
         ? `<button class="chip chip--generate" onclick="window.openBrieferModal()">📋 הורד שאלון + הפק בריף</button>`
+        : ''}
+      ${agentId === 'shraga'
+        ? `<button class="chip chip--generate" onclick="window.openShragaModal()">🧠 העלה קבצים וקבל ניתוח Word</button>`
         : ''}
     </div>`;
   msgs.appendChild(empty);

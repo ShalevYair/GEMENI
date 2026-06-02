@@ -18,6 +18,7 @@ import re
 import sys
 import json
 import time
+import threading
 import requests
 import openpyxl
 from pathlib import Path
@@ -85,50 +86,77 @@ RE_IF           = re.compile(r'^\s*IF\b', re.IGNORECASE)
 RE_LOOP         = re.compile(r'^\s*(FOR|REPEAT|WHILE|READ|FIND)\b', re.IGNORECASE)
 
 
+RE_END_PROG      = re.compile(r'^\s*END\s*$', re.IGNORECASE)
+RE_END_PROG_SEMI = re.compile(r'^\s*END\s*;?\s*$', re.IGNORECASE)
+RE_PROG_NAME_CMT = re.compile(r'^\*{1,2}\s*(?:PROGRAM|PROG|MODULE|NAME|ROUTINE)\s*[:\-]?\s*([A-Z0-9_-]+)', re.IGNORECASE)
+RE_DEFINE_DATA_START = re.compile(r'^\s*DEFINE\s+DATA\b', re.IGNORECASE)
+
+
+def _guess_program_name(lines, stem, index):
+    """Look backwards from line index to find a comment header with a name."""
+    for j in range(min(index, 10), -1, -1):
+        m = RE_PROG_NAME_CMT.match(lines[j].strip())
+        if m:
+            return m.group(1).upper()
+    return f"{stem}_PROG{index + 1}"
+
+
 def split_into_programs(content, filename):
     """
-    Split a Natural file into individual programs/subroutines.
-    In Natural, programs are often delimited by comment headers or
-    DEFINE SUBROUTINE / END-SUBROUTINE blocks.
-    Falls back to treating the whole file as one unit.
-    """
-    programs = []
-    lines    = content.splitlines()
+    Split a Natural file into individual programs.
 
-    # Strategy 1: split on DEFINE SUBROUTINE blocks
-    current_name  = None
-    current_lines = []
-    in_subroutine = False
+    Natural ADABAS marks end-of-program with a standalone END statement.
+    Each block between two END statements is one program.
+    Program names are inferred from comment headers (e.g. * PROGRAM: FOO)
+    or from the stem + sequence number.
+    """
+    stem  = Path(filename).stem
+    lines = content.splitlines()
+
+    # ── Strategy A: split on standalone END lines ───────────────────────────
+    segments     = []
+    current      = []
+    end_count    = 0
 
     for line in lines:
-        m_subr = RE_SUBR_DEF.match(line.strip())
-        m_end  = RE_END_SUBR.match(line.strip())
+        current.append(line)
+        if RE_END_PROG_SEMI.match(line):
+            # Only treat as program boundary if the segment has real content
+            non_empty = [l for l in current if l.strip() and not l.strip().startswith('*')]
+            if len(non_empty) >= 3:
+                segments.append(current[:])
+                end_count += 1
+            current = []
 
-        if m_subr:
-            if current_lines and current_name:
-                programs.append({'name': current_name, 'code': '\n'.join(current_lines)})
-            current_name  = m_subr.group(1)
-            current_lines = [line]
-            in_subroutine = True
-        elif m_end and in_subroutine:
-            current_lines.append(line)
-            programs.append({'name': current_name, 'code': '\n'.join(current_lines)})
-            current_name  = None
-            current_lines = []
-            in_subroutine = False
-        else:
-            current_lines.append(line)
+    # Trailing lines after last END (shouldn't happen in clean files, but handle it)
+    if current:
+        non_empty = [l for l in current if l.strip() and not l.strip().startswith('*')]
+        if len(non_empty) >= 3:
+            segments.append(current)
 
-    # Remaining lines after last subroutine = main program body
-    if current_lines:
-        name = Path(filename).stem + '_MAIN'
-        programs.append({'name': name, 'code': '\n'.join(current_lines)})
+    # If we found more than 1 segment, use them
+    if len(segments) > 1:
+        programs = []
+        for i, seg_lines in enumerate(segments):
+            name = _guess_program_name(seg_lines, stem, i)
+            programs.append({'name': name, 'code': '\n'.join(seg_lines)})
+        return programs
 
-    # Strategy 2: if no subroutines found, treat as single unit
-    if len(programs) == 1 or (len(programs) == 0):
-        return [{'name': Path(filename).stem, 'code': content}]
+    # ── Strategy B: split on DEFINE DATA blocks ─────────────────────────────
+    # Each new "DEFINE DATA" that appears after the first one = new program
+    split_points = [i for i, l in enumerate(lines) if RE_DEFINE_DATA_START.match(l)]
 
-    return programs
+    if len(split_points) > 1:
+        programs = []
+        for idx, start in enumerate(split_points):
+            end = split_points[idx + 1] if idx + 1 < len(split_points) else len(lines)
+            seg = lines[start:end]
+            name = _guess_program_name(seg, stem, idx)
+            programs.append({'name': name, 'code': '\n'.join(seg)})
+        return programs
+
+    # ── Fallback: whole file as one program ──────────────────────────────────
+    return [{'name': stem, 'code': content}]
 
 
 def parse_file(filepath):
@@ -198,6 +226,27 @@ def build_knowledge_base(files_data):
 # GEMINI API
 # ──────────────────────────────────────────────────────────────────────────────
 
+class _Spinner:
+    """Print a progress dot every N seconds while an operation is running."""
+    def __init__(self, interval=4):
+        self._interval = interval
+        self._stop     = threading.Event()
+        self._thread   = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        while not self._stop.wait(self._interval):
+            print(".", end="", flush=True)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self._stop.set()
+        self._thread.join()
+        print()  # newline after dots
+
+
 def call_gemini(api_key, prompt, attempt=0):
     """Call Gemini REST API with exponential-backoff retry."""
     url = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={api_key}"
@@ -209,7 +258,7 @@ def call_gemini(api_key, prompt, attempt=0):
         resp = requests.post(url, json=body, timeout=180)
         if resp.status_code in (429, 503) and attempt < 4:
             wait = 2 ** attempt
-            print(f"    ⏳ Rate limit / server busy — ממתין {wait}s...")
+            print(f"\n    ⏳ Rate limit / server busy — ממתין {wait}s...", end="", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         resp.raise_for_status()
@@ -219,7 +268,7 @@ def call_gemini(api_key, prompt, attempt=0):
     except requests.RequestException as e:
         if attempt < 4:
             wait = 2 ** attempt
-            print(f"    ⚠ Network error: {e} — ממתין {wait}s...")
+            print(f"\n    ⚠ Network error: {e} — ממתין {wait}s...", end="", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         raise
@@ -678,7 +727,9 @@ def main():
 
             try:
                 prompt   = build_program_prompt(fd, prog, kb, ddm_cache)
-                raw_resp = call_gemini(api_key, prompt)
+                print(f"    ⏳ שולח ל-Gemini", end="", flush=True)
+                with _Spinner(interval=4):
+                    raw_resp = call_gemini(api_key, prompt)
                 cleaned  = strip_json_fences(raw_resp)
                 analysis = json.loads(cleaned)
                 analyses.append(analysis)

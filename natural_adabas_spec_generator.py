@@ -333,19 +333,26 @@ def call_gemini(api_key, prompt, attempt=0):
         "generationConfig": {"maxOutputTokens": MAX_TOKENS, "temperature": TEMPERATURE},
     }
     try:
-        resp = requests.post(url, json=body, timeout=180)
+        resp = requests.post(url, json=body, timeout=360)
         if resp.status_code in (429, 503) and attempt < 4:
-            wait = 2 ** attempt
-            print(f"\n    ⏳ Rate limit / server busy — ממתין {wait}s...", end="", flush=True)
+            wait = 30 * (2 ** attempt)  # 30s, 60s, 120s, 240s
+            print(f"\n    ⏳ Rate limit ({resp.status_code}) — ממתין {wait}s...", end="", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         resp.raise_for_status()
         data = resp.json()
         parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
         return "".join(p.get("text", "") for p in parts)
+    except requests.Timeout:
+        if attempt < 3:
+            wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
+            print(f"\n    ⏳ Timeout — ממתין {wait}s לפני ניסיון חוזר...", end="", flush=True)
+            time.sleep(wait)
+            return call_gemini(api_key, prompt, attempt + 1)
+        raise
     except requests.RequestException as e:
         if attempt < 4:
-            wait = 2 ** attempt
+            wait = 15 * (2 ** attempt)  # 15s, 30s, 60s, 120s
             print(f"\n    ⚠ Network error: {e} — ממתין {wait}s...", end="", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
@@ -796,6 +803,19 @@ def main():
               f"CALLNATs: {len(fd['callnats'])}")
 
     print(f"\n  סה\"כ תוכניות/שגרות: {total_programs}")
+
+    # ── Token estimate warning ─────────────────────────────────────────────────
+    total_chars   = sum(len(p['code']) for fd in files_data for p in fd['programs'])
+    est_in_tokens = total_chars // 4          # ~4 chars per token
+    est_out_tok   = total_programs * 3000     # ~3K output tokens per program
+    print(f"\n  ⚠  אומדן טוקנים:")
+    print(f"     קלט:  ~{est_in_tokens:,} טוקנים  ({total_chars/1e6:.1f}MB)")
+    print(f"     פלט:  ~{est_out_tok:,} טוקנים")
+    print(f"     סה\"כ: ~{(est_in_tokens+est_out_tok):,} טוקנים")
+    ans = input("  להמשיך? (y/n): ").strip().lower()
+    if ans != 'y':
+        print("  בוטל.")
+        sys.exit(0)
 
     # ── PHASE 2: Knowledge base ────────────────────────────────────────────────
     print("\n── שלב 2: בניית Knowledge Base ────────────────────────────")

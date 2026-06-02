@@ -38,7 +38,7 @@ TEMPERATURE   = 0.1
 API_DELAY     = 1.5
 
 # Max characters sent per program to Gemini (to stay within token limits)
-MAX_PROGRAM_CHARS = 120_000
+MAX_PROGRAM_CHARS = 700_000
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STYLES
@@ -419,14 +419,14 @@ DDMs בשימוש בקובץ כולו: {ddms}
 
   "workflows": [
     {{
-      "name": "שם הזרימה / תהליך",
-      "trigger": "on_create | on_update | on_delete | on_field_change | scheduled | manual",
-      "trigger_details": "פירוט הטריגר — מה גורם לתהליך להתחיל",
+      "name": "שם הזרימה / תהליך — צור זרימה נפרדת לכל: פעולת PF-key, סוג משתמש, תת-תהליך עיקרי, מסך",
+      "trigger": "on_create | on_update | on_delete | on_field_change | scheduled | manual | pf_key",
+      "trigger_details": "פירוט מדויק — לדוגמה: לחיצת PF3, בחירת אפשרות 2, כניסה ראשונה",
       "actors": "מי מעורב — תפקידים / משתמשים",
       "steps": [
-        "צעד 1: תיאור",
-        "צעד 2: תיאור",
-        "צעד 3: IF תנאי → נתיב א / נתיב ב"
+        "צעד 1: תיאור מפורט",
+        "צעד 2: IF תנאי → נתיב א / נתיב ב",
+        "צעד 3: קריאה ל-CALLNAT XX / עדכון DDM YY"
       ],
       "business_rules": [
         {{
@@ -444,23 +444,24 @@ DDMs בשימוש בקובץ כולו: {ddms}
 
   "permissions": [
     {{
-      "role": "שם תפקיד",
-      "description": "תיאור התפקיד",
+      "role": "שם תפקיד — לפי ערכי GL-MMAD-RASHAY-SODI או משתנה הרשאה אחר בקוד",
+      "description": "תיאור התפקיד והרמה (לדוגמה: רמה < 6, רמה >= 8)",
       "entity": "שם הישות",
       "read": "all | own | none",
-      "create": "כן | לא",
-      "update": "all | own | none",
-      "delete": "all | own | none"
+      "create": "כן | לא — לפי קוד STORE/INSERT",
+      "update": "all | own | none — לפי קוד UPDATE",
+      "delete": "all | own | none — לפי קוד DELETE"
     }}
   ],
 
   "integrations": [
     {{
-      "system": "שם המערכת / ממשק חיצוני",
+      "system": "שם המערכת החיצונית בלבד — לא תוכניות Natural פנימיות",
+      "type": "external | internal",
       "direction": "כניסה | יציאה | דו-כיווני",
       "data": "אילו נתונים עוברים",
       "frequency": "ריאל-טיים | אצווה | לפי דרישה",
-      "notes": "הערות נוספות"
+      "notes": "הערות"
     }}
   ],
 
@@ -671,13 +672,15 @@ def build_excel(analyses, kb, output_path):
 
     set_col_widths(ws6, {'A':20,'B':20,'C':25,'D':40,'E':20,'F':12,'G':12,'H':12,'I':12})
 
-    # ── 7. Integrations ───────────────────────────────────────────────────────
-    ws7 = wb.create_sheet("אינטגרציות")
-    add_header_row(ws7, ["קובץ", "תוכנית", "מערכת", "כיוון", "נתונים", "תדירות", "הערות"])
+    # ── 7. External Integrations only ────────────────────────────────────────
+    ws7 = wb.create_sheet("אינטגרציות חיצוניות")
+    add_header_row(ws7, ["קובץ", "תוכנית", "מערכת חיצונית", "כיוון", "נתונים", "תדירות", "הערות"])
 
     i = 0
     for a in analyses:
         for intg in a.get('integrations', []):
+            if intg.get('type', '').lower() == 'internal':
+                continue  # internal CALLNAT calls go to call graph sheet
             ws7.append([
                 a.get('filename', ''), a.get('program_name', ''),
                 intg.get('system', ''), intg.get('direction', ''),
@@ -685,6 +688,8 @@ def build_excel(analyses, kb, output_path):
             ])
             for c in ws7[ws7.max_row]: cell_style(c, alt=(i % 2 == 0))
             i += 1
+
+    set_col_widths(ws7, {'A':20,'B':20,'C':30,'D':15,'E':50,'F':18,'G':40})
 
     set_col_widths(ws7, {'A':20,'B':20,'C':25,'D':15,'E':50,'F':18,'G':40})
 

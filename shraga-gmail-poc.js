@@ -24,24 +24,36 @@ function processShraga() {
   if (!threads.length) { Logger.log('אין מיילים ממתינים'); return; }
 
   for (const thread of threads) {
+    // מנוע כפילות: הסר את ה-label מיד, לפני קריאות Gemini הארוכות,
+    // כדי שריצה חופפת לא תטפל באותו thread פעם שנייה.
+    thread.removeLabel(label);
+
     const messages = thread.getMessages();
     const lastMsg  = messages[messages.length - 1];
     const body     = lastMsg.getPlainBody().slice(0, 12000);
 
     try {
-      // קריאה 1 — כיול
+      // ── שלב 1: כיול — שרגא מבין כוונה ומחליט לבד כמה עבודה צריך ──
       const calibRaw = callGemini(API_KEY, buildCalibPrompt(body));
       const calib    = parseJSON(calibRaw);
 
-      // קריאות 2–N — ביצוע
       const plan     = calib.workPlan || [{ section: 'ניתוח כללי', prompt: calib.internalPrompt || body }];
-      const numCalls = Math.min(3, Math.max(1, plan.length));
-      const sections = [];
+      const numCalls = Math.min(4, Math.max(1, plan.length));
+      const isSimple = calib.complexity === 'simple' || numCalls === 1;
 
-      for (let i = 0; i < numCalls; i++) {
-        const result  = callGemini(API_KEY, buildExecPrompt(body, calib, plan[i]));
-        const summary = extractSummary(result);
-        sections.push(`<h2>${plan[i].section}</h2>${convertToHtml(summary)}`);
+      // ── שלב 2: ביצוע — קריאה אחת או כמה, לפי החלטת הכיול ──
+      let finalText;
+      if (isSimple) {
+        // שאלה פשוטה: קריאת הביצוע היא התשובה הסופית — בלי סינתזה מיותרת
+        finalText = callGemini(API_KEY, buildExecPrompt(body, calib, plan[0]));
+      } else {
+        // בקשה מורכבת: כמה תוצרים גולמיים → שלב סינתזה אחד שמאחד אותם
+        const sections = [];
+        for (let i = 0; i < numCalls; i++) {
+          sections.push(callGemini(API_KEY, buildExecPrompt(body, calib, plan[i])));
+        }
+        // ── שלב 3: סינתזה — תשובה אחת סופית ומלוטשת למשתמש ──
+        finalText = callGemini(API_KEY, buildSynthesisPrompt(body, calib, sections));
       }
 
       // נושא חכם לפי תוכן
@@ -49,9 +61,9 @@ function processShraga() {
         `תן כותרת קצרה של 5-7 מילים בעברית שמתארת את התוכן הבא. רק הכותרת, בלי שום דבר אחר:\n${body.slice(0, 500)}`
       ).trim();
 
-      // בנה HTML
+      // בנה HTML — תשובה אחת זורמת, בלי פיגומים פנימיים
       let htmlBody = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;line-height:1.8;">`;
-      htmlBody += sections.join('<hr>');
+      htmlBody += convertToHtml(finalText);
 
       if (calib.questions && calib.questions.length) {
         htmlBody += `<h2>שאלות פתוחות</h2><ol>`;
@@ -90,24 +102,41 @@ function processShraga() {
 function buildCalibPrompt(body) {
   return `${SHRAGA_IDENTITY}
 
-עכשיו בשלב הכיול. קיבלת את הפנייה הבאה:
+עכשיו אתה בשלב הכיול. תפקידך להבין את הפנייה ולתכנן כמה עבודה היא דורשת.
+
+קיבלת את הפנייה הבאה:
 ${body}
+
+הנחיות לכיול:
+1. סווג את אופי הפנייה ב-"mode":
+   - "execute" = יש כאן משימה קונקרטית לביצוע עכשיו (לנתח מסמך, לכתוב קוד, להכין תוכנית עבודה וכו').
+   - "advise"  = המשתמש מתייעץ, שואל "איך כדאי", או מתאר התנהגות/יכולות שהוא רוצה ש"שרגא יעשה מעכשיו".
+     שים לב: אם הפנייה מתארת איך שרגא צריך להתנהג בעתיד — אל תיישם את ההתנהגות הזו עכשיו!
+     זו בקשת ייעוץ/תכנון — תתייחס לרעיון ותייעץ עליו, אל תבצע אותו על המשתמש.
+2. סווג "complexity":
+   - "simple"  = שאלה/בקשה שאפשר לענות עליה היטב בקריאה אחת (רוב המקרים).
+   - "complex" = בקשה רחבה עם כמה תוצרים נפרדים (למשל: תוכנית עבודה + מענה משפטי + הצעת PoC).
+3. קבע workPlan: סעיף אחד ל-simple, 2-4 סעיפים ל-complex — כל סעיף תוצר עצמאי.
 
 החזר JSON בלבד (ללא טקסט נלווה):
 {
   "understanding": "מה הבנת מהפנייה",
-  "numExecutionCalls": <1-3>,
-  "internalPrompt": "פרומט מפורט לעצמך לביצוע",
+  "mode": "execute" | "advise",
+  "complexity": "simple" | "complex",
+  "internalPrompt": "הנחיות מפורטות לעצמך לשלב הביצוע",
   "workPlan": [{ "section": "שם סעיף", "prompt": "מה לעשות בסעיף זה" }],
-  "questions": ["שאלה אם נדרש"]
+  "questions": ["שאלה למשתמש אם באמת נדרש, אחרת השאר ריק"]
 }`;
 }
 
 function buildExecPrompt(body, calib, section) {
+  const adviseNote = calib.mode === 'advise'
+    ? `\nשים לב: זו פנייה מסוג ייעוץ/תכנון. אם הפנייה מתארת איך שרגא צריך להתנהג בעתיד — אל תיישם זאת על המשתמש; תייעץ על הרעיון עצמו.\n`
+    : '';
   return `${SHRAGA_IDENTITY}
 
-עכשיו בשלב הביצוע.
-
+עכשיו אתה בשלב הביצוע.
+${adviseNote}
 הנחיות שקבעת לעצמך בכיול:
 ${calib.internalPrompt || ''}
 
@@ -119,19 +148,30 @@ ${section.prompt}
 תוכן המקור:
 ${body}
 
-כתוב את הניתוח המלא שלך.
-בסוף כתוב בדיוק:
----סיכום ותגובה מומלצת---
-[כאן רק מה שהמשתמש צריך לראות — תשובה ישירה, ברורה, מעשית, בעברית]`;
+כתוב תשובה ישירה, ברורה, מעשית ומלאה בעברית — בדיוק מה שהמשתמש צריך לקבל.`;
+}
+
+function buildSynthesisPrompt(body, calib, sections) {
+  return `${SHRAGA_IDENTITY}
+
+ביצעת עבודה פנימית בכמה שלבים. לפניך התוצרים הגולמיים של השלבים.
+תפקידך עכשיו: לאחד אותם לתשובה אחת סופית, קוהרנטית ומלוטשת בעברית — בדיוק מה שהמשתמש יקבל במייל.
+
+חוקים:
+- אל תזכיר שלבים, סעיפים פנימיים או "תהליך עבודה". כתוב כאילו זו תשובה אחת רציפה.
+- אל תחזור על אותו תוכן פעמיים; מזג חפיפות.
+- שמור על מבנה ברור (כותרות, רשימות) אם זה עוזר לקריאות.
+
+הפנייה המקורית של המשתמש:
+${body}
+
+התוצרים הגולמיים שלך:
+${sections.map((s, i) => `--- תוצר ${i + 1} ---\n${s}`).join('\n\n')}
+
+כתוב כעת את התשובה הסופית האחת למשתמש:`;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-function extractSummary(text) {
-  const marker = '---סיכום ותגובה מומלצת---';
-  const idx    = text.indexOf(marker);
-  return idx !== -1 ? text.slice(idx + marker.length).trim() : text;
-}
 
 function callGemini(apiKey, prompt) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;

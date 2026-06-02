@@ -215,7 +215,7 @@ function renderEmptyState() {
         ? `<button class="chip chip--generate" onclick="window.openBrieferModal()">📋 הורד שאלון + הפק בריף</button>`
         : ''}
       ${agentId === 'shraga'
-        ? `<button class="chip chip--generate" onclick="window.openShragaModal()">🧠 העלה קבצים וקבל ניתוח Word</button>`
+        ? `<button class="chip chip--generate" onclick="window.openShragaModal()">🧠 העלה קבצים וקבל ניתוח מעמיק</button>`
         : ''}
     </div>`;
   msgs.appendChild(empty);

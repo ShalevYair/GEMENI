@@ -89,25 +89,30 @@ RE_LOOP         = re.compile(r'^\s*(FOR|REPEAT|WHILE|READ|FIND)\b', re.IGNORECAS
 RE_END_PROG_SEMI     = re.compile(r'^\s*END\s*;?\s*$', re.IGNORECASE)
 RE_PROG_NAME_CMT     = re.compile(r'^\*{1,2}\s*(?:PROGRAM|PROG|MODULE|NAME|ROUTINE)\s*[:\-]?\s*([A-Z0-9_-]+)', re.IGNORECASE)
 RE_DEFINE_DATA_START = re.compile(r'^\s*DEFINE\s+DATA\b', re.IGNORECASE)
-# *C** or *C* — common mainframe export separator; also matches with trailing \r or spaces
-RE_CATALOG_SEP       = re.compile(r'^\*C\*+\s*\r?$')
+# *C** lines in mainframe exports: *C**   <LIBRARY>   <PROGNAME>   <metadata...>
+# They mark the start of each cataloged member. Match any line starting with *C**
+RE_CATALOG_SEP       = re.compile(r'^\*C\*\*')
 
 
 def _extract_name_from_segment(lines, stem, index):
     """
-    Try to find a program name inside a segment.
-    Looks for:
-      1. *C** <NAME> style header on the line right after the separator
-      2. * PROGRAM: / * NAME: comment
-      3. Falls back to stem_PROGn
+    Extract program name from a segment's *C** header line.
+    Format: *C**   <LIBRARY>   <PROGNAME>   <metadata>
+    The program name is the 3rd whitespace-separated token (index 2).
+    Falls back to comment headers or stem_PROGn.
     """
+    if lines:
+        first = lines[0].strip()
+        if first.startswith('*C**'):
+            tokens = first.split()
+            # tokens[0]='*C**', tokens[1]=library, tokens[2]=progname
+            if len(tokens) >= 3:
+                return tokens[2].upper()
+            elif len(tokens) == 2:
+                return tokens[1].upper()
+    # Fallback: look for comment-style name in first 15 lines
     for line in lines[:15]:
-        stripped = line.strip()
-        # *C** PROGNAME  or  *C* PROGNAME
-        m = re.match(r'^\*C\*+\s+([A-Z0-9_-]+)', stripped, re.IGNORECASE)
-        if m:
-            return m.group(1).upper()
-        m = RE_PROG_NAME_CMT.match(stripped)
+        m = RE_PROG_NAME_CMT.match(line.strip())
         if m:
             return m.group(1).upper()
     return f"{stem}_PROG{index + 1}"

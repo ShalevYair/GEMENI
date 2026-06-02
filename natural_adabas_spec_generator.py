@@ -86,16 +86,28 @@ RE_IF           = re.compile(r'^\s*IF\b', re.IGNORECASE)
 RE_LOOP         = re.compile(r'^\s*(FOR|REPEAT|WHILE|READ|FIND)\b', re.IGNORECASE)
 
 
-RE_END_PROG      = re.compile(r'^\s*END\s*$', re.IGNORECASE)
-RE_END_PROG_SEMI = re.compile(r'^\s*END\s*;?\s*$', re.IGNORECASE)
-RE_PROG_NAME_CMT = re.compile(r'^\*{1,2}\s*(?:PROGRAM|PROG|MODULE|NAME|ROUTINE)\s*[:\-]?\s*([A-Z0-9_-]+)', re.IGNORECASE)
+RE_END_PROG_SEMI     = re.compile(r'^\s*END\s*;?\s*$', re.IGNORECASE)
+RE_PROG_NAME_CMT     = re.compile(r'^\*{1,2}\s*(?:PROGRAM|PROG|MODULE|NAME|ROUTINE)\s*[:\-]?\s*([A-Z0-9_-]+)', re.IGNORECASE)
 RE_DEFINE_DATA_START = re.compile(r'^\s*DEFINE\s+DATA\b', re.IGNORECASE)
+# *C** or *C* — common mainframe export separator between cataloged members
+RE_CATALOG_SEP       = re.compile(r'^\*C\*+\s*$')
 
 
-def _guess_program_name(lines, stem, index):
-    """Look backwards from line index to find a comment header with a name."""
-    for j in range(min(index, 10), -1, -1):
-        m = RE_PROG_NAME_CMT.match(lines[j].strip())
+def _extract_name_from_segment(lines, stem, index):
+    """
+    Try to find a program name inside a segment.
+    Looks for:
+      1. *C** <NAME> style header on the line right after the separator
+      2. * PROGRAM: / * NAME: comment
+      3. Falls back to stem_PROGn
+    """
+    for line in lines[:15]:
+        stripped = line.strip()
+        # *C** PROGNAME  or  *C* PROGNAME
+        m = re.match(r'^\*C\*+\s+([A-Z0-9_-]+)', stripped, re.IGNORECASE)
+        if m:
+            return m.group(1).upper()
+        m = RE_PROG_NAME_CMT.match(stripped)
         if m:
             return m.group(1).upper()
     return f"{stem}_PROG{index + 1}"
@@ -103,32 +115,42 @@ def _guess_program_name(lines, stem, index):
 
 def split_into_programs(content, filename):
     """
-    Split a Natural file into individual programs.
+    Split a Natural ADABAS file into individual programs.
 
-    Natural ADABAS marks end-of-program with a standalone END statement.
-    Each block between two END statements is one program.
-    Program names are inferred from comment headers (e.g. * PROGRAM: FOO)
-    or from the stem + sequence number.
+    Priority order:
+      A. *C** separator lines  (mainframe export convention)
+      B. Standalone END lines  (Natural language standard)
+      C. Multiple DEFINE DATA  (heuristic)
+      D. Whole file as one unit (fallback)
     """
     stem  = Path(filename).stem
     lines = content.splitlines()
 
-    # ── Strategy A: split on standalone END lines ───────────────────────────
-    segments     = []
-    current      = []
-    end_count    = 0
+    # ── Strategy A: *C** separator lines ────────────────────────────────────
+    sep_indices = [i for i, l in enumerate(lines) if RE_CATALOG_SEP.match(l)]
+    if sep_indices:
+        segments = []
+        boundaries = sep_indices + [len(lines)]
+        for idx, start in enumerate(sep_indices):
+            end     = boundaries[idx + 1]
+            seg     = lines[start:end]
+            name    = _extract_name_from_segment(seg, stem, idx)
+            segments.append({'name': name, 'code': '\n'.join(seg)})
+        if segments:
+            return segments
+
+    # ── Strategy B: standalone END lines ────────────────────────────────────
+    segments = []
+    current  = []
 
     for line in lines:
         current.append(line)
         if RE_END_PROG_SEMI.match(line):
-            # Only treat as program boundary if the segment has real content
             non_empty = [l for l in current if l.strip() and not l.strip().startswith('*')]
             if len(non_empty) >= 3:
                 segments.append(current[:])
-                end_count += 1
             current = []
 
-    # Trailing lines after last END (shouldn't happen in clean files, but handle it)
     if current:
         non_empty = [l for l in current if l.strip() and not l.strip().startswith('*')]
         if len(non_empty) >= 3:
@@ -138,12 +160,11 @@ def split_into_programs(content, filename):
     if len(segments) > 1:
         programs = []
         for i, seg_lines in enumerate(segments):
-            name = _guess_program_name(seg_lines, stem, i)
+            name = _extract_name_from_segment(seg_lines, stem, i)
             programs.append({'name': name, 'code': '\n'.join(seg_lines)})
         return programs
 
-    # ── Strategy B: split on DEFINE DATA blocks ─────────────────────────────
-    # Each new "DEFINE DATA" that appears after the first one = new program
+    # ── Strategy C: split on DEFINE DATA blocks ──────────────────────────────
     split_points = [i for i, l in enumerate(lines) if RE_DEFINE_DATA_START.match(l)]
 
     if len(split_points) > 1:
@@ -151,7 +172,7 @@ def split_into_programs(content, filename):
         for idx, start in enumerate(split_points):
             end = split_points[idx + 1] if idx + 1 < len(split_points) else len(lines)
             seg = lines[start:end]
-            name = _guess_program_name(seg, stem, idx)
+            name = _extract_name_from_segment(seg, stem, idx)
             programs.append({'name': name, 'code': '\n'.join(seg)})
         return programs
 

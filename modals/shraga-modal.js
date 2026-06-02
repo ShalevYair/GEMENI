@@ -8,8 +8,15 @@ let outputSections = []; // accumulated text from execution calls
 let totalCallsPlanned = 0;
 
 const MAX_FILES = 20;
-const WARN_CHARS = 80_000;   // warn about slow processing
-const HEAVY_CHARS = 200_000; // warn about very slow processing (~30 min)
+const WARN_CHARS = 80_000;
+const HEAVY_CHARS = 200_000;
+
+const BLOCKED_EXTS = new Set(['exe', 'com', 'bat', 'cmd', 'msi', 'scr', 'pif']);
+const INLINE_EXTS  = new Set(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'ico', 'svg']);
+const TEXT_EXTS    = new Set(['txt','md','csv','json','html','htm','xml','yaml','yml','toml','ini','cfg','log','sh','bash','ps1','py','js','ts','jsx','tsx','java','c','cpp','cs','go','rb','php','sql','r','swift','kt','rs','dart','vue','scss','css','less','gitignore','env','conf','properties']);
+
+// output format registry
+const OUTPUT_FORMATS = { doc: 'application/msword', md: 'text/markdown', txt: 'text/plain', html: 'text/html', json: 'application/json' };
 
 // ── Init ───────────────────────────────────────────────────────────────────
 export function initShragaModal() {
@@ -99,13 +106,11 @@ function showPhasePick() {
   setBody(`
     <!-- Drop zone -->
     <label id="shraga-drop" style="display:block;border:2px dashed #c8d0e0;border-radius:10px;padding:1rem;text-align:center;cursor:pointer;background:#fafbfc;transition:.15s;">
-      <input type="file" id="shraga-file-input"
-             accept=".docx,.doc,.txt,.md,.pdf,.xls,.xlsx"
-             multiple hidden />
+      <input type="file" id="shraga-file-input" multiple hidden />
       <div id="shraga-drop-label" style="font-size:.88rem;color:#475569;">
         <span style="font-size:1.8rem;display:block;margin-bottom:.3rem;">📂</span>
         לחץ לבחירת קבצים או גרור לכאן<br>
-        <span style="font-size:.76rem;color:#94a3b8;">DOCX · DOC · TXT · MD · PDF · XLS · XLSX</span>
+        <span style="font-size:.76rem;color:#94a3b8;">כל סוגי הקבצים נתמכים (למעט EXE)</span>
       </div>
     </label>
 
@@ -175,8 +180,8 @@ async function addFiles(rawFiles) {
       showModalError(`מקסימום ${MAX_FILES} קבצים בו-זמנית.`); break;
     }
     const ext = (f.name.split('.').pop() || '').toLowerCase();
-    if (!['docx','doc','txt','md','pdf','xls','xlsx'].includes(ext)) {
-      showModalError(`סוג קובץ לא נתמך: .${ext}`); continue;
+    if (BLOCKED_EXTS.has(ext)) {
+      showModalError(`סוג קובץ חסום מטעמי אבטחה: .${ext}`); continue;
     }
     try {
       const parsed = await readShragaFile(f);
@@ -226,7 +231,7 @@ function updateDropLabel() {
   if (pickedFiles.length === 0) {
     el.innerHTML = `<span style="font-size:1.8rem;display:block;margin-bottom:.3rem;">📂</span>
       לחץ לבחירת קבצים או גרור לכאן<br>
-      <span style="font-size:.76rem;color:#94a3b8;">DOCX · DOC · TXT · MD · PDF · XLS · XLSX</span>`;
+      <span style="font-size:.76rem;color:#94a3b8;">כל סוגי הקבצים נתמכים (למעט EXE)</span>`;
   } else {
     el.innerHTML = `<span style="font-size:1.4rem;display:block;margin-bottom:.2rem;">✅</span>
       <strong style="color:#0f766e;">${pickedFiles.length} קבצים נטענו</strong>
@@ -239,12 +244,12 @@ function renderWarnings() {
   if (!container) return;
   const warnings = [];
 
-  // check for images
-  const imgFiles = pickedFiles.filter(f => /\.(png|jpg|jpeg|gif|webp|bmp|tiff)$/i.test(f.name));
-  if (imgFiles.length) {
+  // warn about binary/unknown files
+  const binaryFiles = pickedFiles.filter(f => f.binaryWarning);
+  if (binaryFiles.length) {
     warnings.push({
       danger: true,
-      text: `⚠️ זוהו ${imgFiles.length} קבצי תמונה: ${imgFiles.map(f => f.name).join(', ')}.\nלתמונות ערך מוסף נמוך מאד לעיבוד טקסטואלי — הן צורכות הרבה עיבוד (זמן וכסף) מבלי לתרום משמעותית לניתוח. מומלץ בחום להסיר אותן.`
+      text: `⚠️ ${binaryFiles.length} קבצים לא זוהו כטקסט או פורמט מוכר: ${binaryFiles.map(f => f.name).join(', ')}.\nהם יועברו כ-base64 — ייתכן שהמודל לא יוכל לקרוא אותם. מומלץ לבדוק שהפורמט נכון.`
     });
   }
 
@@ -298,14 +303,27 @@ async function readShragaFile(file) {
     return { name, text: res.value, sizeChars: res.value.length, isInline: false };
   }
 
-  if (['txt', 'md'].includes(ext)) {
-    const text = await file.text();
-    return { name, text, sizeChars: text.length, isInline: false };
+  if (ext === 'doc') {
+    const buf  = await file.arrayBuffer();
+    const arr  = new Uint8Array(buf);
+    const text = Array.from(arr)
+      .map(b => b >= 32 && b < 127 ? String.fromCharCode(b) : ' ')
+      .join('')
+      .replace(/ {3,}/g, ' ')
+      .trim();
+    return { name, text: `[קובץ DOC — קריאה חלקית]\n${text}`, sizeChars: text.length, isInline: false };
   }
 
   if (ext === 'pdf') {
     const base64 = await toBase64(file);
     return { name, base64, mimeType: 'application/pdf', isInline: true, sizeChars: Math.round(file.size * 0.75) };
+  }
+
+  // images — send inline
+  if (['png','jpg','jpeg','gif','webp','bmp','tiff','tif','ico'].includes(ext)) {
+    const mimeMap = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', bmp:'image/bmp', tiff:'image/tiff', tif:'image/tiff', ico:'image/x-icon' };
+    const base64 = await toBase64(file);
+    return { name, base64, mimeType: mimeMap[ext] || 'image/png', isInline: true, sizeChars: Math.round(file.size * 0.1) };
   }
 
   if (['xls', 'xlsx'].includes(ext)) {
@@ -322,19 +340,23 @@ async function readShragaFile(file) {
     return { name, text, sizeChars: text.length, isInline: false };
   }
 
-  if (ext === 'doc') {
-    // Try to extract readable text from binary DOC (partial, best-effort)
-    const buf  = await file.arrayBuffer();
-    const arr  = new Uint8Array(buf);
-    const text = Array.from(arr)
-      .map(b => b >= 32 && b < 127 ? String.fromCharCode(b) : ' ')
-      .join('')
-      .replace(/ {3,}/g, ' ')
-      .trim();
-    return { name, text: `[קובץ DOC — קריאה חלקית]\n${text}`, sizeChars: text.length, isInline: false };
+  // all known text formats + fallback attempt
+  if (TEXT_EXTS.has(ext) || ext === 'svg') {
+    const text = await file.text();
+    return { name, text, sizeChars: text.length, isInline: false };
   }
 
-  throw new Error(`סוג קובץ לא נתמך: .${ext}`);
+  // unknown — try as text, fallback to base64
+  try {
+    const text = await file.text();
+    // if the result looks like binary (many replacement chars), bail
+    const nullCount = (text.match(/�/g) || []).length;
+    if (nullCount / text.length > 0.05) throw new Error('binary');
+    return { name, text: `[קובץ ${ext.toUpperCase()}]\n${text}`, sizeChars: text.length, isInline: false };
+  } catch {
+    const base64 = await toBase64(file);
+    return { name, base64, mimeType: 'application/octet-stream', isInline: true, sizeChars: Math.round(file.size * 0.1), binaryWarning: true };
+  }
 }
 
 function toBase64(file) {
@@ -348,8 +370,15 @@ function toBase64(file) {
 
 function fileTypeIcon(name) {
   const ext = (name.split('.').pop() || '').toLowerCase();
-  const map = { pdf: '📄', docx: '📝', doc: '📝', xls: '📊', xlsx: '📊', txt: '📃', md: '📃' };
-  return map[ext] || '📎';
+  if (['png','jpg','jpeg','gif','webp','bmp','tiff','tif','ico','svg'].includes(ext)) return '🖼️';
+  if (['xls','xlsx','csv'].includes(ext)) return '📊';
+  if (['pdf'].includes(ext)) return '📄';
+  if (['docx','doc'].includes(ext)) return '📝';
+  if (['txt','md','log'].includes(ext)) return '📃';
+  if (['json','xml','yaml','yml','toml'].includes(ext)) return '🔧';
+  if (['html','htm'].includes(ext)) return '🌐';
+  if (['py','js','ts','java','c','cpp','cs','go','rb','php','sql','sh','swift','kt','rs'].includes(ext)) return '💻';
+  return '📎';
 }
 
 // ── Phase 2: calibration + execution ──────────────────────────────────────
@@ -402,9 +431,32 @@ window.runShraga = async function () {
   }
 
   phase = 'done';
-  const docContent = assembleDocument(context, calibration, outputSections);
-  downloadAsWord(docContent);
-  showDone();
+  const outFiles = calibration.outputFiles && calibration.outputFiles.length
+    ? calibration.outputFiles
+    : [{ filename: 'shraga_analysis', format: 'doc', title: 'ניתוח מלא' }];
+
+  // group sections by outputFileIndex
+  const grouped = outFiles.map((_, i) => outputSections.filter((s, si) => {
+    const plan = (calibration.workPlan || [])[si];
+    return (plan ? (plan.outputFileIndex ?? 0) : 0) === i;
+  }));
+  // any unassigned sections go to file 0
+  outputSections.forEach((s, si) => {
+    const plan = (calibration.workPlan || [])[si];
+    const idx = plan ? (plan.outputFileIndex ?? 0) : 0;
+    if (idx >= outFiles.length) grouped[0].push(s);
+  });
+
+  const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  for (let i = 0; i < outFiles.length; i++) {
+    const fileDef = outFiles[i];
+    const sections = grouped[i] || outputSections; // fallback: all sections in file 0
+    if (!sections.length && i > 0) continue; // skip empty extra files
+    const content = assembleDocument(context, calibration, sections, fileDef.title || fileDef.filename);
+    downloadFile(content, `${fileDef.filename || 'shraga'}_${ts}`, fileDef.format || 'doc');
+    await new Promise(r => setTimeout(r, 400)); // stagger downloads
+  }
+  showDone(outFiles);
 };
 
 // ── Prompt builders ────────────────────────────────────────────────────────
@@ -435,10 +487,19 @@ ${inlineFiles.length ? `\n[${inlineFiles.length} קבצי PDF מצורפים כ-
   "numExecutionCalls": <1–4>,
   "internalPrompt": "פרומט ראשי מפורט לשרגא — הנחיות כלליות לביצוע הניתוח",
   "workPlan": [
-    { "section": "שם הסעיף", "prompt": "מה לנתח/לכתוב בסעיף זה — פירוט מלא" }
+    { "section": "שם הסעיף", "prompt": "מה לנתח/לכתוב בסעיף זה — פירוט מלא", "outputFileIndex": 0 }
+  ],
+  "outputFiles": [
+    { "filename": "shraga_analysis", "format": "doc", "title": "ניתוח מלא" }
   ],
   "questions": ["שאלה 1", "שאלה 2"]
-}`;
+}
+
+הנחיות לבחירת קבצי פלט (outputFiles):
+- החלט כמה קבצי פלט נדרשים (1 עד 4) לפי סוג הניתוח וצרכי המשתמש.
+- format יכול להיות: "doc" (Word — לדוחות מפורטים), "md" (Markdown — לתיעוד טכני), "txt" (טקסט רגיל), "html" (דף HTML — לממשקים או מסמכים חזותיים), "json" (JSON — לנתונים מובנים).
+- בשדה outputFileIndex בכל סעיף workPlan — ציין באיזה קובץ פלט הסעיף הזה ישתייך (אינדקס ב-outputFiles).
+- אם מדובר בניתוח פשוט — קובץ אחד doc מספיק. אם יש גם נתונים מובנים וגם פרוזה — שקול doc + json. אם נדרש סיכום מנהלים + ניתוח מפורט — שני doc נפרדים.`;
 }
 
 function buildExecutionPrompt(context, calib, section, sectionIdx, totalSections) {
@@ -475,22 +536,22 @@ function parseCalibration(raw) {
   if (first !== -1 && last > first) {
     try { return JSON.parse(s.slice(first, last + 1)); } catch { /* ignore */ }
   }
-  // fallback — single execution call with raw text as internal prompt
   return {
     understanding: 'לא הצלחתי לפרסר כיול — עובר לביצוע ישיר',
     numExecutionCalls: 1,
     internalPrompt: raw || '',
-    workPlan: [{ section: 'ניתוח מלא', prompt: 'בצע ניתוח מלא ומקיף של כל החומרים לפי ההקשר שניתן.' }],
+    workPlan: [{ section: 'ניתוח מלא', prompt: 'בצע ניתוח מלא ומקיף של כל החומרים לפי ההקשר שניתן.', outputFileIndex: 0 }],
+    outputFiles: [{ filename: 'shraga_analysis', format: 'doc', title: 'ניתוח מלא' }],
     questions: [],
   };
 }
 
 // ── Document assembly ──────────────────────────────────────────────────────
-function assembleDocument(context, calib, sections) {
+function assembleDocument(context, calib, sections, docTitle = 'ניתוח שרגא') {
   const ts = new Date().toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' });
   const fileList = pickedFiles.map(f => `- ${f.name}`).join('\n');
 
-  let md = `# ניתוח שרגא\n\n`;
+  let md = `# ${docTitle}\n\n`;
   md += `**תאריך:** ${ts}\n\n`;
   if (context) md += `**הקשר:** ${context}\n\n`;
   md += `**קבצים שנותחו:**\n${fileList}\n\n---\n\n`;
@@ -508,8 +569,8 @@ function assembleDocument(context, calib, sections) {
   return md;
 }
 
-// ── Word output ────────────────────────────────────────────────────────────
-function downloadAsWord(markdownText) {
+// ── File output ─────────────────────────────────────────────────────────────
+function markdownToWordHtml(markdownText) {
   let bodyHtml = '';
   if (window.marked) {
     try { bodyHtml = window.marked.parse(markdownText, { breaks: true, gfm: true }); }
@@ -517,8 +578,7 @@ function downloadAsWord(markdownText) {
   } else {
     bodyHtml = deps.escHtml(markdownText).replace(/\n/g, '<br>');
   }
-
-  const wordHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office'
+  return `<html xmlns:o='urn:schemas-microsoft-com:office:office'
     xmlns:w='urn:schemas-microsoft-com:office:word'
     xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
@@ -543,13 +603,67 @@ function downloadAsWord(markdownText) {
 </head>
 <body dir="rtl">${bodyHtml}</body>
 </html>`;
+}
 
-  const ts   = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
-  const blob = new Blob(['﻿', wordHtml], { type: 'application/msword' });
+function markdownToHtml(markdownText) {
+  let body = '';
+  if (window.marked) {
+    try { body = window.marked.parse(markdownText, { breaks: true, gfm: true }); }
+    catch { body = deps.escHtml(markdownText).replace(/\n/g, '<br>'); }
+  } else {
+    body = deps.escHtml(markdownText).replace(/\n/g, '<br>');
+  }
+  return `<!DOCTYPE html><html lang="he"><head><meta charset="utf-8">
+<style>body{font-family:Arial,sans-serif;direction:rtl;max-width:900px;margin:2rem auto;color:#1a202c;line-height:1.6;}
+h1{color:#1a365d;}h2{color:#2c5282;}table{border-collapse:collapse;width:100%;}
+td,th{border:1px solid #cbd5e1;padding:6px 10px;}th{background:#ebf8ff;}
+code{background:#f7fafc;padding:1px 4px;}pre{background:#f7fafc;padding:12px;overflow:auto;}</style>
+</head><body dir="rtl">${body}</body></html>`;
+}
+
+function downloadFile(markdownContent, filenameNoExt, format) {
+  let content, mimeType, ext;
+  switch (format) {
+    case 'md':
+      content  = markdownContent;
+      mimeType = 'text/markdown';
+      ext      = 'md';
+      break;
+    case 'txt':
+      content  = markdownContent.replace(/#{1,6} /g, '').replace(/\*\*/g, '').replace(/\*/g, '');
+      mimeType = 'text/plain';
+      ext      = 'txt';
+      break;
+    case 'html':
+      content  = markdownToHtml(markdownContent);
+      mimeType = 'text/html';
+      ext      = 'html';
+      break;
+    case 'json': {
+      const lines = markdownContent.split('\n');
+      const sections = [];
+      let cur = null;
+      for (const line of lines) {
+        if (/^## /.test(line)) { if (cur) sections.push(cur); cur = { title: line.replace(/^## /, ''), content: '' }; }
+        else if (cur) cur.content += line + '\n';
+      }
+      if (cur) sections.push(cur);
+      content  = JSON.stringify({ generatedBy: 'שרגא', sections }, null, 2);
+      mimeType = 'application/json';
+      ext      = 'json';
+      break;
+    }
+    default: // 'doc'
+      content  = markdownToWordHtml(markdownContent);
+      mimeType = 'application/msword';
+      ext      = 'doc';
+      break;
+  }
+  const blob = new Blob(ext === 'doc' ? ['﻿', content] : [content], { type: mimeType });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
-  a.download = `shraga_${ts}.doc`;
+  a.download = `${filenameNoExt}.${ext}`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -611,16 +725,27 @@ function updateRunning(msg, current, total) {
   }
 }
 
-function showDone() {
+function showDone(outFiles) {
+  const formatIcon = { doc: '📝', md: '📃', txt: '📄', html: '🌐', json: '🔧' };
+  const fileListHtml = (outFiles || [{ filename: 'shraga_analysis', format: 'doc', title: 'ניתוח מלא' }]).map((f, i) =>
+    `<div style="display:flex;align-items:center;gap:.5rem;font-size:.83rem;color:#15803d;">
+      ${formatIcon[f.format] || '📎'} <strong>${deps.escHtml(f.title || f.filename)}</strong>
+      <span style="color:#6b7280;font-size:.76rem;">.${f.format}</span>
+      <button onclick="window.shragaRedownload(${i})"
+        style="margin-right:.3rem;font-size:.75rem;padding:.15rem .5rem;background:#dcfce7;border:1px solid #86efac;border-radius:5px;cursor:pointer;color:#166534;font-family:Heebo,sans-serif;">
+        ⬇ הורד שוב
+      </button>
+    </div>`
+  ).join('');
+
   setBody(`
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:1rem 1.1rem;">
-      <div style="font-size:1rem;font-weight:700;color:#166534;margin-bottom:.4rem;">✅ הניתוח הושלם — הקובץ הורד</div>
-      <div style="font-size:.83rem;color:#15803d;">קבצים שנותחו: <strong>${pickedFiles.length}</strong></div>
-      <div style="font-size:.83rem;color:#15803d;">סה"כ קריאות API: <strong>${totalCallsPlanned}</strong></div>
+      <div style="font-size:1rem;font-weight:700;color:#166534;margin-bottom:.6rem;">✅ הניתוח הושלם — הקבצים הורדו</div>
+      ${fileListHtml}
+      <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280;">קבצים שנותחו: <strong>${pickedFiles.length}</strong> | קריאות API: <strong>${totalCallsPlanned}</strong></div>
     </div>
     <div style="font-size:.82rem;color:#475569;line-height:1.5;">
-      הקובץ נשמר בפורמט <strong>.doc</strong> הניתן לפתיחה ב-Microsoft Word, Google Docs, ו-LibreOffice.<br>
-      אם ההורדה נחסמה על ידי הדפדפן — לחץ על "הורד שוב".
+      אם הורדה נחסמה על ידי הדפדפן — לחץ "הורד שוב" ליד הקובץ הרצוי.
     </div>
     ${calibration?.questions?.length ? `
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:9px;padding:.75rem 1rem;font-size:.82rem;color:#1e40af;">
@@ -633,18 +758,24 @@ function showDone() {
   setFooter(`
     <div style="display:flex;gap:.7rem;justify-content:space-between;align-items:center;">
       <button onclick="window.closeShragaModal()" style="padding:.48rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.87rem;font-family:Heebo,sans-serif;color:#374151;">סגור</button>
-      <div style="display:flex;gap:.5rem;">
-        <button onclick="window.shragaRedownload()" style="padding:.5rem 1.1rem;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;">⬇ הורד שוב</button>
-        <button onclick="window.openShragaModal()" style="padding:.5rem 1.1rem;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;">🔄 ניתוח חדש</button>
-      </div>
+      <button onclick="window.openShragaModal()" style="padding:.5rem 1.1rem;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;">🔄 ניתוח חדש</button>
     </div>`);
 }
 
-window.shragaRedownload = function () {
-  if (!outputSections.length) return;
-  const contextVal = ''; // already done
-  const docContent = assembleDocument(contextVal, calibration || {}, outputSections);
-  downloadAsWord(docContent);
+window.shragaRedownload = async function (fileIdx = 0) {
+  if (!outputSections.length || !calibration) return;
+  const outFiles = calibration.outputFiles && calibration.outputFiles.length
+    ? calibration.outputFiles
+    : [{ filename: 'shraga_analysis', format: 'doc', title: 'ניתוח מלא' }];
+  const fileDef = outFiles[fileIdx] || outFiles[0];
+  const grouped = outputSections.filter((_, si) => {
+    const plan = (calibration.workPlan || [])[si];
+    return (plan ? (plan.outputFileIndex ?? 0) : 0) === fileIdx;
+  });
+  const sections = grouped.length ? grouped : outputSections;
+  const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  const content = assembleDocument('', calibration, sections, fileDef.title || fileDef.filename);
+  downloadFile(content, `${fileDef.filename || 'shraga'}_${ts}`, fileDef.format || 'doc');
 };
 
 function showError(msg) {

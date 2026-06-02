@@ -89,8 +89,8 @@ RE_LOOP         = re.compile(r'^\s*(FOR|REPEAT|WHILE|READ|FIND)\b', re.IGNORECAS
 RE_END_PROG_SEMI     = re.compile(r'^\s*END\s*;?\s*$', re.IGNORECASE)
 RE_PROG_NAME_CMT     = re.compile(r'^\*{1,2}\s*(?:PROGRAM|PROG|MODULE|NAME|ROUTINE)\s*[:\-]?\s*([A-Z0-9_-]+)', re.IGNORECASE)
 RE_DEFINE_DATA_START = re.compile(r'^\s*DEFINE\s+DATA\b', re.IGNORECASE)
-# *C** or *C* — common mainframe export separator between cataloged members
-RE_CATALOG_SEP       = re.compile(r'^\*C\*+\s*$')
+# *C** or *C* — common mainframe export separator; also matches with trailing \r or spaces
+RE_CATALOG_SEP       = re.compile(r'^\*C\*+\s*\r?$')
 
 
 def _extract_name_from_segment(lines, stem, index):
@@ -178,6 +178,58 @@ def split_into_programs(content, filename):
 
     # ── Fallback: whole file as one program ──────────────────────────────────
     return [{'name': stem, 'code': content}]
+
+
+def debug_file(filepath):
+    """
+    Print diagnostic info to help tune the program splitter.
+    Run with:  python natural_adabas_spec_generator.py --debug <file.txt>
+    """
+    with open(filepath, 'rb') as f:
+        raw = f.read()
+
+    # Detect line ending style
+    crlf = raw.count(b'\r\n')
+    lf   = raw.count(b'\n') - crlf
+    print(f"\nFile: {filepath}  ({len(raw):,} bytes)")
+    print(f"Line endings: CRLF={crlf}  LF={lf}")
+
+    lines = raw.decode('utf-8', errors='replace').splitlines()
+    print(f"Total lines: {len(lines)}")
+
+    # Show first 10 lines with hex
+    print("\n── First 10 lines (repr) ──────────────────────────")
+    for i, l in enumerate(lines[:10]):
+        print(f"  {i+1:4d}: {repr(l)}")
+
+    # Find candidate separator lines (lines with only * and C chars)
+    print("\n── Candidate separator lines (contain *C) ─────────")
+    found = 0
+    for i, l in enumerate(lines):
+        stripped = l.strip()
+        if stripped.startswith('*C') or stripped.startswith('* C'):
+            print(f"  line {i+1:5d}: {repr(l)}")
+            found += 1
+            if found >= 20:
+                print("  ... (showing first 20)")
+                break
+    if found == 0:
+        print("  (none found — looking for any line starting with *)")
+        for i, l in enumerate(lines):
+            if l.strip().startswith('*') and len(l.strip()) < 20:
+                print(f"  line {i+1:5d}: {repr(l)}")
+                found += 1
+                if found >= 20:
+                    break
+
+    # Show DEFINE DATA occurrences
+    dd = [i+1 for i, l in enumerate(lines) if re.match(r'^\s*DEFINE\s+DATA\b', l, re.IGNORECASE)]
+    print(f"\n── DEFINE DATA at lines: {dd}")
+
+    # Show END occurrences (standalone)
+    ends = [i+1 for i, l in enumerate(lines) if re.match(r'^\s*END\s*\r?$', l, re.IGNORECASE)]
+    print(f"── Standalone END at lines: {ends[:20]}")
+    sys.exit(0)
 
 
 def parse_file(filepath):
@@ -685,6 +737,19 @@ def build_excel(analyses, kb, output_path):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main():
+    # ── Debug mode ─────────────────────────────────────────────────────────────
+    if len(sys.argv) >= 2 and sys.argv[1] == '--debug':
+        target = sys.argv[2] if len(sys.argv) >= 3 else None
+        if not target:
+            # Find first .txt file
+            txts = sorted(Path('.').glob('*.txt'))
+            if not txts:
+                print("No .txt files found.")
+                sys.exit(1)
+            target = str(txts[0])
+        debug_file(target)
+        return  # debug_file calls sys.exit, but just in case
+
     print("=" * 62)
     print("  Natural ADABAS → מחולל אפיון טכני  ")
     print("=" * 62)

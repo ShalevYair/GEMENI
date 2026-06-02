@@ -67,7 +67,7 @@ function injectModal() {
       <div style="padding:1.1rem 1.5rem .85rem;border-bottom:1px solid #f1f5f9;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
         <div>
           <h3 style="margin:0 0 .15rem;font-size:1.1rem;color:#1e293b;display:flex;align-items:center;gap:.4rem;">🧠 שרגא — ניתוח מסמכים</h3>
-          <p style="margin:0;color:#64748b;font-size:.82rem;">העלה קבצים, תן הקשר — קבל ניתוח מעמיק בקובץ Word</p>
+          <p style="margin:0;color:#64748b;font-size:.82rem;">העלה קבצים, תן הקשר — קבל ניתוח מעמיק בקבצים מרובים</p>
         </div>
         <button onclick="window.closeShragaModal()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:#94a3b8;padding:.2rem .45rem;border-radius:6px;line-height:1;">✕</button>
       </div>
@@ -132,10 +132,11 @@ function showPhasePick() {
 
     <!-- How it works -->
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:.75rem 1rem;font-size:.79rem;color:#475569;line-height:1.55;">
-      <strong style="color:#334155;">איך שרגא עובד:</strong>
-      קריאה 1 — שרגא קורא את כל החומרים ומכייל את עצמו.
-      קריאות 2–5 — שרגא מחליט כמה נדרשות לפי היקף החומר ומבצע ניתוח מעמיק.
-      הפלט מוחזר כקובץ Word עם ממצאים, תשובות ושאלות פתוחות.
+      <strong style="color:#334155;">איך שרגא עובד:</strong><br>
+      📥 <strong>קבלה:</strong> כל סוגי הקבצים (עד ${MAX_FILES}) — DOCX, PDF, תמונות, קוד, CSV, JSON, HTML ועוד (למעט EXE).<br>
+      🔍 <strong>קריאה 1 — כיול:</strong> שרגא קורא את כל החומרים ומחליט על תוכנית עבודה וקבצי פלט.<br>
+      ⚙️ <strong>קריאות 2–5 — ביצוע:</strong> ניתוח מעמיק לפי היקף החומר.<br>
+      📤 <strong>פלט:</strong> שרגא מחליט כמה קבצים להפיק ובאיזה פורמט — Word, Markdown, HTML, JSON, טקסט.
     </div>`);
 
   setFooter(`
@@ -143,7 +144,7 @@ function showPhasePick() {
       <button onclick="window.closeShragaModal()" style="padding:.48rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.87rem;font-family:Heebo,sans-serif;color:#374151;">ביטול</button>
       <button id="shraga-run-btn" onclick="window.runShraga()" disabled
         style="padding:.5rem 1.4rem;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(124,58,237,.35);opacity:.55;">
-        🧠 הפעל שרגא
+        🧠 נתח וייצא קבצים
       </button>
     </div>`);
 

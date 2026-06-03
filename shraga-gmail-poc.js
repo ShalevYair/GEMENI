@@ -68,16 +68,26 @@ function processShraga() {
         finalText = callGemini(API_KEY, buildSynthesisPrompt(body, calib, sections, profile));
       }
 
-      // נושא חכם לפי תוכן
+      // נושא: טקסט נקי בלבד, בלי קידומת "שרגא:" ובלי markdown
       const rawSubject = callGemini(API_KEY,
-        `כתוב כותרת מייל תשובה בעברית בלבד — 5 מילים לכל היותר — שתופיע בתיבת הדואר של המשתמש ותגרום לו להבין מה הוא מקבל. לא תהליך, לא הסבר — רק הכותרת עצמה:\n${body.slice(0, 500)}`
+        `כתוב כותרת מייל בעברית בלבד — עד 5 מילים — שתגרום למקבל להבין מה הוא מקבל. טקסט רגיל בלבד, ללא כוכביות, ללא פסיק, ללא קידומת. רק הכותרת:\n${body.slice(0, 500)}`
       ).trim();
-      // הסרת דליפות חשיבה של המודל (THOUGHT: / thinking: וכו')
-      const subject = rawSubject.replace(/^(THOUGHT|thinking|thought):[\s\S]*$/i, '').trim().slice(0, 200) || 'תשובת שרגא';
+      const subject = rawSubject
+        .replace(/^(THOUGHT|thinking|thought):[\s\S]*$/i, '')
+        .replace(/\*+/g, '')
+        .replace(/^שרגא[:\s]*/i, '')
+        .trim()
+        .slice(0, 200) || 'תשובת שרגא';
 
-      // בנה HTML — תשובה אחת זורמת, בלי פיגומים פנימיים
+      // בנה HTML גוף מייל
       let htmlBody = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;line-height:1.8;">`;
-      htmlBody += convertToHtml(finalText);
+
+      const isPresentation = calib.outputFormat === 'presentation';
+      if (isPresentation) {
+        htmlBody += `<p>המצגת מצורפת כקובץ HTML — פתח בדפדפן לתצוגה מלאה.</p>`;
+      } else {
+        htmlBody += convertToHtml(finalText);
+      }
 
       if (calib.questions && calib.questions.length) {
         htmlBody += `<h2>שאלות פתוחות</h2><ol>`;
@@ -85,17 +95,21 @@ function processShraga() {
         htmlBody += `</ol>`;
       }
 
-      htmlBody += `<hr><p>שרגא 🧠</p></div>`;
+      htmlBody += `<hr><p>שרגא</p></div>`;
 
       // שלח תשובה לשולח המקורי, עם CC לעצמך למעקב
       const myEmail = Session.getActiveUser().getEmail();
       const replyTo = userEmail !== myEmail ? userEmail : myEmail;
-      GmailApp.sendEmail(
-        replyTo,
-        'שרגא: ' + subject,
-        'ניתוח שרגא מצורף',
-        { htmlBody, cc: replyTo !== myEmail ? myEmail : '' }
-      );
+      const emailOptions = { htmlBody, cc: replyTo !== myEmail ? myEmail : '' };
+
+      // אם זו מצגת — צרף קובץ HTML
+      if (isPresentation) {
+        const slideHtml = buildPresentationHtml(finalText, subject);
+        const blob = Utilities.newBlob(slideHtml, 'text/html', subject + '.html');
+        emailOptions.attachments = [blob];
+      }
+
+      GmailApp.sendEmail(replyTo, subject, '', emailOptions);
 
       // מחק את המקור
       thread.moveToTrash();
@@ -133,7 +147,10 @@ ${body}
    - "simple"  = שאלה/בקשה שאפשר לענות עליה היטב בקריאה אחת (רוב המקרים).
    - "complex" = בקשה רחבה עם כמה תוצרים נפרדים (למשל: תוכנית עבודה + מענה משפטי + הצעת PoC).
 3. קבע workPlan: סעיף אחד ל-simple, 2-4 סעיפים ל-complex — כל סעיף תוצר עצמאי.
-4. אם המשתמש מסר בפנייה פרטים חדשים על עצמו (תפקיד, מנהל, צוות, פרויקטים וכו') —
+4. קבע "outputFormat":
+   - "presentation" = המשתמש ביקש מצגת / שקפים / PowerPoint / Slides
+   - "text" = כל שאר המקרים
+5. אם המשתמש מסר בפנייה פרטים חדשים על עצמו (תפקיד, מנהל, צוות, פרויקטים וכו') —
    החזר אותם ב-"profileUpdates" כדי שנשמור אותם לזיכרון. אחרת השאר אובייקט ריק.
    שדות אפשריים: full_name, role, manager_email, team, projects, notes.
 
@@ -144,6 +161,7 @@ ${body}
   "complexity": "simple" | "complex",
   "internalPrompt": "הנחיות מפורטות לעצמך לשלב הביצוע",
   "workPlan": [{ "section": "שם סעיף", "prompt": "מה לעשות בסעיף זה" }],
+  "outputFormat": "text" | "presentation",
   "profileUpdates": { },
   "questions": ["שאלה למשתמש אם באמת נדרש, אחרת השאר ריק"]
 }`;
@@ -151,12 +169,15 @@ ${body}
 
 function buildExecPrompt(body, calib, section, profile) {
   const adviseNote = calib.mode === 'advise'
-    ? `\nשים לב: זו פנייה מסוג ייעוץ/תכנון. אם הפנייה מתארת איך שרגא צריך להתנהג בעתיד — אל תיישם זאת על המשתמש; תייעץ על הרעיון עצמו.\n`
+    ? `\nשים לב: זו פנייה מסוג ייעוץ/תכנון. אל תיישם שינויים על המשתמש — תייעץ על הרעיון עצמו.\n`
+    : '';
+  const presentationNote = calib.outputFormat === 'presentation'
+    ? `\nפורמט נדרש: מצגת. כתוב כל שקף בפורמט הבא (ורק כך):\n## כותרת שקף\n- נקודה 1\n- נקודה 2\n\nהפרד בין שקפים בשורה ריקה. עד 5 נקודות לשקף. לא יותר מ-12 שקפים.\n`
     : '';
   return `${SHRAGA_IDENTITY}
 ${profileContext(profile)}
 עכשיו אתה בשלב הביצוע.
-${adviseNote}
+${adviseNote}${presentationNote}
 הנחיות שקבעת לעצמך בכיול:
 ${calib.internalPrompt || ''}
 
@@ -168,7 +189,7 @@ ${section.prompt}
 תוכן המקור:
 ${body}
 
-כתוב תשובה ישירה, ברורה, מעשית ומלאה בעברית — בדיוק מה שהמשתמש צריך לקבל.`;
+כתוב תשובה ישירה, ברורה, מעשית ומלאה בעברית.`;
 }
 
 function buildSynthesisPrompt(body, calib, sections, profile) {
@@ -263,17 +284,60 @@ function callGemini(apiKey, prompt) {
   return JSON.parse(res.getContentText()).candidates[0].content.parts[0].text;
 }
 
+// בונה HTML מצגת מ-Markdown שקפים (## כותרת + bullet points)
+function buildPresentationHtml(md, title) {
+  const slides = md.split(/\n(?=## )/).map(block => {
+    const lines   = block.trim().split('\n');
+    const heading = lines[0].replace(/^##\s*/, '');
+    const bullets = lines.slice(1)
+      .filter(l => l.trim().startsWith('-') || l.trim().startsWith('*'))
+      .map(l => `<li>${l.replace(/^[\s*-]+/, '')}</li>`)
+      .join('');
+    return `
+      <div class="slide">
+        <h2>${heading}</h2>
+        ${bullets ? `<ul>${bullets}</ul>` : ''}
+      </div>`;
+  });
+
+  return `<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  body { margin:0; font-family: Arial, sans-serif; background:#1a1a2e; color:#eee; }
+  .slide { width:100vw; min-height:100vh; display:flex; flex-direction:column;
+           justify-content:center; align-items:flex-start; padding:8vh 10vw;
+           box-sizing:border-box; border-bottom:3px solid #0f3460; }
+  .slide:nth-child(odd)  { background:#16213e; }
+  .slide:nth-child(even) { background:#0f3460; }
+  h2 { font-size:2.4em; margin-bottom:0.6em; color:#e94560; }
+  ul { font-size:1.5em; line-height:2; padding-right:1.5em; }
+  li { margin-bottom:0.3em; }
+</style>
+</head>
+<body>${slides.join('')}</body>
+</html>`;
+}
+
 function convertToHtml(md) {
-  return md
+  // קבץ רצפי bullet רצופים ל-<ul> אחד לפני כל המרה אחרת
+  const grouped = md.replace(/((?:^[*-] .+\n?)+)/gm, (block) => {
+    const items = block.trim().split('\n')
+      .map(l => `<li>${l.replace(/^[*-] /, '')}</li>`)
+      .join('');
+    return `<ul>${items}</ul>\n`;
+  });
+  return grouped
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // שחזר תגיות HTML שהוגנו בטעות
+    .replace(/&lt;(\/?(ul|li|h[123]|strong|em|hr|p|br)[^&]*)&gt;/g, '<$1>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
     .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
-    .replace(/^\* (.+)$/gm,  '<li>$1</li>')
-    .replace(/^- (.+)$/gm,   '<li>$1</li>')
-    .replace(/(<li>[\s\S]+?<\/li>)/g, '<ul>$1</ul>')
     .replace(/^---$/gm, '<hr>')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br>');

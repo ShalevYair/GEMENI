@@ -69,9 +69,11 @@ function processShraga() {
       }
 
       // נושא חכם לפי תוכן
-      const subject = callGemini(API_KEY,
-        `תן כותרת קצרה של 5-7 מילים בעברית שמתארת את התוכן הבא. רק הכותרת, בלי שום דבר אחר:\n${body.slice(0, 500)}`
-      ).trim().slice(0, 200);
+      const rawSubject = callGemini(API_KEY,
+        `כתוב כותרת מייל תשובה בעברית בלבד — 5 מילים לכל היותר — שתופיע בתיבת הדואר של המשתמש ותגרום לו להבין מה הוא מקבל. לא תהליך, לא הסבר — רק הכותרת עצמה:\n${body.slice(0, 500)}`
+      ).trim();
+      // הסרת דליפות חשיבה של המודל (THOUGHT: / thinking: וכו')
+      const subject = rawSubject.replace(/^(THOUGHT|thinking|thought):[\s\S]*$/i, '').trim().slice(0, 200) || 'תשובת שרגא';
 
       // בנה HTML — תשובה אחת זורמת, בלי פיגומים פנימיים
       let htmlBody = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;line-height:1.8;">`;

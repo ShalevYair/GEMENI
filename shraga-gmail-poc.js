@@ -35,13 +35,25 @@ function processShraga() {
     const lastMsg  = messages[messages.length - 1];
     const body     = lastMsg.getPlainBody().slice(0, 12000);
 
-    // קריאת קבצים מצורפים (טקסט בלבד — PPTX/DOCX/PDF מדולגים)
+    // קריאת קבצים מצורפים
     const attachmentTexts = [];
     lastMsg.getAttachments().forEach(att => {
       const mime = att.getContentType();
-      if (mime.startsWith('text/') || mime === 'application/json') {
-        try { attachmentTexts.push(`[קובץ: ${att.getName()}]\n${att.getDataAsString().slice(0, 8000)}`); } catch(_) {}
-      }
+      const name = att.getName();
+      try {
+        if (mime.startsWith('text/') || mime === 'application/json') {
+          attachmentTexts.push(`[קובץ: ${name}]\n${att.getDataAsString().slice(0, 8000)}`);
+        } else if (
+          mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+          mime === 'application/vnd.ms-powerpoint' ||
+          mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+          mime === 'application/pdf'
+        ) {
+          // המרה ל-Google Slides/Docs דרך Drive ואז ייצוא כטקסט
+          const text = _extractTextFromBinaryAttachment(att, mime);
+          if (text) attachmentTexts.push(`[קובץ: ${name}]\n${text.slice(0, 8000)}`);
+        }
+      } catch(_) {}
     });
     const fullBody = attachmentTexts.length
       ? body + '\n\n--- קבצים מצורפים ---\n' + attachmentTexts.join('\n\n')
@@ -203,7 +215,7 @@ function buildExecPrompt(body, calib, section, profile) {
   return `${SHRAGA_IDENTITY}
 ${profileContext(profile)}
 עכשיו אתה בשלב הביצוע.
-${adviseNote}${presentationNote}
+${adviseNote}
 הנחיות שקבעת לעצמך בכיול:
 ${calib.internalPrompt || ''}
 
@@ -215,27 +227,38 @@ ${section.prompt}
 תוכן המקור:
 ${body}
 
-כתוב תשובה ישירה, ברורה, מעשית ומלאה בעברית.`;
+${presentationNote ? presentationNote : 'כתוב תשובה ישירה, ברורה, מעשית ומלאה בעברית.'}`;
 }
 
 function buildSynthesisPrompt(body, calib, sections, profile) {
+  const isPresentation = calib.outputFormat === 'presentation';
+  const formatInstruction = isPresentation
+    ? `חשוב ביותר: הפלט הסופי חייב להיות JSON בלבד לפי הסכמה הבאה, ללא שום טקסט לפני או אחרי:
+{
+  "theme": "dark-tech" | "light-corp" | "warm-energy" | "green-future",
+  "slides": [
+    { "type": "cover", "title": "...", "subtitle": "..." },
+    { "type": "section", "title": "..." },
+    { "type": "content", "title": "...", "bullets": ["..."] },
+    { "type": "comparison", "title": "...", "left": {"label":"...","points":["..."]}, "right": {"label":"...","points":["..."]} },
+    { "type": "quote", "text": "...", "source": "..." },
+    { "type": "summary", "title": "סיכום", "bullets": ["..."] }
+  ]
+}
+אל תכתוב תיאור של המצגת — בנה אותה ישירות ב-JSON.`
+    : 'כתוב תשובה סופית אחת, רציפה, ברורה, מעשית ומלאה בעברית. אל תזכיר שלבים פנימיים.';
+
   return `${SHRAGA_IDENTITY}
 ${profileContext(profile)}
-ביצעת עבודה פנימית בכמה שלבים. לפניך התוצרים הגולמיים של השלבים.
-תפקידך עכשיו: לאחד אותם לתשובה אחת סופית, קוהרנטית ומלוטשת בעברית — בדיוק מה שהמשתמש יקבל במייל.
+ביצעת עבודה פנימית בכמה שלבים. לפניך התוצרים הגולמיים.
 
-חוקים:
-- אל תזכיר שלבים, סעיפים פנימיים או "תהליך עבודה". כתוב כאילו זו תשובה אחת רציפה.
-- אל תחזור על אותו תוכן פעמיים; מזג חפיפות.
-- שמור על מבנה ברור (כותרות, רשימות) אם זה עוזר לקריאות.
-
-הפנייה המקורית של המשתמש:
+הפנייה המקורית:
 ${body}
 
-התוצרים הגולמיים שלך:
+התוצרים הגולמיים:
 ${sections.map((s, i) => `--- תוצר ${i + 1} ---\n${s}`).join('\n\n')}
 
-כתוב כעת את התשובה הסופית האחת למשתמש:`;
+${formatInstruction}`;
 }
 
 // ── Memory (Google Sheets) ──────────────────────────────────────────────────
@@ -296,6 +319,59 @@ function extractEmail(from) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+// ממיר קובץ בינארי מצורף (PPTX/DOCX/PDF) לטקסט דרך Drive export
+function _extractTextFromBinaryAttachment(att, mime) {
+  const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const PDF_MIME  = 'application/pdf';
+
+  let googleMime;
+  if (mime === PPTX_MIME || mime === 'application/vnd.ms-powerpoint') {
+    googleMime = 'application/vnd.google-apps.presentation';
+  } else if (mime === DOCX_MIME || mime === 'application/msword') {
+    googleMime = 'application/vnd.google-apps.document';
+  } else if (mime === PDF_MIME) {
+    googleMime = 'application/vnd.google-apps.document';
+  } else {
+    return null;
+  }
+
+  // העלאה ל-Drive עם המרה אוטומטית
+  const token   = ScriptApp.getOAuthToken();
+  const boundary = '----GASBoundary';
+  const metaPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify({ name: att.getName(), mimeType: googleMime }) + '\r\n';
+  const dataPart = `--${boundary}\r\nContent-Type: ${mime}\r\nContent-Transfer-Encoding: base64\r\n\r\n` +
+    Utilities.base64Encode(att.getBytes()) + `\r\n--${boundary}--`;
+
+  const uploadResp = UrlFetchApp.fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    {
+      method: 'post',
+      contentType: `multipart/related; boundary="${boundary}"`,
+      payload: metaPart + dataPart,
+      headers: { Authorization: 'Bearer ' + token },
+      muteHttpExceptions: true
+    }
+  );
+  if (uploadResp.getResponseCode() !== 200) return null;
+
+  const fileId   = JSON.parse(uploadResp.getContentText()).id;
+  const exportMime = googleMime === 'application/vnd.google-apps.presentation'
+    ? 'text/plain'
+    : 'text/plain';
+
+  const textResp = UrlFetchApp.fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportMime)}`,
+    { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true }
+  );
+
+  // ניקוי — מחק את הקובץ מ-Drive
+  DriveApp.getFileById(fileId).setTrashed(true);
+
+  return textResp.getResponseCode() === 200 ? textResp.getContentText() : null;
+}
 
 function callGemini(apiKey, prompt) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;

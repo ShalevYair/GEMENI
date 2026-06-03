@@ -457,40 +457,25 @@ function _textBox(slide, text, x, y, w, h, fontSize, color, bold, italic, align)
   const box = slide.insertTextBox('', x, y, w, h);
   const tr  = box.getText();
 
-  // RTL mark לפני כל הטקסט + עיטוף מספרים ב-LTR embedding
-  const rtlText = '‏' + _fixBidi(text || '');
-  const segments = _parseBold(rtlText);
-
-  // אינדקס התחלה: text box ריק מכיל \n — נתחיל ממנו
-  const baseOffset = tr.asString().length - 1; // לרוב 0 אם ריק לגמרי, 1 אם יש \n
-
+  const segments = _parseBold(text || '');
   segments.forEach(seg => {
     const before = tr.asString().length;
-    tr.insertText(before > 0 ? before - 1 : 0, seg.text); // לפני ה-\n האחרון
-    const after  = tr.asString().length;
-    const start  = before - 1 < 0 ? 0 : before - 1;
-    const end    = start + seg.text.length;
-    if (end > start) {
-      const range = tr.getRange(start, end);
-      const ts = range.getTextStyle();
-      ts.setFontSize(fontSize).setForegroundColor(color);
-      ts.setBold(bold || seg.bold);
-      if (italic) ts.setItalic(true);
-    }
+    const insertAt = Math.max(0, before - 1); // לפני ה-\n הסופי
+    tr.insertText(insertAt, seg.text);
+    const start = insertAt;
+    const end   = start + seg.text.length;
+    const range = tr.getRange(start, end);
+    const ts = range.getTextStyle();
+    ts.setFontSize(fontSize).setForegroundColor(color);
+    ts.setBold(bold || seg.bold);
+    if (italic) ts.setItalic(true);
   });
 
-  // START = ימין עבור טקסט RTL (עברית)
   tr.getParagraphStyle().setParagraphAlignment(
     align === 'center' ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.START
   );
 
   return box;
-}
-
-// עוטף מספרים וסימנים לטיניים ב-LTR embedding כדי למנוע שיבוש בידירקציונל
-function _fixBidi(str) {
-  // ‪ = LTR embedding, ‬ = pop directional
-  return str.replace(/(\d[\d\-\/\.]*|\([^)]*\d[^)]*\))/g, '‪$1‬');
 }
 
 // מחלק מחרוזת לפלחי { text, bold } לפי סימוני **

@@ -35,13 +35,25 @@ function processShraga() {
     const lastMsg  = messages[messages.length - 1];
     const body     = lastMsg.getPlainBody().slice(0, 12000);
 
+    // קריאת קבצים מצורפים (טקסט בלבד — PPTX/DOCX/PDF מדולגים)
+    const attachmentTexts = [];
+    lastMsg.getAttachments().forEach(att => {
+      const mime = att.getContentType();
+      if (mime.startsWith('text/') || mime === 'application/json') {
+        try { attachmentTexts.push(`[קובץ: ${att.getName()}]\n${att.getDataAsString().slice(0, 8000)}`); } catch(_) {}
+      }
+    });
+    const fullBody = attachmentTexts.length
+      ? body + '\n\n--- קבצים מצורפים ---\n' + attachmentTexts.join('\n\n')
+      : body;
+
     // ── זיכרון: מי המשתמש שפנה, ומה שרגא כבר יודע עליו ──
     const userEmail = extractEmail(lastMsg.getFrom());
     const profile   = lookupProfile(userEmail);
 
     try {
       // ── שלב 1: כיול — שרגא מבין כוונה ומחליט לבד כמה עבודה צריך ──
-      const calibRaw = callGemini(API_KEY, buildCalibPrompt(body, profile));
+      const calibRaw = callGemini(API_KEY, buildCalibPrompt(fullBody, profile));
       const calib    = parseJSON(calibRaw);
 
       // עדכון זיכרון: אם המשתמש מסר פרטים חדשים על עצמו, שמור אותם
@@ -49,23 +61,20 @@ function processShraga() {
         saveProfile(userEmail, profile, calib.profileUpdates);
       }
 
-      const plan     = calib.workPlan || [{ section: 'ניתוח כללי', prompt: calib.internalPrompt || body }];
+      const plan     = calib.workPlan || [{ section: 'ניתוח כללי', prompt: calib.internalPrompt || fullBody }];
       const numCalls = Math.min(4, Math.max(1, plan.length));
       const isSimple = calib.complexity === 'simple' || numCalls === 1;
 
       // ── שלב 2: ביצוע — קריאה אחת או כמה, לפי החלטת הכיול ──
       let finalText;
       if (isSimple) {
-        // שאלה פשוטה: קריאת הביצוע היא התשובה הסופית — בלי סינתזה מיותרת
-        finalText = callGemini(API_KEY, buildExecPrompt(body, calib, plan[0], profile));
+        finalText = callGemini(API_KEY, buildExecPrompt(fullBody, calib, plan[0], profile));
       } else {
-        // בקשה מורכבת: כמה תוצרים גולמיים → שלב סינתזה אחד שמאחד אותם
         const sections = [];
         for (let i = 0; i < numCalls; i++) {
-          sections.push(callGemini(API_KEY, buildExecPrompt(body, calib, plan[i], profile)));
+          sections.push(callGemini(API_KEY, buildExecPrompt(fullBody, calib, plan[i], profile)));
         }
-        // ── שלב 3: סינתזה — תשובה אחת סופית ומלוטשת למשתמש ──
-        finalText = callGemini(API_KEY, buildSynthesisPrompt(body, calib, sections, profile));
+        finalText = callGemini(API_KEY, buildSynthesisPrompt(fullBody, calib, sections, profile));
       }
 
       // נושא: טקסט נקי בלבד, בלי קידומת "שרגא:" ובלי markdown
@@ -367,16 +376,41 @@ function _rect(slide, x, y, w, h, color) {
   return r;
 }
 
+// מוסיף טקסט עם תמיכת RTL ועיבוד bold (**טקסט**)
 function _textBox(slide, text, x, y, w, h, fontSize, color, bold, italic, align) {
-  const box = slide.insertTextBox(text || '', x, y, w, h);
-  const ts = box.getText().getTextStyle();
-  ts.setFontSize(fontSize).setForegroundColor(color);
-  if (bold)   ts.setBold(true);
-  if (italic) ts.setItalic(true);
-  box.getText().getParagraphStyle().setParagraphAlignment(
-    align === 'center' ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.START
-  );
+  const box = slide.insertTextBox('', x, y, w, h);
+  const tr  = box.getText();
+
+  // פיצול לפי **bold** segments
+  const segments = _parseBold(text || '');
+  segments.forEach(seg => {
+    tr.appendText(seg.text);
+    const range = tr.getRange(tr.getText().length - seg.text.length, tr.getText().length);
+    const ts = range.getTextStyle();
+    ts.setFontSize(fontSize).setForegroundColor(color);
+    ts.setBold(bold || seg.bold);
+    if (italic) ts.setItalic(true);
+  });
+
+  // יישור: RTL = END לטקסט עברי
+  const pa = tr.getParagraphStyle();
+  if (align === 'center') pa.setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+  else                    pa.setParagraphAlignment(SlidesApp.ParagraphAlignment.END);
+
   return box;
+}
+
+// מחלק מחרוזת לפלחי { text, bold } לפי סימוני **
+function _parseBold(str) {
+  const parts = [], re = /\*\*(.+?)\*\*/g;
+  let last = 0, m;
+  while ((m = re.exec(str)) !== null) {
+    if (m.index > last) parts.push({ text: str.slice(last, m.index), bold: false });
+    parts.push({ text: m[1], bold: true });
+    last = re.lastIndex;
+  }
+  if (last < str.length) parts.push({ text: str.slice(last), bold: false });
+  return parts.length ? parts : [{ text: str, bold: false }];
 }
 
 function _renderCover(slide, d, t, W, H) {

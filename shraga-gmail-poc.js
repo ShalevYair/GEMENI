@@ -384,8 +384,10 @@ function _textBox(slide, text, x, y, w, h, fontSize, color, bold, italic, align)
   // פיצול לפי **bold** segments
   const segments = _parseBold(text || '');
   segments.forEach(seg => {
+    const startIdx = tr.asString().length;
     tr.appendText(seg.text);
-    const range = tr.getRange(tr.getText().length - seg.text.length, tr.getText().length);
+    const endIdx = tr.asString().length;
+    const range = tr.getRange(startIdx, endIdx);
     const ts = range.getTextStyle();
     ts.setFontSize(fontSize).setForegroundColor(color);
     ts.setBold(bold || seg.bold);

@@ -479,7 +479,10 @@ function _textBox(slide, text, x, y, w, h, fontSize, color, bold, italic, align)
   const box = slide.insertTextBox('', x, y, w, h);
   const tr  = box.getText();
 
-  const segments = _parseBold(text || '');
+  // RLM (U+200F) at the start of each line forces BiDi to treat every paragraph as RTL,
+  // fixing period placement and bullet side without touching slide structure.
+  const rtlText = (text || '').split('\n').map(l => '‏' + l).join('\n');
+  const segments = _parseBold(rtlText);
   segments.forEach(seg => {
     const before = tr.asString().length;
     const insertAt = Math.max(0, before - 1); // לפני ה-\n הסופי
@@ -493,9 +496,12 @@ function _textBox(slide, text, x, y, w, h, fontSize, color, bold, italic, align)
     if (italic) ts.setItalic(true);
   });
 
-  tr.getParagraphStyle().setParagraphAlignment(
-    align === 'center' ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.END
-  );
+  // Apply alignment per-paragraph — calling on a multi-paragraph TextRange
+  // returns a merged style that silently fails on paragraphs beyond the first.
+  const alignment = align === 'center' ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.END;
+  tr.getParagraphs().forEach(p => {
+    p.getRange().getParagraphStyle().setParagraphAlignment(alignment);
+  });
 
   return box;
 }

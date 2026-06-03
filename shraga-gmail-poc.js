@@ -320,6 +320,49 @@ function extractEmail(from) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+// מגדיר RTL על כל תיבות הטקסט בכל שקופיות המצגת דרך Slides REST API
+function _setAllTextRTL(presId) {
+  const token = ScriptApp.getOAuthToken();
+
+  // קבל את כל ה-shapes עם טקסט מה-REST API
+  const getResp = UrlFetchApp.fetch(
+    `https://slides.googleapis.com/v1/presentations/${presId}`,
+    { headers: { Authorization: 'Bearer ' + token }, muteHttpExceptions: true }
+  );
+  if (getResp.getResponseCode() !== 200) return;
+
+  const presJson = JSON.parse(getResp.getContentText());
+  const requests = [];
+
+  (presJson.slides || []).forEach(slide => {
+    (slide.pageElements || []).forEach(el => {
+      if (el.shape && el.shape.text) {
+        requests.push({
+          updateParagraphStyle: {
+            objectId: el.objectId,
+            textRange: { type: 'ALL' },
+            style: { direction: 'RIGHT_TO_LEFT' },
+            fields: 'direction'
+          }
+        });
+      }
+    });
+  });
+
+  if (!requests.length) return;
+
+  UrlFetchApp.fetch(
+    `https://slides.googleapis.com/v1/presentations/${presId}:batchUpdate`,
+    {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + token },
+      payload: JSON.stringify({ requests }),
+      muteHttpExceptions: true
+    }
+  );
+}
+
 // ממיר קובץ בינארי מצורף (PPTX/DOCX/PDF) לטקסט דרך Drive export
 function _extractTextFromBinaryAttachment(att, mime) {
   const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -436,6 +479,10 @@ function buildPptxBlob(raw, title) {
   pres.saveAndClose();
 
   const fileId = pres.getId();
+
+  // Slides REST API: הגדר RTL לכל ה-shapes — SlidesApp לא חושף setTextDirection()
+  _setAllTextRTL(fileId);
+
   const resp = UrlFetchApp.fetch(
     `https://docs.google.com/presentation/d/${fileId}/export/pptx`,
     { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }

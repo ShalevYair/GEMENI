@@ -84,7 +84,7 @@ function processShraga() {
 
       const isPresentation = calib.outputFormat === 'presentation';
       if (isPresentation) {
-        htmlBody += `<p>המצגת מצורפת כקובץ HTML — פתח בדפדפן לתצוגה מלאה.</p>`;
+        htmlBody += `<p>המצגת מצורפת כקובץ PowerPoint (.pptx).</p>`;
       } else {
         htmlBody += convertToHtml(finalText);
       }
@@ -102,11 +102,9 @@ function processShraga() {
       const replyTo = userEmail !== myEmail ? userEmail : myEmail;
       const emailOptions = { htmlBody, cc: replyTo !== myEmail ? myEmail : '' };
 
-      // אם זו מצגת — צרף קובץ HTML
+      // אם זו מצגת — צרף קובץ PPTX
       if (isPresentation) {
-        const slideHtml = buildPresentationHtml(finalText, subject);
-        const blob = Utilities.newBlob(slideHtml, 'text/html', subject + '.html');
-        emailOptions.attachments = [blob];
+        emailOptions.attachments = [buildPptxBlob(finalText, subject)];
       }
 
       GmailApp.sendEmail(replyTo, subject, '', emailOptions);
@@ -284,41 +282,71 @@ function callGemini(apiKey, prompt) {
   return JSON.parse(res.getContentText()).candidates[0].content.parts[0].text;
 }
 
-// בונה HTML מצגת מ-Markdown שקפים (## כותרת + bullet points)
-function buildPresentationHtml(md, title) {
-  const slides = md.split(/\n(?=## )/).map(block => {
+// בונה קובץ PPTX מ-Markdown שקפים (## כותרת + bullet points)
+// יוצר Google Slides, מייצא ל-PPTX, מחזיר Blob, ומוחק את הקובץ מ-Drive
+function buildPptxBlob(md, title) {
+  // פרסר: מפצל בלוקי שקפים לפי שורות ##
+  const slideBlocks = md.split(/\n(?=## )/).map(block => {
     const lines   = block.trim().split('\n');
-    const heading = lines[0].replace(/^##\s*/, '');
+    const heading = lines[0].replace(/^##\s*/, '').trim();
     const bullets = lines.slice(1)
-      .filter(l => l.trim().startsWith('-') || l.trim().startsWith('*'))
-      .map(l => `<li>${l.replace(/^[\s*-]+/, '')}</li>`)
-      .join('');
-    return `
-      <div class="slide">
-        <h2>${heading}</h2>
-        ${bullets ? `<ul>${bullets}</ul>` : ''}
-      </div>`;
+      .filter(l => /^[\s]*[-*]/.test(l))
+      .map(l => l.replace(/^[\s*-]+/, '').trim())
+      .filter(Boolean);
+    return { heading, bullets };
+  }).filter(s => s.heading);
+
+  // יצירת מצגת Google Slides חדשה
+  const pres   = SlidesApp.create(title);
+  const slides = pres.getSlides();
+
+  slideBlocks.forEach((data, i) => {
+    let slide;
+    if (i === 0) {
+      // השקף הראשון כבר קיים ב-Google Slides (ברירת מחדל)
+      slide = slides[0];
+      slide.getShapes().forEach(s => s.remove());
+    } else {
+      slide = pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+    }
+
+    // רקע כהה לכל שקף
+    slide.getBackground().setSolidFill('#16213e');
+
+    // כותרת
+    const titleBox = slide.insertTextBox(data.heading, 40, 40, 840, 100);
+    const titleStyle = titleBox.getText().getTextStyle();
+    titleStyle.setFontSize(36).setBold(true).setForegroundColor('#e94560');
+    titleBox.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.START);
+
+    // bullets
+    if (data.bullets.length) {
+      const bulletText = data.bullets.map(b => '• ' + b).join('\n');
+      const bulletBox  = slide.insertTextBox(bulletText, 40, 160, 840, 360);
+      const bStyle     = bulletBox.getText().getTextStyle();
+      bStyle.setFontSize(22).setForegroundColor('#eeeeee');
+      bulletBox.getText().getParagraphStyle().setLineSpacing(160);
+    }
   });
 
-  return `<!DOCTYPE html>
-<html dir="rtl" lang="he">
-<head>
-<meta charset="UTF-8">
-<title>${title}</title>
-<style>
-  body { margin:0; font-family: Arial, sans-serif; background:#1a1a2e; color:#eee; }
-  .slide { width:100vw; min-height:100vh; display:flex; flex-direction:column;
-           justify-content:center; align-items:flex-start; padding:8vh 10vw;
-           box-sizing:border-box; border-bottom:3px solid #0f3460; }
-  .slide:nth-child(odd)  { background:#16213e; }
-  .slide:nth-child(even) { background:#0f3460; }
-  h2 { font-size:2.4em; margin-bottom:0.6em; color:#e94560; }
-  ul { font-size:1.5em; line-height:2; padding-right:1.5em; }
-  li { margin-bottom:0.3em; }
-</style>
-</head>
-<body>${slides.join('')}</body>
-</html>`;
+  pres.saveAndClose();
+
+  // ייצוא ל-PPTX דרך Drive API
+  const fileId  = pres.getId();
+  const pptxUrl = `https://docs.google.com/presentation/d/${fileId}/export/pptx`;
+  const resp    = UrlFetchApp.fetch(pptxUrl, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  });
+
+  // ניקוי: מחק את ה-Google Slides מ-Drive
+  DriveApp.getFileById(fileId).setTrashed(true);
+
+  if (resp.getResponseCode() !== 200) {
+    throw new Error('ייצוא PPTX נכשל: ' + resp.getResponseCode());
+  }
+
+  return resp.getBlob().setName(title + '.pptx');
 }
 
 function convertToHtml(md) {

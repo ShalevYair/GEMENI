@@ -170,7 +170,26 @@ function buildExecPrompt(body, calib, section, profile) {
     ? `\nשים לב: זו פנייה מסוג ייעוץ/תכנון. אל תיישם שינויים על המשתמש — תייעץ על הרעיון עצמו.\n`
     : '';
   const presentationNote = calib.outputFormat === 'presentation'
-    ? `\nפורמט נדרש: מצגת. כתוב כל שקף בפורמט הבא (ורק כך):\n## כותרת שקף\n- נקודה 1\n- נקודה 2\n\nהפרד בין שקפים בשורה ריקה. עד 5 נקודות לשקף. לא יותר מ-12 שקפים.\n`
+    ? `\nפורמט נדרש: החזר JSON בלבד (ללא טקסט נלווה) לפי הסכמה הבאה:
+{
+  "theme": "dark-tech" | "light-corp" | "warm-energy" | "green-future",
+  "slides": [
+    { "type": "cover",      "title": "...", "subtitle": "..." },
+    { "type": "section",    "title": "..." },
+    { "type": "content",    "title": "...", "bullets": ["..."] },
+    { "type": "comparison", "title": "...", "left": {"label":"...","points":["..."]}, "right": {"label":"...","points":["..."]} },
+    { "type": "quote",      "text": "...", "source": "..." },
+    { "type": "summary",    "title": "סיכום", "bullets": ["..."] }
+  ]
+}
+כללים:
+- בחר theme לפי טון הבקשה: dark-tech=טכנולוגי, light-corp=עסקי/ניהולי, warm-energy=שיווקי/יצירתי, green-future=עתידני/סביבתי
+- תמיד התחל ב-cover אחד
+- הוסף שקפי section להפרדת פרקים
+- השתמש ב-comparison כשיש השוואה בין שני דברים
+- השתמש ב-quote כשיש מסר חזק לציטוט
+- סיים ב-summary
+- סה"כ עד 14 שקפים, עד 5 bullets בשקף content\n`
     : '';
   return `${SHRAGA_IDENTITY}
 ${profileContext(profile)}
@@ -282,71 +301,154 @@ function callGemini(apiKey, prompt) {
   return JSON.parse(res.getContentText()).candidates[0].content.parts[0].text;
 }
 
-// בונה קובץ PPTX מ-Markdown שקפים (## כותרת + bullet points)
-// יוצר Google Slides, מייצא ל-PPTX, מחזיר Blob, ומוחק את הקובץ מ-Drive
-function buildPptxBlob(md, title) {
-  // פרסר: מפצל בלוקי שקפים לפי שורות ##
-  const slideBlocks = md.split(/\n(?=## )/).map(block => {
+// ── Presentation renderer ─────────────────────────────────────────────────────
+
+const PRES_THEMES = {
+  'dark-tech':    { bg: '#0f172a', accent: '#6366f1', text: '#f8fafc', sub: '#94a3b8', sectionBg: '#1e1b4b' },
+  'light-corp':   { bg: '#f8fafc', accent: '#2563eb', text: '#1e293b', sub: '#64748b', sectionBg: '#dbeafe' },
+  'warm-energy':  { bg: '#1c0a00', accent: '#f97316', text: '#fef3c7', sub: '#fdba74', sectionBg: '#431407' },
+  'green-future': { bg: '#022c22', accent: '#10b981', text: '#ecfdf5', sub: '#6ee7b7', sectionBg: '#064e3b' },
+};
+
+// יוצר Google Slides מ-JSON מובנה, מייצא ל-PPTX, מחזיר Blob, ומוחק מ-Drive
+function buildPptxBlob(raw, title) {
+  // פרסר: JSON מובנה (מ-Gemini החדש) או fallback ל-markdown ישן
+  let presData;
+  try {
+    const clean = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+    presData = JSON.parse(clean);
+    if (!presData.slides) throw new Error('no slides');
+  } catch(_) {
+    presData = { theme: 'dark-tech', slides: _parseMdSlides(raw) };
+  }
+
+  const t = PRES_THEMES[presData.theme] || PRES_THEMES['dark-tech'];
+  const W = 720, H = 405; // נקודות, יחס 16:9
+
+  const pres = SlidesApp.create(title);
+  const firstSlides = pres.getSlides();
+
+  presData.slides.forEach((sd, i) => {
+    let slide;
+    if (i === 0) {
+      slide = firstSlides[0];
+      slide.getShapes().forEach(s => s.remove());
+    } else {
+      slide = pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+    }
+    slide.getBackground().setSolidFill(t.bg);
+
+    switch (sd.type) {
+      case 'cover':      _renderCover(slide, sd, t, W, H);      break;
+      case 'section':    _renderSection(slide, sd, t, W, H);    break;
+      case 'comparison': _renderComparison(slide, sd, t, W, H); break;
+      case 'quote':      _renderQuote(slide, sd, t, W, H);      break;
+      case 'summary':    _renderSummary(slide, sd, t, W, H);    break;
+      default:           _renderContent(slide, sd, t, W, H);    break;
+    }
+  });
+
+  pres.saveAndClose();
+
+  const fileId = pres.getId();
+  const resp = UrlFetchApp.fetch(
+    `https://docs.google.com/presentation/d/${fileId}/export/pptx`,
+    { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }
+  );
+  DriveApp.getFileById(fileId).setTrashed(true);
+  if (resp.getResponseCode() !== 200) throw new Error('PPTX export failed: ' + resp.getResponseCode());
+  return resp.getBlob().setName(title + '.pptx');
+}
+
+function _rect(slide, x, y, w, h, color) {
+  const r = slide.insertShape(SlidesApp.ShapeType.RECTANGLE, x, y, w, h);
+  r.getFill().setSolidFill(color);
+  r.getBorder().setTransparent();
+  return r;
+}
+
+function _textBox(slide, text, x, y, w, h, fontSize, color, bold, italic, align) {
+  const box = slide.insertTextBox(text || '', x, y, w, h);
+  const ts = box.getText().getTextStyle();
+  ts.setFontSize(fontSize).setForegroundColor(color);
+  if (bold)   ts.setBold(true);
+  if (italic) ts.setItalic(true);
+  box.getText().getParagraphStyle().setParagraphAlignment(
+    align === 'center' ? SlidesApp.ParagraphAlignment.CENTER : SlidesApp.ParagraphAlignment.START
+  );
+  return box;
+}
+
+function _renderCover(slide, d, t, W, H) {
+  _rect(slide, 0, H - 8, W, 8, t.accent);   // פס תחתון
+  _rect(slide, 0, 0, W, 6, t.accent);        // פס עליון דק
+  _textBox(slide, d.title,    40, H * 0.22, W - 80, 130, 40, t.text,  true,  false, 'center')
+    .setContentAlignment(SlidesApp.ContentAlignment.MIDDLE);
+  if (d.subtitle) {
+    _textBox(slide, d.subtitle, 60, H * 0.62, W - 120, 60, 20, t.sub, false, true,  'center');
+  }
+}
+
+function _renderSection(slide, d, t, W, H) {
+  slide.getBackground().setSolidFill(t.sectionBg);
+  _rect(slide, 0, 0, 10, H, t.accent);
+  _textBox(slide, d.title, 40, 0, W - 50, H, 34, t.text, true, false, 'start')
+    .setContentAlignment(SlidesApp.ContentAlignment.MIDDLE);
+}
+
+function _renderContent(slide, d, t, W, H) {
+  _rect(slide, 0, 0, 6, H, t.accent);
+  _textBox(slide, d.title, 26, 18, W - 36, 58, 27, t.accent, true, false, 'start');
+  const bullets = (d.bullets || []).map(b => '• ' + b).join('\n');
+  if (bullets) {
+    const bx = _textBox(slide, bullets, 26, 88, W - 46, H - 103, 18, t.text, false, false, 'start');
+    bx.getText().getParagraphStyle().setLineSpacing(150);
+  }
+}
+
+function _renderComparison(slide, d, t, W, H) {
+  _textBox(slide, d.title, 20, 12, W - 40, 52, 25, t.accent, true, false, 'start');
+  const half = (W - 60) / 2;
+  const left = d.left || {}, right = d.right || {};
+  _textBox(slide, left.label  || '', 20,        72, half, 38, 17, t.sub, true, false, 'start');
+  _textBox(slide, right.label || '', W/2 + 10,  72, half, 38, 17, t.sub, true, false, 'start');
+  _rect(slide, W/2 - 1, 68, 2, H - 80, t.accent);
+  const lText = (left.points  || []).map(p => '• ' + p).join('\n');
+  const rText = (right.points || []).map(p => '• ' + p).join('\n');
+  if (lText) _textBox(slide, lText, 20,       115, half,    H - 128, 16, t.text, false, false, 'start');
+  if (rText) _textBox(slide, rText, W/2 + 10, 115, half,    H - 128, 16, t.text, false, false, 'start');
+}
+
+function _renderQuote(slide, d, t, W, H) {
+  _textBox(slide, '“', 24, 10, 70, 90, 80, t.accent, true, false, 'start');
+  _textBox(slide, d.text || '', 55, 85, W - 90, H - 155, 22, t.text, false, true, 'center')
+    .setContentAlignment(SlidesApp.ContentAlignment.MIDDLE);
+  if (d.source) {
+    _textBox(slide, '— ' + d.source, 55, H - 58, W - 90, 40, 16, t.sub, false, false, 'center');
+  }
+}
+
+function _renderSummary(slide, d, t, W, H) {
+  _rect(slide, 0, 0, W, 6, t.accent);
+  _textBox(slide, d.title || 'סיכום', 26, 18, W - 36, 56, 27, t.accent, true, false, 'start');
+  const bullets = (d.bullets || []).map(b => '✓  ' + b).join('\n');
+  if (bullets) {
+    const bx = _textBox(slide, bullets, 26, 86, W - 46, H - 100, 18, t.text, false, false, 'start');
+    bx.getText().getParagraphStyle().setLineSpacing(155);
+  }
+}
+
+// fallback: מפרסר markdown ישן (## כותרת + bullets)
+function _parseMdSlides(md) {
+  return md.split(/\n(?=## )/).map(block => {
     const lines   = block.trim().split('\n');
     const heading = lines[0].replace(/^##\s*/, '').trim();
     const bullets = lines.slice(1)
       .filter(l => /^[\s]*[-*]/.test(l))
       .map(l => l.replace(/^[\s*-]+/, '').trim())
       .filter(Boolean);
-    return { heading, bullets };
-  }).filter(s => s.heading);
-
-  // יצירת מצגת Google Slides חדשה
-  const pres   = SlidesApp.create(title);
-  const slides = pres.getSlides();
-
-  slideBlocks.forEach((data, i) => {
-    let slide;
-    if (i === 0) {
-      // השקף הראשון כבר קיים ב-Google Slides (ברירת מחדל)
-      slide = slides[0];
-      slide.getShapes().forEach(s => s.remove());
-    } else {
-      slide = pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
-    }
-
-    // רקע כהה לכל שקף
-    slide.getBackground().setSolidFill('#16213e');
-
-    // כותרת
-    const titleBox = slide.insertTextBox(data.heading, 40, 40, 840, 100);
-    const titleStyle = titleBox.getText().getTextStyle();
-    titleStyle.setFontSize(36).setBold(true).setForegroundColor('#e94560');
-    titleBox.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.START);
-
-    // bullets
-    if (data.bullets.length) {
-      const bulletText = data.bullets.map(b => '• ' + b).join('\n');
-      const bulletBox  = slide.insertTextBox(bulletText, 40, 160, 840, 360);
-      const bStyle     = bulletBox.getText().getTextStyle();
-      bStyle.setFontSize(22).setForegroundColor('#eeeeee');
-      bulletBox.getText().getParagraphStyle().setLineSpacing(160);
-    }
-  });
-
-  pres.saveAndClose();
-
-  // ייצוא ל-PPTX דרך Drive API
-  const fileId  = pres.getId();
-  const pptxUrl = `https://docs.google.com/presentation/d/${fileId}/export/pptx`;
-  const resp    = UrlFetchApp.fetch(pptxUrl, {
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-    muteHttpExceptions: true
-  });
-
-  // ניקוי: מחק את ה-Google Slides מ-Drive
-  DriveApp.getFileById(fileId).setTrashed(true);
-
-  if (resp.getResponseCode() !== 200) {
-    throw new Error('ייצוא PPTX נכשל: ' + resp.getResponseCode());
-  }
-
-  return resp.getBlob().setName(title + '.pptx');
+    return { type: bullets.length ? 'content' : 'section', title: heading, bullets };
+  }).filter(s => s.title);
 }
 
 function convertToHtml(md) {

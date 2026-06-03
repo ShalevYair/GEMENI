@@ -71,7 +71,7 @@ function processShraga() {
       // נושא חכם לפי תוכן
       const subject = callGemini(API_KEY,
         `תן כותרת קצרה של 5-7 מילים בעברית שמתארת את התוכן הבא. רק הכותרת, בלי שום דבר אחר:\n${body.slice(0, 500)}`
-      ).trim();
+      ).trim().slice(0, 200);
 
       // בנה HTML — תשובה אחת זורמת, בלי פיגומים פנימיים
       let htmlBody = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:14px;line-height:1.8;">`;

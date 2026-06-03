@@ -212,6 +212,22 @@ function buildExecPrompt(body, calib, section, profile) {
 - סיים ב-summary
 - סה"כ עד 14 שקפים, עד 5 bullets בשקף content\n`
     : '';
+  // כשזו מצגת — הוראת הפורמט קודמת לכל השאר
+  if (presentationNote) {
+    return `${presentationNote}
+
+${SHRAGA_IDENTITY}
+${profileContext(profile)}
+הנחיות שקבעת לעצמך: ${calib.internalPrompt || ''}
+הבנתך: ${calib.understanding || ''}
+המשימה: ${section.section} — ${section.prompt}
+
+תוכן המקור:
+${body}
+
+חשוב: החזר JSON בלבד כמו שהוגדר למעלה. אל תוסיף ברכות, הסברים, או כל טקסט מחוץ ל-JSON.`;
+  }
+
   return `${SHRAGA_IDENTITY}
 ${profileContext(profile)}
 עכשיו אתה בשלב הביצוע.
@@ -227,7 +243,7 @@ ${section.prompt}
 תוכן המקור:
 ${body}
 
-${presentationNote ? presentationNote : 'כתוב תשובה ישירה, ברורה, מעשית ומלאה בעברית.'}`;
+כתוב תשובה ישירה, ברורה, מעשית ומלאה בעברית.`;
 }
 
 function buildSynthesisPrompt(body, calib, sections, profile) {
@@ -399,10 +415,18 @@ const PRES_THEMES = {
 function buildPptxBlob(raw, title) {
   // פרסר: JSON מובנה (מ-Gemini החדש) או fallback ל-markdown ישן
   let presData;
+  // פרסר: חילוץ JSON גמיש — מתעלם מטקסט לפני/אחרי ה-JSON
+  let presData;
   try {
-    const clean = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
-    presData = JSON.parse(clean);
-    if (!presData.slides) throw new Error('no slides');
+    let s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+    // נסה ישיר
+    try { presData = JSON.parse(s); } catch(_) {}
+    // חלץ את ה-{ ... } הראשון-אחרון אם יש טקסט מסביב
+    if (!presData || !presData.slides) {
+      const first = s.indexOf('{'), last = s.lastIndexOf('}');
+      if (first !== -1 && last > first) presData = JSON.parse(s.slice(first, last + 1));
+    }
+    if (!presData || !presData.slides) throw new Error('no slides');
   } catch(_) {
     presData = { theme: 'dark-tech', slides: _parseMdSlides(raw) };
   }

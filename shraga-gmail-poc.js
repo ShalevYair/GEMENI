@@ -413,8 +413,6 @@ const PRES_THEMES = {
 
 // יוצר Google Slides מ-JSON מובנה, מייצא ל-PPTX, מחזיר Blob, ומוחק מ-Drive
 function buildPptxBlob(raw, title) {
-  // פרסר: JSON מובנה (מ-Gemini החדש) או fallback ל-markdown ישן
-  let presData;
   // פרסר: חילוץ JSON גמיש — מתעלם מטקסט לפני/אחרי ה-JSON
   let presData;
   try {

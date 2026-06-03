@@ -85,12 +85,14 @@ function processShraga() {
 
       htmlBody += `<hr><p>שרגא 🧠</p></div>`;
 
-      // שלח מייל חדש
+      // שלח תשובה לשולח המקורי, עם CC לעצמך למעקב
+      const myEmail = Session.getActiveUser().getEmail();
+      const replyTo = userEmail !== myEmail ? userEmail : myEmail;
       GmailApp.sendEmail(
-        Session.getActiveUser().getEmail(),
+        replyTo,
         'שרגא: ' + subject,
         'ניתוח שרגא מצורף',
-        { htmlBody }
+        { htmlBody, cc: replyTo !== myEmail ? myEmail : '' }
       );
 
       // מחק את המקור

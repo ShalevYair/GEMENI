@@ -561,8 +561,187 @@ def add_header_row(ws, headers):
     freeze_header(ws)
 
 
+def build_readme_sheet(wb):
+    """Add a README sheet as the first sheet explaining all sheets and columns."""
+    ws = wb.create_sheet("מדריך לקריאה", 0)
+
+    TITLE_FILL  = PatternFill(start_color="1E3A5F", end_color="1E3A5F", fill_type="solid")
+    TITLE_FONT  = Font(color="FFFFFF", bold=True, name="Arial", size=13)
+    SHEET_FILL  = PatternFill(start_color="2E5990", end_color="2E5990", fill_type="solid")
+    SHEET_FONT  = Font(color="FFFFFF", bold=True, name="Arial", size=11)
+    COL_FILL    = PatternFill(start_color="D6E4F7", end_color="D6E4F7", fill_type="solid")
+    COL_FONT    = Font(bold=True, name="Arial", size=10)
+    BODY_FONT   = Font(name="Arial", size=10)
+    THIN        = Border(left=Side(style='thin'), right=Side(style='thin'),
+                         top=Side(style='thin'),  bottom=Side(style='thin'))
+    WRAP_R      = Alignment(horizontal="right", vertical="top", wrap_text=True)
+    WRAP_C      = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    def title_row(text, row):
+        ws.cell(row=row, column=1, value=text).fill  = TITLE_FILL
+        ws.cell(row=row, column=1).font              = TITLE_FONT
+        ws.cell(row=row, column=1).alignment         = WRAP_C
+        ws.cell(row=row, column=1).border            = THIN
+        ws.cell(row=row, column=2, value="").fill    = TITLE_FILL
+        ws.cell(row=row, column=2).border            = THIN
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+
+    def sheet_row(text, row):
+        ws.cell(row=row, column=1, value=text).fill  = SHEET_FILL
+        ws.cell(row=row, column=1).font              = SHEET_FONT
+        ws.cell(row=row, column=1).alignment         = WRAP_C
+        ws.cell(row=row, column=1).border            = THIN
+        ws.cell(row=row, column=2, value="").fill    = SHEET_FILL
+        ws.cell(row=row, column=2).border            = THIN
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+
+    def col_row(col_name, description, row, alt=False):
+        c1 = ws.cell(row=row, column=1, value=col_name)
+        c2 = ws.cell(row=row, column=2, value=description)
+        c1.font  = COL_FONT
+        c2.font  = BODY_FONT
+        c1.alignment = WRAP_R
+        c2.alignment = WRAP_R
+        c1.border = THIN
+        c2.border = THIN
+        if alt:
+            c1.fill = COL_FILL
+            c2.fill = COL_FILL
+
+    CONTENT = [
+        ("מדריך — אפיון טכני Natural ADABAS", "title"),
+        ("הקובץ נוצר אוטומטית על ידי סקריפט Python שמנתח קוד Natural ADABAS ומשתמש ב-Gemini AI.", "info"),
+        ("כל שורה מייצגת תוכנית בודדת (member) שחולצה מתוך קבצי ה-.txt.", "info"),
+        ("", "space"),
+
+        ("גיליון 1 — סיכום", "sheet"),
+        ("קובץ", "שם קובץ ה-.txt המקורי שממנו חולצה התוכנית"),
+        ("תוכנית", "שם התוכנית כפי שמופיע בשורת ה-*C** בקובץ המיינפריים"),
+        ("מטרה עסקית", "תיאור תמציתי של מה התוכנית עושה מבחינה עסקית"),
+        ("DDMs", "רשימת ה-DDMs (טבלאות ADABAS) שבהן התוכנית משתמשת"),
+        ("CALLNAT", "רשימת תוכניות חיצוניות שהתוכנית קוראת להן"),
+        ("מורכבות", "הערכת מורכבות: פשוט / בינוני / מורכב"),
+        ("", "space"),
+
+        ("גיליון 2 — ישויות", "sheet"),
+        ("קובץ", "שם קובץ המקור"),
+        ("תוכנית", "שם התוכנית"),
+        ("ישות / DDM", "שם ה-DDM — מקביל לטבלה בבסיס נתונים רלציוני"),
+        ("קובץ ADABAS", "מספר או שם הקובץ הפיזי ב-ADABAS"),
+        ("תיאור ישות", "הסבר עסקי של מה הישות מייצגת"),
+        ("", "space"),
+
+        ("גיליון 3 — שדות", "sheet"),
+        ("קובץ", "שם קובץ המקור"),
+        ("תוכנית", "שם התוכנית"),
+        ("ישות", "שם ה-DDM שאליו שייך השדה"),
+        ("שם שדה", "שם השדה הטכני בקוד Natural"),
+        ("תווית", "שם תצוגה בעברית"),
+        ("סוג", "סוג הנתון: string | number | date | boolean | picklist | relation"),
+        ("אורך", "אורך מקסימלי של השדה"),
+        ("חובה", "האם השדה חובה: כן / לא"),
+        ("תיאור", "הסבר עסקי של השדה ומשמעותו"),
+        ("", "space"),
+
+        ("גיליון 4 — זרימות עבודה", "sheet"),
+        ("קובץ", "שם קובץ המקור"),
+        ("תוכנית", "שם התוכנית"),
+        ("שם זרימה", "שם התהליך העסקי — כל PF-key / פעולה / מסך הוא זרימה נפרדת"),
+        ("טריגר", "סוג האירוע המפעיל: manual | on_create | on_update | pf_key | scheduled"),
+        ("פירוט טריגר", "תיאור מפורט של מה גורם לתהליך להתחיל"),
+        ("שחקנים", "מי מעורב: תפקידים / משתמשים / מערכות"),
+        ("צעדים", "רצף הפעולות בתהליך, כולל הסתעפויות IF/THEN"),
+        ("תוצאה תקינה", "מה קורה כשהתהליך מסתיים בהצלחה"),
+        ("טיפול בשגיאות", "מה קורה כשיש שגיאה"),
+        ("", "space"),
+
+        ("גיליון 5 — חוקי עסק", "sheet"),
+        ("קובץ", "שם קובץ המקור"),
+        ("תוכנית", "שם התוכנית"),
+        ("זרימה", "שם הזרימה שאליה שייך החוק"),
+        ("RULE ID", "מזהה ייחודי של החוק: BR-<תוכנית>-001"),
+        ("שם החוק", "שם קצר ומתאר של החוק העסקי"),
+        ("לוגיקה", "הלוגיקה המדויקת: IF תנאי THEN פעולה ELSE פעולה"),
+        ("טריגר", "מתי החוק מופעל"),
+        ("חריגות", "מקרים שבהם החוק אינו חל"),
+        ("", "space"),
+
+        ("גיליון 6 — הרשאות ותפקידים", "sheet"),
+        ("קובץ", "שם קובץ המקור"),
+        ("תוכנית", "שם התוכנית"),
+        ("תפקיד", "שם התפקיד — נגזר מבדיקות הרשאה בקוד (לדוגמה: GL-MMAD-RASHAY-SODI)"),
+        ("תיאור תפקיד", "הסבר מה התפקיד כולל ומה רמת ההרשאה שלו"),
+        ("ישות", "הישות (DDM) שעליה חלה ההרשאה"),
+        ("קריאה", "הרשאת קריאה: all | own | none"),
+        ("יצירה", "הרשאת יצירה: כן / לא"),
+        ("עדכון", "הרשאת עדכון: all | own | none"),
+        ("מחיקה", "הרשאת מחיקה: all | own | none"),
+        ("", "space"),
+
+        ("גיליון 7 — אינטגרציות חיצוניות", "sheet"),
+        ("קובץ", "שם קובץ המקור"),
+        ("תוכנית", "שם התוכנית"),
+        ("מערכת חיצונית", "שם המערכת החיצונית — לא כולל תוכניות Natural פנימיות"),
+        ("כיוון", "כיוון הנתונים: כניסה | יציאה | דו-כיווני"),
+        ("נתונים", "אילו נתונים עוברים בין המערכות"),
+        ("תדירות", "ריאל-טיים | אצווה | לפי דרישה"),
+        ("הערות", "הערות נוספות על האינטגרציה"),
+        ("", "space"),
+
+        ("גיליון 8 — גרף קריאות", "sheet"),
+        ("קובץ מקור", "קובץ ה-.txt שממנו מגיעה הקריאה"),
+        ("תוכנית מקור", "שם התוכנית שמבצעת את הקריאה"),
+        ("סוג", "סוג התלות: CALLNAT (קריאה לתוכנית) | DDM (שימוש בטבלה) | ADABAS_FILE"),
+        ("קובץ/תוכנית יעד", "שם התוכנית או ה-DDM שאליו מתבצעת הקריאה"),
+        ("מטרה", "הסבר של מטרת הקריאה"),
+        ("", "space"),
+
+        ("גיליון 9 — גלוסרי", "sheet"),
+        ("מונח", "המונח הטכני (לרוב באנגלית/עברית מקוצרת) כפי שמופיע בקוד"),
+        ("הגדרה", "הסבר בעברית של משמעות המונח"),
+        ("קובץ", "הקובץ שממנו חולץ המונח"),
+        ("", "space"),
+
+        ("גיליון 10 — שאלות פתוחות", "sheet"),
+        ("קובץ", "שם קובץ המקור"),
+        ("תוכנית", "שם התוכנית"),
+        ("שאלה", "שאלה שעלתה בניתוח ודורשת בירור עם בעל הידע"),
+    ]
+
+    row = 1
+    alt = False
+    for item in CONTENT:
+        if item[1] == "title":
+            title_row(item[0], row)
+            ws.row_dimensions[row].height = 28
+        elif item[1] == "sheet":
+            sheet_row(item[0], row)
+            ws.row_dimensions[row].height = 22
+            alt = False
+        elif item[1] == "info":
+            c = ws.cell(row=row, column=1, value=item[0])
+            c.font = BODY_FONT
+            c.alignment = WRAP_R
+            c.border = THIN
+            ws.cell(row=row, column=2).border = THIN
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+            ws.row_dimensions[row].height = 18
+        elif item[1] == "space":
+            ws.row_dimensions[row].height = 8
+        else:
+            col_row(item[0], item[1], row, alt)
+            ws.row_dimensions[row].height = 30
+            alt = not alt
+        row += 1
+
+    ws.column_dimensions['A'].width = 28
+    ws.column_dimensions['B'].width = 70
+    ws.sheet_view.rightToLeft = True
+
+
 def build_excel(analyses, kb, output_path):
     wb = openpyxl.Workbook()
+    build_readme_sheet(wb)
 
     # ── 1. Summary ────────────────────────────────────────────────────────────
     ws1 = wb.active

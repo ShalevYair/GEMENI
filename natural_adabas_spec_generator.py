@@ -10,6 +10,9 @@ Usage:
   4. Output: natural_adabas_spec.xlsx + knowledge_base.json + analyses.json
      + synthesis.json (consolidated entities + system overview)
      Failed programs are listed in errors.log
+  5. After a run: python natural_adabas_spec_generator.py --review [N]
+     builds review.html — a smart sample of N programs (default 8) with
+     code and analysis side by side, for human quality checking. No API.
 
 Resume support:
   Every analyzed program is checkpointed to analyses_checkpoint.jsonl as it
@@ -390,6 +393,216 @@ def build_validation(files_data, analyses):
                 rows.append((fd['filename'], prog['name'], 'CALLNAT', name,
                              'נמצא CALLNAT בקוד אך ה-AI לא דיווח עליו — פספוס'))
     return rows
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# REVIEW MODE (--review) — human quality-check package, no API calls
+# ──────────────────────────────────────────────────────────────────────────────
+
+def select_review_sample(files_data, analyses, validation_rows, n=8):
+    """
+    Pick a smart (not random) sample for human review:
+    the most complex programs, the most-called ones, programs with many
+    validation gaps, a couple of medium ones, and one data member.
+    Returns [(analysis, reason), ...].
+    """
+    ok = [a for a in analyses if 'error' not in a]
+
+    gaps = defaultdict(int)
+    for r in validation_rows:
+        gaps[(r[0], r[1])] += 1
+
+    callers = defaultdict(int)          # program name → how many programs call it
+    for fd in files_data:
+        for p in fd['programs']:
+            for c in p.get('callnats', []):
+                callers[c] += 1
+
+    def key(a):       return (a.get('filename', ''), a.get('program_name', ''))
+    def n_rules(a):   return sum(len(w.get('business_rules', [])) for w in a.get('workflows', []))
+    def richness(a):  return len(a.get('workflows', [])) + n_rules(a)
+    def n_callers(a): return callers.get((a.get('program_name') or '').upper(), 0)
+
+    sample, seen = [], set()
+    def add(a, reason):
+        if key(a) not in seen and len(sample) < n:
+            seen.add(key(a))
+            sample.append((a, reason))
+
+    for a in sorted([a for a in ok if a.get('complexity') == 'מורכב'],
+                    key=richness, reverse=True)[:3]:
+        add(a, f"מורכבת במיוחד ({len(a.get('workflows', []))} זרימות, {n_rules(a)} חוקים)")
+    for a in sorted(ok, key=n_callers, reverse=True)[:2]:
+        if n_callers(a) > 0:
+            add(a, f"מרכזית בגרף הקריאות ({n_callers(a)} תוכניות קוראות לה)")
+    for a in sorted(ok, key=lambda x: gaps.get(key(x), 0), reverse=True)[:2]:
+        if gaps.get(key(a), 0) >= 2:
+            add(a, f"{gaps[key(a)]} פערי ולידציה")
+    for a in [a for a in ok if a.get('complexity') == 'בינוני'][:2]:
+        add(a, "מורכבות בינונית")
+    for a in [a for a in ok if a.get('program_type') == 'data'][:1]:
+        add(a, "אזור נתונים (פרומפט מצומצם)")
+    # top up with the richest programs if the sample is still small
+    for a in sorted(ok, key=richness, reverse=True):
+        add(a, "השלמת דגימה")
+    return sample[:n]
+
+
+def _render_analysis_html(a, esc):
+    parts = [f"<p><b>מטרה עסקית:</b> {esc(a.get('business_purpose', ''))}</p>",
+             f"<p><b>מורכבות:</b> {esc(a.get('complexity', ''))}"
+             + (f" &middot; <b>שוכפל מ:</b> {esc(a['duplicate_of'])}" if a.get('duplicate_of') else "")
+             + "</p>"]
+    if a.get('entities'):
+        parts.append("<h4>ישויות</h4><ul>")
+        for e in a['entities']:
+            fields = e.get('fields', [])
+            f_txt = ", ".join(f"{esc(f.get('name', ''))} ({esc(f.get('type', ''))})"
+                              for f in fields[:12])
+            if len(fields) > 12:
+                f_txt += f" ועוד {len(fields) - 12}"
+            parts.append(f"<li><b>{esc(e.get('name', ''))}</b> — {esc(e.get('description', ''))}"
+                         f"<div class='fields'>{len(fields)} שדות: {f_txt}</div></li>")
+        parts.append("</ul>")
+    if a.get('workflows'):
+        parts.append("<h4>זרימות עבודה</h4>")
+        for w in a['workflows']:
+            parts.append(f"<div class='wf'><b>{esc(w.get('name', ''))}</b> "
+                         f"<span class='trig'>({esc(w.get('trigger', ''))} — "
+                         f"{esc(w.get('trigger_details', ''))})</span><ol>")
+            parts += [f"<li>{esc(s)}</li>" for s in w.get('steps', [])]
+            parts.append("</ol>")
+            if w.get('business_rules'):
+                parts.append("<ul class='rules'>")
+                parts += [f"<li><b>{esc(r.get('name', ''))}:</b> "
+                          f"<code>{esc(r.get('logic', ''))}</code></li>"
+                          for r in w['business_rules']]
+                parts.append("</ul>")
+            parts.append("</div>")
+    if a.get('permissions'):
+        parts.append("<h4>הרשאות</h4><ul>")
+        parts += [f"<li><b>{esc(p.get('role', ''))}</b> על {esc(p.get('entity', ''))} — "
+                  f"קריאה:{esc(p.get('read', ''))} עדכון:{esc(p.get('update', ''))} "
+                  f"מחיקה:{esc(p.get('delete', ''))}</li>" for p in a['permissions']]
+        parts.append("</ul>")
+    if a.get('open_questions'):
+        parts.append("<h4>שאלות פתוחות</h4><ul>"
+                     + "".join(f"<li>{esc(q)}</li>" for q in a['open_questions']) + "</ul>")
+    return "\n".join(parts)
+
+
+REVIEW_CSS = """
+body{font-family:Arial,'Segoe UI',sans-serif;margin:0;background:#f4f6fa;color:#1a2233}
+header{background:#1e3a5f;color:#fff;padding:18px 28px}
+header h1{margin:0 0 6px;font-size:22px} header p{margin:0;opacity:.85;font-size:13px}
+.stats{display:flex;gap:14px;padding:16px 28px;flex-wrap:wrap}
+.card{background:#fff;border-radius:8px;padding:12px 18px;box-shadow:0 1px 3px rgba(0,0,0,.12);min-width:130px}
+.card .num{font-size:24px;font-weight:bold} .card.warn .num{color:#c0392b}
+.checklist{margin:0 28px 10px;background:#fff8e1;border-right:4px solid #f0a818;border-radius:6px;padding:10px 16px;font-size:14px}
+section{background:#fff;margin:18px 28px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12);overflow:hidden}
+section>h2{background:#2e5990;color:#fff;margin:0;padding:10px 16px;font-size:16px}
+section>h2 .badge{background:#f0a818;color:#1a2233;border-radius:10px;padding:2px 10px;font-size:12px;margin-inline-start:10px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.analysis{padding:14px 18px;border-inline-end:1px solid #e2e8f2;font-size:14px}
+.analysis h4{margin:14px 0 6px;color:#1e3a5f}
+.fields{color:#5a6a85;font-size:12px;margin:3px 0 6px}
+.wf{margin:0 0 12px;padding:8px 10px;background:#f4f7fc;border-radius:6px}
+.wf .trig{color:#5a6a85;font-size:12px} .wf ol{margin:6px 0;padding-inline-start:20px}
+.rules{background:#fff;border-radius:4px;margin:4px 0;padding:6px 22px;font-size:13px}
+.gaps{margin:10px 18px;padding:8px 12px;background:#fdecea;border-radius:6px;font-size:13px}
+pre{margin:0;padding:14px;background:#10141c;color:#d7e0ee;font-size:11.5px;line-height:1.5;overflow:auto;max-height:780px;direction:ltr;text-align:left}
+@media print{pre{max-height:none}}
+"""
+
+
+def generate_review_html(sample, code_map, validation_rows, stats, out_path):
+    from html import escape as esc
+    gaps_by_prog = defaultdict(list)
+    for r in validation_rows:
+        gaps_by_prog[(r[0], r[1])].append(r)
+
+    top_gap_files = defaultdict(int)
+    for r in validation_rows:
+        top_gap_files[r[0]] += 1
+    top_files_txt = ", ".join(f"{esc(f)} ({c})" for f, c in
+                              sorted(top_gap_files.items(), key=lambda x: -x[1])[:5])
+
+    h = [f"<!DOCTYPE html><html dir='rtl' lang='he'><head><meta charset='utf-8'>"
+         f"<title>סקירת איכות — אפיון Natural ADABAS</title><style>{REVIEW_CSS}</style></head><body>",
+         f"<header><h1>סקירת איכות — אפיון Natural ADABAS</h1>"
+         f"<p>נוצר {time.strftime('%Y-%m-%d %H:%M')} · דגימה של {len(sample)} תוכניות מתוך {stats['total']}</p></header>",
+         "<div class='stats'>",
+         f"<div class='card'><div class='num'>{stats['total']}</div>תוכניות נותחו</div>",
+         f"<div class='card{' warn' if stats['errors'] else ''}'><div class='num'>{stats['errors']}</div>שגיאות</div>",
+         f"<div class='card{' warn' if stats['halluc'] else ''}'><div class='num'>{stats['halluc']}</div>חשדות הזיה</div>",
+         f"<div class='card{' warn' if stats['misses'] else ''}'><div class='num'>{stats['misses']}</div>פספוסים</div>",
+         "</div>"]
+    if top_files_txt:
+        h.append(f"<div class='checklist'>ריכוזי פערים לפי קובץ: {top_files_txt}</div>")
+    h.append("<div class='checklist'><b>לכל תוכנית בדגימה, בדוק 4 שאלות:</b> "
+             "1) המטרה העסקית נכונה? &middot; 2) הזרימות תואמות את הקוד (PF-keys, הסתעפויות)? &middot; "
+             "3) חוקי העסק קיימים בקוד ובכיוון הנכון (&lt; לעומת &gt;)? &middot; "
+             "4) השדות והטיפוסים תואמים ל-DEFINE DATA?</div>")
+
+    for a, reason in sample:
+        k = (a.get('filename', ''), a.get('program_name', ''))
+        code = code_map.get(k, '(הקוד לא נמצא)')
+        if len(code) > 30000:
+            code = code[:30000] + "\n\n... (קוצר לתצוגה — הקוד המלא בקובץ המקור)"
+        h.append(f"<section><h2>{esc(k[1])} <small>({esc(k[0])})</small>"
+                 f"<span class='badge'>{esc(reason)}</span></h2>")
+        prog_gaps = gaps_by_prog.get(k)
+        if prog_gaps:
+            h.append("<div class='gaps'><b>פערי ולידציה בתוכנית זו:</b><br>"
+                     + "<br>".join(f"{esc(r[2])} {esc(r[3])} — {esc(r[4])}" for r in prog_gaps)
+                     + "</div>")
+        h.append(f"<div class='cols'><div class='analysis'>{_render_analysis_html(a, esc)}</div>"
+                 f"<pre>{esc(code)}</pre></div></section>")
+
+    h.append("</body></html>")
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(h))
+
+
+def run_review(sample_size=8):
+    """--review entry point: build review.html from existing outputs. No API."""
+    analyses_path = Path('analyses.json')
+    if analyses_path.exists():
+        with open(analyses_path, 'r', encoding='utf-8') as f:
+            analyses = json.load(f)
+    else:
+        ckpt = load_checkpoint(CHECKPOINT_PATH)
+        if not ckpt:
+            print("לא נמצאו analyses.json או checkpoint — הרץ קודם את הניתוח.")
+            sys.exit(1)
+        analyses = list(ckpt.values())
+
+    txt_files  = sorted(Path('.').glob('*.txt'))
+    files_data = [parse_file(fp) for fp in txt_files]
+    code_map   = {(fd['filename'], p['name']): p['code']
+                  for fd in files_data for p in fd['programs']}
+
+    validation_rows = build_validation(files_data, analyses)
+    stats = {
+        'total' : len([a for a in analyses if 'error' not in a]),
+        'errors': len([a for a in analyses if 'error' in a]),
+        'halluc': len([r for r in validation_rows if 'חשד להזיה' in r[4]]),
+        'misses': len([r for r in validation_rows if 'פספוס' in r[4]]),
+    }
+    sample = select_review_sample(files_data, analyses, validation_rows, sample_size)
+
+    out_path = Path('review.html')
+    generate_review_html(sample, code_map, validation_rows, stats, out_path)
+
+    print("=" * 62)
+    print("  סקירת איכות — סיכום")
+    print("=" * 62)
+    print(f"  תוכניות שנותחו: {stats['total']}   שגיאות: {stats['errors']}")
+    print(f"  חשדות הזיה: {stats['halluc']}   פספוסים: {stats['misses']}")
+    print(f"\n  דגימה לבדיקה אנושית ({len(sample)} תוכניות):")
+    for a, reason in sample:
+        print(f"    • {a.get('program_name', ''):20s} ({a.get('filename', '')})  — {reason}")
+    print(f"\n  ✓ {out_path} נוצר — פתח בדפדפן ועבור תוכנית-תוכנית מול הקוד")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1531,6 +1744,15 @@ def main():
             target = str(txts[0])
         debug_file(target)
         return  # debug_file calls sys.exit, but just in case
+
+    # ── Review mode — quality-check package from existing outputs, no API ─────
+    if '--review' in sys.argv:
+        idx = sys.argv.index('--review')
+        size = 8
+        if len(sys.argv) > idx + 1 and sys.argv[idx + 1].isdigit():
+            size = max(1, int(sys.argv[idx + 1]))
+        run_review(size)
+        return
 
     # ── Parallelism level ──────────────────────────────────────────────────────
     workers = MAX_WORKERS

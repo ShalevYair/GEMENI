@@ -318,9 +318,54 @@ def build_knowledge_base(files_data):
     }
 
 
+def build_validation(files_data, analyses):
+    """
+    Cross-check the static regex findings against what the AI reported,
+    per program. No API calls. Returns rows of:
+      (filename, program, kind, name, finding)
+    AI claims with no anchor in the code are suspected hallucinations;
+    code findings the AI didn't report are misses.
+    """
+    by_key = {(a.get('filename', ''), a.get('program_name', '')): a for a in analyses}
+    rows = []
+    for fd in files_data:
+        for prog in fd['programs']:
+            a = by_key.get((fd['filename'], prog['name']))
+            if not a or 'error' in a:
+                continue
+            code         = prog['code']
+            static_ddms  = {m.group(1).upper() for m in RE_VIEW_OF.finditer(code)}
+            static_calls = {m.group(1).upper() for m in RE_CALLNAT.finditer(code)}
+            ai_entities  = {(e.get('name') or '').strip().upper()
+                            for e in a.get('entities', [])} - {''}
+            ai_callnats  = {(d.get('name') or '').strip().upper()
+                            for d in a.get('dependencies', [])
+                            if (d.get('type') or '').upper() == 'CALLNAT'} - {''}
+            for name in sorted(ai_entities - static_ddms):
+                rows.append((fd['filename'], prog['name'], 'ישות', name,
+                             'ה-AI דיווח על הישות אך לא נמצא VIEW OF בקוד — חשד להזיה (או הגדרה ב-LDA חיצוני)'))
+            for name in sorted(static_ddms - ai_entities):
+                rows.append((fd['filename'], prog['name'], 'ישות', name,
+                             'נמצא VIEW OF בקוד אך ה-AI לא דיווח על הישות — פספוס'))
+            for name in sorted(ai_callnats - static_calls):
+                rows.append((fd['filename'], prog['name'], 'CALLNAT', name,
+                             'ה-AI דיווח על קריאה אך לא נמצא CALLNAT בקוד — חשד להזיה'))
+            for name in sorted(static_calls - ai_callnats):
+                rows.append((fd['filename'], prog['name'], 'CALLNAT', name,
+                             'נמצא CALLNAT בקוד אך ה-AI לא דיווח עליו — פספוס'))
+    return rows
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # GEMINI API
 # ──────────────────────────────────────────────────────────────────────────────
+
+class GeminiTruncated(Exception):
+    """The response hit MAX_TOKENS and was cut off mid-output."""
+    def __init__(self, partial_text):
+        super().__init__("תשובה נקטעה (MAX_TOKENS)")
+        self.partial_text = partial_text
+
 
 def call_gemini(api_key, prompt, attempt=0):
     """Call Gemini REST API with exponential-backoff retry."""
@@ -342,9 +387,13 @@ def call_gemini(api_key, prompt, attempt=0):
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         resp.raise_for_status()
-        data = resp.json()
-        parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
-        return "".join(p.get("text", "") for p in parts)
+        data      = resp.json()
+        candidate = (data.get("candidates") or [{}])[0]
+        parts     = candidate.get("content", {}).get("parts", [])
+        text      = "".join(p.get("text", "") for p in parts)
+        if candidate.get("finishReason") == "MAX_TOKENS":
+            raise GeminiTruncated(text)
+        return text
     except requests.Timeout:
         if attempt < 3:
             wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
@@ -390,6 +439,45 @@ def log_error(path, filename, prog_name, message):
     ts = time.strftime('%Y-%m-%d %H:%M:%S')
     with open(path, 'a', encoding='utf-8') as f:
         f.write(f"{ts}  {filename} › {prog_name}  {message}\n")
+
+
+CONCISE_SUFFIX = """
+
+חשוב: התשובה הקודמת נקטעה באמצע כי הייתה ארוכה מדי.
+קצר משמעותית: עד 5 הזרימות המרכזיות בלבד, עד 10 שדות חשובים לכל ישות,
+תיאורים של משפט אחד. שמור על מבנה ה-JSON המבוקש."""
+
+
+def call_and_parse(api_key, prompt):
+    """
+    Call Gemini and parse the JSON answer, recovering from the two common
+    failure modes:
+      - MAX_TOKENS truncation → one retry asking for a concise answer
+      - malformed JSON        → one retry
+    Returns (analysis, None) on success or (None, error_message) on failure.
+    Network errors propagate to the caller.
+    """
+    truncated = False
+    json_err  = None
+    current   = prompt
+    for _ in range(3):
+        try:
+            raw = call_gemini(api_key, current)
+        except GeminiTruncated:
+            if truncated:
+                return None, "תשובה נקטעה (MAX_TOKENS) גם אחרי בקשת תמצות"
+            truncated = True
+            current   = prompt + CONCISE_SUFFIX
+            continue
+        try:
+            return parse_json_response(raw), None
+        except json.JSONDecodeError as e:
+            if json_err is not None:
+                return None, f"JSON parse: {e}"
+            json_err = e
+    if json_err is not None:
+        return None, f"JSON parse: {json_err}"
+    return None, "לא התקבלה תשובה תקינה"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -794,21 +882,10 @@ def run_synthesis(api_key, analyses, workers):
     state   = {'completed': 0, 'errors': 0}
 
     def worker(name, o, n_obs):
-        record, error = None, None
         try:
-            prompt   = build_synthesis_prompt(name, o)
-            last_err = None
-            for _ in range(2):              # one automatic retry on bad JSON
-                raw = call_gemini(api_key, prompt)
-                try:
-                    record = parse_json_response(raw)
-                    break
-                except json.JSONDecodeError as e:
-                    last_err = e
-            if record is None:
-                error = f"JSON parse: {last_err}"
+            record, error = call_and_parse(api_key, build_synthesis_prompt(name, o))
         except Exception as e:
-            error = str(e)
+            record, error = None, str(e)
         with io_lock:
             state['completed'] += 1
             if error:
@@ -871,8 +948,9 @@ def run_synthesis(api_key, analyses, workers):
                                             n_programs=n_programs,
                                             n_entities=len(entities))
             try:
-                raw      = call_gemini(api_key, prompt)
-                overview = parse_json_response(raw)
+                overview, ov_err = call_and_parse(api_key, prompt)
+                if ov_err:
+                    raise RuntimeError(ov_err)
                 append_checkpoint(SYNTHESIS_CHECKPOINT_PATH,
                                   {'entity': '__OVERVIEW__', 'n_obs': len(entities),
                                    'record': overview})
@@ -1063,6 +1141,13 @@ def build_readme_sheet(wb):
         ("קובץ", "שם קובץ המקור"),
         ("תוכנית", "שם התוכנית"),
         ("שאלה", "שאלה שעלתה בניתוח ודורשת בירור עם בעל הידע"),
+        ("", "space"),
+
+        ("גיליון 14 — ולידציה", "sheet"),
+        ("קובץ / תוכנית", "היכן נמצא הפער"),
+        ("סוג", "ישות (VIEW OF) או CALLNAT"),
+        ("שם", "שם הישות / התוכנית שבמחלוקת"),
+        ("ממצא", "הצלבה אוטומטית בין סריקת הקוד לדיווח ה-AI: דיווח ללא עיגון בקוד = חשד להזיה; ממצא בקוד שלא דווח = פספוס. גיליון ריק = הניתוח עקבי עם הקוד"),
     ]
 
     row = 1
@@ -1158,7 +1243,7 @@ def build_synthesis_sheets(wb, synthesis):
     set_col_widths(ws, {'A':22,'B':22,'C':22,'D':12,'E':10,'F':10,'G':55})
 
 
-def build_excel(analyses, kb, output_path, synthesis=None):
+def build_excel(analyses, kb, output_path, synthesis=None, validation_rows=None):
     wb = openpyxl.Workbook()
 
     # ── 1. Summary ────────────────────────────────────────────────────────────
@@ -1349,6 +1434,20 @@ def build_excel(analyses, kb, output_path, synthesis=None):
 
     set_col_widths(ws10, {'A':25,'B':25,'C':80})
 
+    # ── 11. Validation ────────────────────────────────────────────────────────
+    ws11 = wb.create_sheet("ולידציה")
+    add_header_row(ws11, ["קובץ", "תוכנית", "סוג", "שם", "ממצא"])
+
+    if validation_rows:
+        for i, row in enumerate(validation_rows):
+            ws11.append(list(row))
+            for c in ws11[ws11.max_row]: cell_style(c, alt=(i % 2 == 0))
+    else:
+        ws11.append(["—", "—", "—", "—", "לא נמצאו פערים — דיווחי ה-AI עקביים עם הקוד"])
+        for c in ws11[ws11.max_row]: cell_style(c)
+
+    set_col_widths(ws11, {'A':20,'B':20,'C':12,'D':25,'E':70})
+
     wb.save(output_path)
 
 
@@ -1513,19 +1612,11 @@ def main():
 
     def worker(seq_no, fd, prog):
         try:
-            prompt   = build_program_prompt(fd, prog, kb, ddm_cache)
-            last_err = None
-            for _ in range(2):              # one automatic retry on bad JSON
-                raw = call_gemini(api_key, prompt)
-                try:
-                    analysis = parse_json_response(raw)
-                    handle_result(seq_no, fd, prog, analysis, None)
-                    return
-                except json.JSONDecodeError as e:
-                    last_err = e
-            handle_result(seq_no, fd, prog, None, f"JSON parse: {last_err}")
+            prompt          = build_program_prompt(fd, prog, kb, ddm_cache)
+            analysis, error = call_and_parse(api_key, prompt)
         except Exception as e:
-            handle_result(seq_no, fd, prog, None, str(e))
+            analysis, error = None, str(e)
+        handle_result(seq_no, fd, prog, analysis, error)
 
     interrupted = False
     if tasks:
@@ -1568,10 +1659,20 @@ def main():
     else:
         synthesis = run_synthesis(api_key, analyses, workers)
 
+    # ── PHASE 3.6: Validation — static cross-check, no API calls ──────────────
+    validation_rows = build_validation(files_data, analyses)
+    if validation_rows:
+        n_hall = len([r for r in validation_rows if 'חשד להזיה' in r[4]])
+        n_miss = len(validation_rows) - n_hall
+        print(f"\n  🔎 ולידציה: {len(validation_rows)} פערים בין הקוד לדיווחי ה-AI "
+              f"(חשדות הזיה: {n_hall}, פספוסים: {n_miss}) — ראה גיליון 'ולידציה'")
+    else:
+        print(f"\n  🔎 ולידציה: דיווחי ה-AI עקביים עם הקוד — אין פערים")
+
     # ── PHASE 4: Build Excel ───────────────────────────────────────────────────
     print("\n── שלב 4: בניית Excel ─────────────────────────────────────")
     output_path = Path('natural_adabas_spec.xlsx')
-    build_excel(analyses, kb, output_path, synthesis)
+    build_excel(analyses, kb, output_path, synthesis, validation_rows)
 
     # ── Summary ────────────────────────────────────────────────────────────────
     print("\n" + "=" * 62)

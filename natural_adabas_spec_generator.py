@@ -26,6 +26,7 @@ import re
 import sys
 import json
 import time
+import hashlib
 import threading
 import requests
 import openpyxl
@@ -122,6 +123,16 @@ def classify_program(code):
     if RE_DEFINE_DATA.search(code):
         return 'data'
     return 'logic'
+
+
+def program_code_hash(code):
+    """
+    Hash for duplicate detection. The *C** catalog header lines carry
+    library/date metadata that differs between exports of identical source,
+    so they are stripped before hashing, as is trailing whitespace.
+    """
+    lines = [l.rstrip() for l in code.splitlines() if not RE_CATALOG_SEP.match(l)]
+    return hashlib.sha1('\n'.join(lines).strip().encode('utf-8')).hexdigest()
 
 
 RE_END_PROG_SEMI     = re.compile(r'^\s*END\s*;?\s*$', re.IGNORECASE)
@@ -304,6 +315,7 @@ def parse_file(filepath):
         prog['callnats'] = sorted({m.group(1).upper()
                                    for m in RE_CALLNAT.finditer(prog['code'])})
         prog['ptype']    = classify_program(prog['code'])
+        prog['hash']     = program_code_hash(prog['code'])
 
     return {
         'filename' : filename,
@@ -1576,12 +1588,22 @@ def main():
               f"{len(done)} תוכניות כבר נותחו, נותרו {len(remaining)}")
         print(f"    (למחוק את הקובץ כדי לנתח הכל מחדש)")
 
-    # ── Token estimate warning (remaining programs only) ──────────────────────
+    # ── Token estimate warning (remaining unique programs only) ───────────────
     if remaining:
-        total_chars   = sum(len(p['code']) for _, p in remaining)
+        ckpt_hashes = {a.get('code_hash') for a in checkpoint.values()
+                       if 'error' not in a and a.get('code_hash')}
+        uniq, seen_h = [], set(ckpt_hashes) - {None}
+        for _, p in remaining:
+            if p['hash'] not in seen_h:
+                seen_h.add(p['hash'])
+                uniq.append(p)
+        n_dups = len(remaining) - len(uniq)
+        if n_dups:
+            print(f"\n  ⧉ זוהו {n_dups} כפילויות (קוד זהה) — ינותחו פעם אחת בלבד")
+        total_chars   = sum(len(p['code']) for p in uniq)
         est_in_tokens = total_chars // 4          # ~4 chars per token
-        est_out_tok   = len(remaining) * 3000     # ~3K output tokens per program
-        print(f"\n  ⚠  אומדן טוקנים ({len(remaining)} תוכניות):")
+        est_out_tok   = len(uniq) * 3000          # ~3K output tokens per program
+        print(f"\n  ⚠  אומדן טוקנים ({len(uniq)} תוכניות ייחודיות):")
         print(f"     קלט:  ~{est_in_tokens:,} טוקנים  ({total_chars/1e6:.1f}MB)")
         print(f"     פלט:  ~{est_out_tok:,} טוקנים")
         print(f"     סה\"כ: ~{(est_in_tokens+est_out_tok):,} טוקנים")
@@ -1623,9 +1645,28 @@ def main():
                 tasks.append((seq, fd, prog))
     skipped = len(order) - len(tasks)
 
-    n_data = sum(1 for _, _, p in tasks if p.get('ptype') == 'data')
+    # ── Duplicate detection: identical members exported in several files are
+    #    analyzed once; the copies reuse the result without an API call ───────
+    hash_to_analysis = {}   # code hash → successful analysis (checkpoint + this run)
+    for a in checkpoint.values():
+        if 'error' not in a and a.get('code_hash'):
+            hash_to_analysis.setdefault(a['code_hash'], a)
+
+    primary_tasks, dup_tasks = [], []
+    claimed_hashes = set(hash_to_analysis)
+    for t in tasks:
+        h = t[2]['hash']
+        if h in claimed_hashes:
+            dup_tasks.append(t)
+        else:
+            claimed_hashes.add(h)
+            primary_tasks.append(t)
+    if dup_tasks:
+        print(f"  ⧉ {len(dup_tasks)} כפילויות — ינותחו פעם אחת וישוכפלו בסוף")
+
+    n_data = sum(1 for _, _, p in primary_tasks if p.get('ptype') == 'data')
     if n_data:
-        print(f"  סיווג: {len(tasks) - n_data} תוכניות לוגיקה, "
+        print(f"  סיווג: {len(primary_tasks) - n_data} תוכניות לוגיקה, "
               f"{n_data} אזורי נתונים (פרומפט מצומצם)")
 
     # Rebuild the DDM cache and the callee-purpose cache from checkpointed
@@ -1642,7 +1683,7 @@ def main():
     # ── Wave ordering: callees before callers, so caller prompts can include
     #    one-line summaries of the subprograms they CALLNAT ───────────────────
     name_to_tasks = defaultdict(list)
-    for t in tasks:
+    for t in primary_tasks:
         name_to_tasks[t[2]['name'].upper()].append(t)
     pending  = set(name_to_tasks)
     calls_of = {}
@@ -1669,7 +1710,7 @@ def main():
         so results survive even if the main thread was interrupted meanwhile."""
         with io_lock:
             state['completed'] += 1
-            n_done, n_total = state['completed'], len(tasks)
+            n_done, n_total = state['completed'], len(primary_tasks)
             elapsed = time.time() - state['start']
             eta_min = (elapsed / n_done) * (n_total - n_done) / 60
             label   = f"[{n_done}/{n_total}] {fd['filename']} › {prog['name']}"
@@ -1681,6 +1722,12 @@ def main():
                 print(f"  ⚠ {label}  {error}", flush=True)
             else:
                 entry = analysis
+                # Force the identity fields — the checkpoint key depends on
+                # them, and the model can't be trusted to echo them verbatim
+                entry['filename']     = fd['filename']
+                entry['program_name'] = prog['name']
+                entry['code_hash']    = prog['hash']
+                hash_to_analysis.setdefault(prog['hash'], entry)
                 for e in analysis.get('entities', []):
                     ddm_cache[e['name']] = e
                 if analysis.get('business_purpose'):
@@ -1736,6 +1783,26 @@ def main():
             except KeyboardInterrupt:
                 interrupted = True
                 executor.shutdown(wait=False, cancel_futures=True)
+
+    # ── Copy results onto duplicate programs (no API calls) ───────────────────
+    if dup_tasks and not interrupted:
+        copied = 0
+        for seq_no, fd, prog in dup_tasks:
+            src = hash_to_analysis.get(prog['hash'])
+            if src is not None:
+                entry = json.loads(json.dumps(src))   # deep copy
+                entry['filename']     = fd['filename']
+                entry['program_name'] = prog['name']
+                entry['duplicate_of'] = f"{src.get('program_name', '')} ({src.get('filename', '')})"
+                copied += 1
+            else:   # the identical primary failed — both retried next run
+                entry = {'filename': fd['filename'], 'program_name': prog['name'],
+                         'error': 'כפילות — ניתוח התוכנית הזהה נכשל; ינוסה שוב בהרצה הבאה'}
+                state['errors'] += 1
+            append_checkpoint(CHECKPOINT_PATH, entry)
+            results[seq_no] = entry
+        if copied:
+            print(f"\n  ⧉ {copied} כפילויות שוכפלו מניתוח קיים (ללא קריאות API)")
 
     errors = state['errors']
     if skipped:

@@ -5,9 +5,10 @@ Natural ADABAS Technical Specification Generator
 
 Usage:
   1. Place this script in the same folder as your .txt Natural files
-  2. Run: python natural_adabas_spec_generator.py
+  2. Run: python natural_adabas_spec_generator.py [--workers N]
   3. Enter your Gemini API key when prompted
   4. Output: natural_adabas_spec.xlsx + knowledge_base.json + analyses.json
+     Failed programs are listed in errors.log
 
 Resume support:
   Every analyzed program is checkpointed to analyses_checkpoint.jsonl as it
@@ -29,6 +30,7 @@ import requests
 import openpyxl
 from pathlib import Path
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -40,14 +42,17 @@ GEMINI_BASE   = "https://generativelanguage.googleapis.com/v1beta/models"
 MAX_TOKENS    = 65000
 TEMPERATURE   = 0.1
 
-# Delay between API calls (seconds) to avoid rate limiting
-API_DELAY     = 1.5
+# Number of parallel Gemini calls (override with --workers N)
+MAX_WORKERS   = 10
 
 # Max characters sent per program to Gemini (to stay within token limits)
 MAX_PROGRAM_CHARS = 700_000
 
 # Incremental checkpoint — one JSON line per analyzed program (append-only)
 CHECKPOINT_PATH = Path('analyses_checkpoint.jsonl')
+
+# Error log — one line per failed program, for a quick status picture
+ERROR_LOG_PATH = Path('errors.log')
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STYLES
@@ -313,39 +318,23 @@ def build_knowledge_base(files_data):
 # GEMINI API
 # ──────────────────────────────────────────────────────────────────────────────
 
-class _Spinner:
-    """Print a progress dot every N seconds while an operation is running."""
-    def __init__(self, interval=4):
-        self._interval = interval
-        self._stop     = threading.Event()
-        self._thread   = threading.Thread(target=self._run, daemon=True)
-
-    def _run(self):
-        while not self._stop.wait(self._interval):
-            print(".", end="", flush=True)
-
-    def __enter__(self):
-        self._thread.start()
-        return self
-
-    def __exit__(self, *_):
-        self._stop.set()
-        self._thread.join()
-        print()  # newline after dots
-
-
 def call_gemini(api_key, prompt, attempt=0):
     """Call Gemini REST API with exponential-backoff retry."""
     url = f"{GEMINI_BASE}/{GEMINI_MODEL}:generateContent?key={api_key}"
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": MAX_TOKENS, "temperature": TEMPERATURE},
+        "generationConfig": {
+            "maxOutputTokens": MAX_TOKENS,
+            "temperature": TEMPERATURE,
+            # JSON mode — forces syntactically valid JSON output
+            "responseMimeType": "application/json",
+        },
     }
     try:
         resp = requests.post(url, json=body, timeout=360)
         if resp.status_code in (429, 503) and attempt < 4:
             wait = 30 * (2 ** attempt)  # 30s, 60s, 120s, 240s
-            print(f"\n    ⏳ Rate limit ({resp.status_code}) — ממתין {wait}s...", end="", flush=True)
+            print(f"    ⏳ Rate limit ({resp.status_code}) — ממתין {wait}s...", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         resp.raise_for_status()
@@ -355,14 +344,14 @@ def call_gemini(api_key, prompt, attempt=0):
     except requests.Timeout:
         if attempt < 3:
             wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
-            print(f"\n    ⏳ Timeout — ממתין {wait}s לפני ניסיון חוזר...", end="", flush=True)
+            print(f"    ⏳ Timeout — ממתין {wait}s לפני ניסיון חוזר...", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         raise
     except requests.RequestException as e:
         if attempt < 4:
             wait = 15 * (2 ** attempt)  # 15s, 30s, 60s, 120s
-            print(f"\n    ⚠ Network error: {e} — ממתין {wait}s...", end="", flush=True)
+            print(f"    ⚠ Network error: {e} — ממתין {wait}s...", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         raise
@@ -374,6 +363,29 @@ def strip_json_fences(text):
     text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\s*```$',          '', text)
     return text.strip()
+
+
+def parse_json_response(raw):
+    """
+    Parse a Gemini response into a dict. If the model appended text after
+    the JSON object ("Extra data" errors), salvage the first complete object.
+    """
+    cleaned = strip_json_fences(raw)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find('{')
+        if start == -1:
+            raise
+        obj, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+        return obj
+
+
+def log_error(path, filename, prog_name, message):
+    """Append one line per failed program — a quick status picture."""
+    ts = time.strftime('%Y-%m-%d %H:%M:%S')
+    with open(path, 'a', encoding='utf-8') as f:
+        f.write(f"{ts}  {filename} › {prog_name}  {message}\n")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1001,6 +1013,15 @@ def main():
         debug_file(target)
         return  # debug_file calls sys.exit, but just in case
 
+    # ── Parallelism level ──────────────────────────────────────────────────────
+    workers = MAX_WORKERS
+    if '--workers' in sys.argv:
+        try:
+            workers = max(1, int(sys.argv[sys.argv.index('--workers') + 1]))
+        except (IndexError, ValueError):
+            print("שימוש: python natural_adabas_spec_generator.py --workers N")
+            sys.exit(1)
+
     print("=" * 62)
     print("  Natural ADABAS → מחולל אפיון טכני  ")
     print("=" * 62)
@@ -1075,79 +1096,105 @@ def main():
         json.dump(kb, f, ensure_ascii=False, indent=2)
     print(f"  ✓ {kb_path} נשמר")
 
-    # ── PHASE 3: Gemini analysis ───────────────────────────────────────────────
-    print(f"\n── שלב 3: ניתוח AI ({len(remaining)}/{total_programs} תוכניות) ──────────")
-    analyses    = []
-    ddm_cache   = {}        # DDM name → field list, built as we go
-    errors      = 0
-    prog_num    = 0
-    skipped     = 0
-    interrupted = False
+    # ── PHASE 3: Gemini analysis (parallel) ────────────────────────────────────
+    print(f"\n── שלב 3: ניתוח AI ({len(remaining)}/{total_programs} תוכניות, "
+          f"{workers} קריאות במקביל) ──────────")
+
+    # Ordered task list; checkpointed programs are pre-filled into results
+    order   = []   # (seq, key) in original program order — keeps Excel stable
+    tasks   = []   # (seq, fd, prog) still needing analysis
+    results = {}   # seq → analysis dict
+    seq = 0
+    for fd in files_data:
+        for prog in fd['programs']:
+            seq += 1
+            key = (fd['filename'], prog['name'])
+            order.append((seq, key))
+            if key in done:
+                results[seq] = checkpoint[key]
+            else:
+                tasks.append((seq, fd, prog))
+    skipped = len(order) - len(tasks)
 
     # Rebuild the DDM cache from checkpointed analyses so resumed runs give
     # the remaining programs the same DDM context as an uninterrupted run
+    ddm_cache = {}
     for a in checkpoint.values():
         if 'error' not in a:
             for e in a.get('entities', []):
                 ddm_cache[e['name']] = e
 
-    try:
-        for fd in files_data:
-            for prog in fd['programs']:
-                prog_num += 1
-                key = (fd['filename'], prog['name'])
-                if key in done:
-                    analyses.append(checkpoint[key])
-                    skipped += 1
-                    continue
+    io_lock = threading.Lock()
+    state   = {'completed': 0, 'errors': 0, 'start': time.time()}
 
-                label = f"[{prog_num}/{total_programs}] {fd['filename']} › {prog['name']}"
-                print(f"  {label}")
+    def handle_result(seq_no, fd, prog, analysis, error):
+        """Runs in the worker thread — checkpoint, log and report under one lock,
+        so results survive even if the main thread was interrupted meanwhile."""
+        with io_lock:
+            state['completed'] += 1
+            n_done, n_total = state['completed'], len(tasks)
+            elapsed = time.time() - state['start']
+            eta_min = (elapsed / n_done) * (n_total - n_done) / 60
+            label   = f"[{n_done}/{n_total}] {fd['filename']} › {prog['name']}"
+            if error:
+                state['errors'] += 1
+                entry = {'filename': fd['filename'], 'program_name': prog['name'],
+                         'error': error}
+                log_error(ERROR_LOG_PATH, fd['filename'], prog['name'], error)
+                print(f"  ⚠ {label}  {error}", flush=True)
+            else:
+                entry = analysis
+                for e in analysis.get('entities', []):
+                    ddm_cache[e['name']] = e
+                n_ent = len(analysis.get('entities', []))
+                n_wf  = len(analysis.get('workflows', []))
+                n_req = sum(len(wf.get('business_rules', [])) for wf in analysis.get('workflows', []))
+                print(f"  ✓ {label}  ישויות:{n_ent} זרימות:{n_wf} חוקים:{n_req}  "
+                      f"~{eta_min/60:.1f} שעות נותרו", flush=True)
+            append_checkpoint(CHECKPOINT_PATH, entry)
+            results[seq_no] = entry
 
+    def worker(seq_no, fd, prog):
+        try:
+            prompt   = build_program_prompt(fd, prog, kb, ddm_cache)
+            last_err = None
+            for _ in range(2):              # one automatic retry on bad JSON
+                raw = call_gemini(api_key, prompt)
                 try:
-                    prompt   = build_program_prompt(fd, prog, kb, ddm_cache)
-                    print(f"    ⏳ שולח ל-Gemini", end="", flush=True)
-                    with _Spinner(interval=4):
-                        raw_resp = call_gemini(api_key, prompt)
-                    cleaned  = strip_json_fences(raw_resp)
-                    analysis = json.loads(cleaned)
-                    analyses.append(analysis)
-                    append_checkpoint(CHECKPOINT_PATH, analysis)
-
-                    # Cache any DDM field definitions we got back
-                    for e in analysis.get('entities', []):
-                        ddm_cache[e['name']] = e
-
-                    n_req  = sum(len(wf.get('business_rules', [])) for wf in analysis.get('workflows', []))
-                    n_wf   = len(analysis.get('workflows', []))
-                    n_ent  = len(analysis.get('entities', []))
-                    print(f"    ✓ ישויות:{n_ent}  זרימות:{n_wf}  חוקים:{n_req}  "
-                          f"מורכבות:{analysis.get('complexity','')}")
-
+                    analysis = parse_json_response(raw)
+                    handle_result(seq_no, fd, prog, analysis, None)
+                    return
                 except json.JSONDecodeError as e:
-                    print(f"    ⚠ JSON parse error: {e}")
-                    failed = {'filename': fd['filename'], 'program_name': prog['name'],
-                              'error': f"JSON parse: {e}"}
-                    analyses.append(failed)
-                    append_checkpoint(CHECKPOINT_PATH, failed)
-                    errors += 1
-                except Exception as e:
-                    print(f"    ⚠ {e}")
-                    failed = {'filename': fd['filename'], 'program_name': prog['name'],
-                              'error': str(e)}
-                    analyses.append(failed)
-                    append_checkpoint(CHECKPOINT_PATH, failed)
-                    errors += 1
+                    last_err = e
+            handle_result(seq_no, fd, prog, None, f"JSON parse: {last_err}")
+        except Exception as e:
+            handle_result(seq_no, fd, prog, None, str(e))
 
-                time.sleep(API_DELAY)
-    except KeyboardInterrupt:
-        interrupted = True
-        analyzed_now = len(analyses) - skipped
-        print(f"\n\n  ⏸ הופסק ידנית — {analyzed_now} ניתוחים מההרצה הזו נשמרו ב-checkpoint")
-        print(f"    בונה פלט חלקי ממה שנותח עד כה...")
+    interrupted = False
+    if tasks:
+        executor = ThreadPoolExecutor(max_workers=workers)
+        futures  = [executor.submit(worker, *t) for t in tasks]
+        try:
+            for fut in as_completed(futures):
+                fut.result()
+        except KeyboardInterrupt:
+            interrupted = True
+            print(f"\n  ⏸ הופסק ידנית — ממתין לקריאות שכבר באוויר שיסתיימו (עד כמה דקות)...")
+            print(f"    כל מה שהסתיים נשמר ב-checkpoint; הרץ שוב כדי להמשיך מאותה נקודה.")
+        finally:
+            try:
+                executor.shutdown(wait=True, cancel_futures=True)
+            except KeyboardInterrupt:
+                interrupted = True
+                executor.shutdown(wait=False, cancel_futures=True)
 
+    errors = state['errors']
     if skipped:
         print(f"\n  ↻ {skipped} תוכניות נטענו מה-checkpoint (לא נשלחו שוב ל-API)")
+    if errors:
+        print(f"  ⚠ {errors} תוכניות נכשלו — פירוט ב-{ERROR_LOG_PATH}")
+
+    analyses = [results[s] for s, _ in order if s in results]
 
     # Save raw analyses
     analyses_path = Path('analyses.json')
@@ -1170,7 +1217,7 @@ def main():
     print(f"  ✓ {kb_path}")
     print(f"  ✓ {analyses_path}")
     if errors:
-        print(f"  ⚠ {errors} תוכניות נכשלו — בדוק analyses.json")
+        print(f"  ⚠ {errors} תוכניות נכשלו — פירוט ב-{ERROR_LOG_PATH}")
     if interrupted or errors:
         print(f"  ↻ הרץ שוב את הסקריפט כדי להמשיך מאותה נקודה "
               f"(תוכניות שהושלמו לא יישלחו שוב)")

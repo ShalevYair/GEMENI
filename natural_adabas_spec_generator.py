@@ -9,6 +9,12 @@ Usage:
   3. Enter your Gemini API key when prompted
   4. Output: natural_adabas_spec.xlsx + knowledge_base.json + analyses.json
 
+Resume support:
+  Every analyzed program is checkpointed to analyses_checkpoint.jsonl as it
+  completes. If the run crashes or is stopped (Ctrl+C), simply run the script
+  again — already-analyzed programs are skipped. Delete the checkpoint file
+  to force a full re-analysis.
+
 Requirements:
   pip install requests openpyxl
 """
@@ -39,6 +45,9 @@ API_DELAY     = 1.5
 
 # Max characters sent per program to Gemini (to stay within token limits)
 MAX_PROGRAM_CHARS = 700_000
+
+# Incremental checkpoint — one JSON line per analyzed program (append-only)
+CHECKPOINT_PATH = Path('analyses_checkpoint.jsonl')
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STYLES
@@ -365,6 +374,52 @@ def strip_json_fences(text):
     text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\s*```$',          '', text)
     return text.strip()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CHECKPOINT (resume support)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def analysis_key(a):
+    return (a.get('filename', ''), a.get('program_name', ''))
+
+
+def load_checkpoint(path):
+    """
+    Load prior analyses from the JSONL checkpoint file.
+    Returns {(filename, program_name): analysis}. If a program appears more
+    than once (e.g. a failed attempt followed by a successful retry), the
+    last entry wins. A truncated final line (killed mid-write) is skipped.
+    """
+    results = {}
+    if not path.exists():
+        return results
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                a = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            results[analysis_key(a)] = a
+    return results
+
+
+def append_checkpoint(path, analysis):
+    # If a previous run was killed mid-write, the file may end with a
+    # truncated line lacking '\n' — terminate it first so the new entry
+    # lands on its own line and stays parseable.
+    needs_nl = path.exists() and path.stat().st_size > 0
+    if needs_nl:
+        with open(path, 'rb') as f:
+            f.seek(-1, 2)
+            needs_nl = f.read(1) != b'\n'
+    with open(path, 'ab') as f:
+        if needs_nl:
+            f.write(b'\n')
+        f.write((json.dumps(analysis, ensure_ascii=False) + '\n').encode('utf-8'))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -983,18 +1038,31 @@ def main():
 
     print(f"\n  סה\"כ תוכניות/שגרות: {total_programs}")
 
-    # ── Token estimate warning ─────────────────────────────────────────────────
-    total_chars   = sum(len(p['code']) for fd in files_data for p in fd['programs'])
-    est_in_tokens = total_chars // 4          # ~4 chars per token
-    est_out_tok   = total_programs * 3000     # ~3K output tokens per program
-    print(f"\n  ⚠  אומדן טוקנים:")
-    print(f"     קלט:  ~{est_in_tokens:,} טוקנים  ({total_chars/1e6:.1f}MB)")
-    print(f"     פלט:  ~{est_out_tok:,} טוקנים")
-    print(f"     סה\"כ: ~{(est_in_tokens+est_out_tok):,} טוקנים")
-    ans = input("  להמשיך? (y/n): ").strip().lower()
-    if ans != 'y':
-        print("  בוטל.")
-        sys.exit(0)
+    # ── Resume: load checkpoint from a previous (interrupted) run ─────────────
+    checkpoint = load_checkpoint(CHECKPOINT_PATH)
+    done = {k for k, a in checkpoint.items() if 'error' not in a}
+    remaining = [(fd, prog) for fd in files_data for prog in fd['programs']
+                 if (fd['filename'], prog['name']) not in done]
+    if done:
+        print(f"\n  ↻ נמצא checkpoint ({CHECKPOINT_PATH}): "
+              f"{len(done)} תוכניות כבר נותחו, נותרו {len(remaining)}")
+        print(f"    (למחוק את הקובץ כדי לנתח הכל מחדש)")
+
+    # ── Token estimate warning (remaining programs only) ──────────────────────
+    if remaining:
+        total_chars   = sum(len(p['code']) for _, p in remaining)
+        est_in_tokens = total_chars // 4          # ~4 chars per token
+        est_out_tok   = len(remaining) * 3000     # ~3K output tokens per program
+        print(f"\n  ⚠  אומדן טוקנים ({len(remaining)} תוכניות):")
+        print(f"     קלט:  ~{est_in_tokens:,} טוקנים  ({total_chars/1e6:.1f}MB)")
+        print(f"     פלט:  ~{est_out_tok:,} טוקנים")
+        print(f"     סה\"כ: ~{(est_in_tokens+est_out_tok):,} טוקנים")
+        ans = input("  להמשיך? (y/n): ").strip().lower()
+        if ans != 'y':
+            print("  בוטל.")
+            sys.exit(0)
+    else:
+        print("\n  ✓ כל התוכניות כבר נותחו — מדלג ישר לבניית הפלט")
 
     # ── PHASE 2: Knowledge base ────────────────────────────────────────────────
     print("\n── שלב 2: בניית Knowledge Base ────────────────────────────")
@@ -1008,49 +1076,78 @@ def main():
     print(f"  ✓ {kb_path} נשמר")
 
     # ── PHASE 3: Gemini analysis ───────────────────────────────────────────────
-    print(f"\n── שלב 3: ניתוח AI ({total_programs} תוכניות) ────────────────────")
-    analyses  = []
-    ddm_cache = {}          # DDM name → field list, built as we go
-    errors    = 0
-    prog_num  = 0
+    print(f"\n── שלב 3: ניתוח AI ({len(remaining)}/{total_programs} תוכניות) ──────────")
+    analyses    = []
+    ddm_cache   = {}        # DDM name → field list, built as we go
+    errors      = 0
+    prog_num    = 0
+    skipped     = 0
+    interrupted = False
 
-    for fd in files_data:
-        for prog in fd['programs']:
-            prog_num += 1
-            label = f"[{prog_num}/{total_programs}] {fd['filename']} › {prog['name']}"
-            print(f"  {label}")
+    # Rebuild the DDM cache from checkpointed analyses so resumed runs give
+    # the remaining programs the same DDM context as an uninterrupted run
+    for a in checkpoint.values():
+        if 'error' not in a:
+            for e in a.get('entities', []):
+                ddm_cache[e['name']] = e
 
-            try:
-                prompt   = build_program_prompt(fd, prog, kb, ddm_cache)
-                print(f"    ⏳ שולח ל-Gemini", end="", flush=True)
-                with _Spinner(interval=4):
-                    raw_resp = call_gemini(api_key, prompt)
-                cleaned  = strip_json_fences(raw_resp)
-                analysis = json.loads(cleaned)
-                analyses.append(analysis)
+    try:
+        for fd in files_data:
+            for prog in fd['programs']:
+                prog_num += 1
+                key = (fd['filename'], prog['name'])
+                if key in done:
+                    analyses.append(checkpoint[key])
+                    skipped += 1
+                    continue
 
-                # Cache any DDM field definitions we got back
-                for e in analysis.get('entities', []):
-                    ddm_cache[e['name']] = e
+                label = f"[{prog_num}/{total_programs}] {fd['filename']} › {prog['name']}"
+                print(f"  {label}")
 
-                n_req  = sum(len(wf.get('business_rules', [])) for wf in analysis.get('workflows', []))
-                n_wf   = len(analysis.get('workflows', []))
-                n_ent  = len(analysis.get('entities', []))
-                print(f"    ✓ ישויות:{n_ent}  זרימות:{n_wf}  חוקים:{n_req}  "
-                      f"מורכבות:{analysis.get('complexity','')}")
+                try:
+                    prompt   = build_program_prompt(fd, prog, kb, ddm_cache)
+                    print(f"    ⏳ שולח ל-Gemini", end="", flush=True)
+                    with _Spinner(interval=4):
+                        raw_resp = call_gemini(api_key, prompt)
+                    cleaned  = strip_json_fences(raw_resp)
+                    analysis = json.loads(cleaned)
+                    analyses.append(analysis)
+                    append_checkpoint(CHECKPOINT_PATH, analysis)
 
-            except json.JSONDecodeError as e:
-                print(f"    ⚠ JSON parse error: {e}")
-                analyses.append({'filename': fd['filename'], 'program_name': prog['name'],
-                                 'error': f"JSON parse: {e}"})
-                errors += 1
-            except Exception as e:
-                print(f"    ⚠ {e}")
-                analyses.append({'filename': fd['filename'], 'program_name': prog['name'],
-                                 'error': str(e)})
-                errors += 1
+                    # Cache any DDM field definitions we got back
+                    for e in analysis.get('entities', []):
+                        ddm_cache[e['name']] = e
 
-            time.sleep(API_DELAY)
+                    n_req  = sum(len(wf.get('business_rules', [])) for wf in analysis.get('workflows', []))
+                    n_wf   = len(analysis.get('workflows', []))
+                    n_ent  = len(analysis.get('entities', []))
+                    print(f"    ✓ ישויות:{n_ent}  זרימות:{n_wf}  חוקים:{n_req}  "
+                          f"מורכבות:{analysis.get('complexity','')}")
+
+                except json.JSONDecodeError as e:
+                    print(f"    ⚠ JSON parse error: {e}")
+                    failed = {'filename': fd['filename'], 'program_name': prog['name'],
+                              'error': f"JSON parse: {e}"}
+                    analyses.append(failed)
+                    append_checkpoint(CHECKPOINT_PATH, failed)
+                    errors += 1
+                except Exception as e:
+                    print(f"    ⚠ {e}")
+                    failed = {'filename': fd['filename'], 'program_name': prog['name'],
+                              'error': str(e)}
+                    analyses.append(failed)
+                    append_checkpoint(CHECKPOINT_PATH, failed)
+                    errors += 1
+
+                time.sleep(API_DELAY)
+    except KeyboardInterrupt:
+        interrupted = True
+        analyzed_now = len(analyses) - skipped
+        print(f"\n\n  ⏸ הופסק ידנית — {analyzed_now} ניתוחים מההרצה הזו נשמרו ב-checkpoint")
+        print(f"    בונה פלט חלקי ממה שנותח עד כה...")
+
+    if skipped:
+        print(f"\n  ↻ {skipped} תוכניות נטענו מה-checkpoint (לא נשלחו שוב ל-API)")
 
     # Save raw analyses
     analyses_path = Path('analyses.json')
@@ -1065,12 +1162,20 @@ def main():
 
     # ── Summary ────────────────────────────────────────────────────────────────
     print("\n" + "=" * 62)
-    print("  הושלם!")
+    if interrupted:
+        print("  הופסק באמצע — נוצר פלט חלקי")
+    else:
+        print("  הושלם!")
     print(f"  ✓ {output_path}")
     print(f"  ✓ {kb_path}")
     print(f"  ✓ {analyses_path}")
     if errors:
         print(f"  ⚠ {errors} תוכניות נכשלו — בדוק analyses.json")
+    if interrupted or errors:
+        print(f"  ↻ הרץ שוב את הסקריפט כדי להמשיך מאותה נקודה "
+              f"(תוכניות שהושלמו לא יישלחו שוב)")
+    elif CHECKPOINT_PATH.exists():
+        print(f"  ℹ checkpoint נשמר ב-{CHECKPOINT_PATH} — מחק אותו כדי לנתח הכל מחדש")
 
     # Print sheet summary
     successful = [a for a in analyses if 'error' not in a]

@@ -5,9 +5,10 @@ Natural ADABAS Technical Specification Generator
 
 Usage:
   1. Place this script in the same folder as your .txt Natural files
-  2. Run: python natural_adabas_spec_generator.py [--workers N]
+  2. Run: python natural_adabas_spec_generator.py [--workers N] [--no-synthesis]
   3. Enter your Gemini API key when prompted
   4. Output: natural_adabas_spec.xlsx + knowledge_base.json + analyses.json
+     + synthesis.json (consolidated entities + system overview)
      Failed programs are listed in errors.log
 
 Resume support:
@@ -53,6 +54,9 @@ CHECKPOINT_PATH = Path('analyses_checkpoint.jsonl')
 
 # Error log — one line per failed program, for a quick status picture
 ERROR_LOG_PATH = Path('errors.log')
+
+# Synthesis checkpoint — consolidated entities (phase 3.5), append-only JSONL
+SYNTHESIS_CHECKPOINT_PATH = Path('synthesis_checkpoint.jsonl')
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STYLES
@@ -396,12 +400,12 @@ def analysis_key(a):
     return (a.get('filename', ''), a.get('program_name', ''))
 
 
-def load_checkpoint(path):
+def load_checkpoint(path, key_fn=analysis_key):
     """
-    Load prior analyses from the JSONL checkpoint file.
-    Returns {(filename, program_name): analysis}. If a program appears more
-    than once (e.g. a failed attempt followed by a successful retry), the
-    last entry wins. A truncated final line (killed mid-write) is skipped.
+    Load prior entries from a JSONL checkpoint file, keyed by key_fn.
+    If a key appears more than once (e.g. a failed attempt followed by a
+    successful retry), the last entry wins. A truncated final line
+    (killed mid-write) is skipped.
     """
     results = {}
     if not path.exists():
@@ -415,7 +419,7 @@ def load_checkpoint(path):
                 a = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            results[analysis_key(a)] = a
+            results[key_fn(a)] = a
     return results
 
 
@@ -587,6 +591,65 @@ DDM_EXTRACT_PROMPT = """
 """
 
 
+SYNTHESIS_PROMPT = """
+{system_context}
+
+הישות (DDM) בשם {entity} זוהתה ב-{n_programs} תוכניות שונות.
+להלן כל התצפיות שנאספו עליה מניתוחי התוכניות:
+
+קובץ ADABAS (ערכים שנצפו): {adabas_files}
+
+תיאורים שניתנו לישות:
+{descriptions}
+
+שדות שנצפו (שם שדה → ערכים שנצפו בתוכניות שונות):
+{fields_block}
+
+תוכניות שמשתמשות בישות: {programs}
+
+=== משימה ===
+מזג את כל התצפיות לרשומה קנונית אחת של הישות:
+- בחר את התיאור המדויק והמלא ביותר (או נסח תיאור חדש שמאחד את כולם)
+- אחד את רשימת השדות: כל שדה מופיע פעם אחת, עם הערכים הנכונים ביותר
+- אם יש סתירות אמיתיות בין תוכניות (סוג שונה, אורך שונה לאותו שדה) — פרט אותן ב-conflicts
+החזר JSON תקני בלבד:
+
+{{
+  "name": "{entity}",
+  "adabas_file": "מספר/שם קובץ ADABAS",
+  "description": "התיאור הקנוני הממוזג",
+  "business_role": "תפקיד הישות במערכת כולה — משפט אחד",
+  "fields": [
+    {{"name": "שם שדה", "label": "תווית בעברית", "type": "string | number | date | boolean | picklist | relation",
+      "length": "אורך", "required": "כן | לא", "description": "תיאור ממוזג"}}
+  ],
+  "conflicts": ["סתירה שדורשת בירור"]
+}}
+"""
+
+OVERVIEW_PROMPT = """
+{system_context}
+
+להלן כל הישויות שזוהו במערכת לאחר איחוד, עם תיאורן ומספר התוכניות שמשתמשות בכל אחת:
+
+{entities_block}
+
+סטטיסטיקות: {n_programs} תוכניות נותחו, {n_entities} ישויות ייחודיות.
+
+=== משימה ===
+כתוב סקירת-על של המערכת כולה. החזר JSON תקני בלבד:
+
+{{
+  "system_purpose": "מה המערכת עושה — פסקה אחת",
+  "domains": [
+    {{"name": "שם תחום עסקי", "description": "תיאור התחום", "entities": ["הישויות השייכות לתחום"]}}
+  ],
+  "key_insights": ["תובנה מרכזית על המערכת"],
+  "open_questions": ["שאלה שדורשת בירור עם בעלי הידע"]
+}}
+"""
+
+
 def build_program_prompt(fd, prog, kb, ddm_cache):
     """Build the analysis prompt for a single program."""
     filename     = fd['filename']
@@ -615,6 +678,216 @@ def build_program_prompt(fd, prog, kb, ddm_cache):
         called_by      = ', '.join(called_by) or 'לא זוהה',
         code           = code,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SYNTHESIS (phase 3.5) — consolidate per-program analyses into one canonical
+# record per entity + a system-level overview
+# ──────────────────────────────────────────────────────────────────────────────
+
+def collect_entity_observations(analyses):
+    """Aggregate every appearance of each entity across all program analyses."""
+    obs = {}
+    for a in analyses:
+        if 'error' in a:
+            continue
+        for e in a.get('entities', []):
+            name = (e.get('name') or '').strip().upper()
+            if not name:
+                continue
+            o = obs.setdefault(name, {'descriptions': [], 'adabas_files': [],
+                                      'programs': [], 'fields': {}})
+            desc = (e.get('description') or '').strip()
+            if desc and desc not in o['descriptions'] and len(o['descriptions']) < 8:
+                o['descriptions'].append(desc)
+            af = str(e.get('adabas_file') or '').strip()
+            if af and af not in o['adabas_files']:
+                o['adabas_files'].append(af)
+            o['programs'].append(a.get('program_name', ''))
+            for f in e.get('fields', []):
+                fn = (f.get('name') or '').strip().upper()
+                if not fn:
+                    continue
+                fo = o['fields'].setdefault(fn, {'labels': [], 'types': [], 'lengths': [],
+                                                 'requireds': [], 'descriptions': []})
+                for src, dst, cap in (('label', 'labels', 4), ('type', 'types', 4),
+                                      ('length', 'lengths', 4), ('required', 'requireds', 2),
+                                      ('description', 'descriptions', 3)):
+                    v = str(f.get(src) or '').strip()
+                    if v and v not in fo[dst] and len(fo[dst]) < cap:
+                        fo[dst].append(v)
+    return obs
+
+
+def build_synthesis_prompt(name, o):
+    field_lines = []
+    for fn, fo in list(o['fields'].items())[:400]:
+        field_lines.append(f"  {fn}: תוויות={fo['labels']} סוגים={fo['types']} "
+                           f"אורכים={fo['lengths']} חובה={fo['requireds']} "
+                           f"תיאורים={fo['descriptions'][:2]}")
+    descriptions = '\n'.join(f"  - {d[:300]}" for d in o['descriptions']) or '  (אין)'
+    programs = sorted(set(o['programs']))
+    progs_txt = ', '.join(programs[:40])
+    if len(programs) > 40:
+        progs_txt += f" ועוד {len(programs) - 40}"
+    return SYNTHESIS_PROMPT.format(
+        system_context = SYSTEM_CONTEXT,
+        entity         = name,
+        n_programs     = len(set(o['programs'])),
+        adabas_files   = ', '.join(o['adabas_files']) or 'לא זוהה',
+        descriptions   = descriptions,
+        fields_block   = '\n'.join(field_lines) or '  (אין)',
+        programs       = progs_txt,
+    )
+
+
+def static_merge_entity(name, o):
+    """No-AI fallback: merge observations mechanically so the sheet is never empty."""
+    fields = []
+    for fn, fo in o['fields'].items():
+        fields.append({
+            'name'       : fn,
+            'label'      : fo['labels'][0] if fo['labels'] else '',
+            'type'       : fo['types'][0] if fo['types'] else '',
+            'length'     : fo['lengths'][0] if fo['lengths'] else '',
+            'required'   : fo['requireds'][0] if fo['requireds'] else '',
+            'description': fo['descriptions'][0] if fo['descriptions'] else '',
+        })
+    return {
+        'name'         : name,
+        'adabas_file'  : o['adabas_files'][0] if o['adabas_files'] else '',
+        'description'  : max(o['descriptions'], key=len, default=''),
+        'business_role': '',
+        'fields'       : sorted(fields, key=lambda f: f['name']),
+        'conflicts'    : [],
+        'consolidation': 'static',  # AI consolidation failed — mechanical merge
+    }
+
+
+def run_synthesis(api_key, analyses, workers):
+    """Consolidate all entities + produce a system overview. Checkpointed:
+    an entity is re-consolidated only if its observation count changed
+    (e.g. failed programs were retried and added data)."""
+    obs = collect_entity_observations(analyses)
+    if not obs:
+        return None
+
+    n_programs = len([a for a in analyses if 'error' not in a])
+    ckpt = load_checkpoint(SYNTHESIS_CHECKPOINT_PATH,
+                           key_fn=lambda a: a.get('entity', ''))
+
+    results = {}
+    tasks   = []
+    for name, o in sorted(obs.items()):
+        n_obs = len(o['programs'])
+        prev  = ckpt.get(name)
+        if prev and 'error' not in prev and prev.get('n_obs') == n_obs:
+            results[name] = prev['record']
+        else:
+            tasks.append((name, o, n_obs))
+
+    print(f"\n── שלב 3.5: סינתזה — איחוד {len(obs)} ישויות ────────────────")
+    if results:
+        print(f"  ↻ {len(results)} ישויות נטענו מה-checkpoint")
+
+    io_lock = threading.Lock()
+    state   = {'completed': 0, 'errors': 0}
+
+    def worker(name, o, n_obs):
+        record, error = None, None
+        try:
+            prompt   = build_synthesis_prompt(name, o)
+            last_err = None
+            for _ in range(2):              # one automatic retry on bad JSON
+                raw = call_gemini(api_key, prompt)
+                try:
+                    record = parse_json_response(raw)
+                    break
+                except json.JSONDecodeError as e:
+                    last_err = e
+            if record is None:
+                error = f"JSON parse: {last_err}"
+        except Exception as e:
+            error = str(e)
+        with io_lock:
+            state['completed'] += 1
+            if error:
+                state['errors'] += 1
+                log_error(ERROR_LOG_PATH, 'SYNTHESIS', name, error)
+                append_checkpoint(SYNTHESIS_CHECKPOINT_PATH,
+                                  {'entity': name, 'n_obs': n_obs, 'error': error})
+                results[name] = static_merge_entity(name, o)
+                print(f"  ⚠ [{state['completed']}/{len(tasks)}] {name}  {error} — מיזוג מכני", flush=True)
+            else:
+                record.setdefault('name', name)
+                append_checkpoint(SYNTHESIS_CHECKPOINT_PATH,
+                                  {'entity': name, 'n_obs': n_obs, 'record': record})
+                results[name] = record
+                print(f"  ✓ [{state['completed']}/{len(tasks)}] {name}  "
+                      f"שדות:{len(record.get('fields', []))}", flush=True)
+
+    interrupted = False
+    if tasks:
+        executor = ThreadPoolExecutor(max_workers=workers)
+        futures  = [executor.submit(worker, *t) for t in tasks]
+        try:
+            for fut in as_completed(futures):
+                fut.result()
+        except KeyboardInterrupt:
+            interrupted = True
+            print("\n  ⏸ הסינתזה הופסקה — ישויות שלא אוחדו ימוזגו מכנית; הרץ שוב להשלמה")
+        finally:
+            try:
+                executor.shutdown(wait=True, cancel_futures=True)
+            except KeyboardInterrupt:
+                executor.shutdown(wait=False, cancel_futures=True)
+        for name, o, n_obs in tasks:       # fill anything still missing
+            if name not in results:
+                results[name] = static_merge_entity(name, o)
+
+    # usage info for the Excel sheet
+    for name, o in obs.items():
+        rec = results.get(name)
+        if rec is not None:
+            progs = sorted(set(o['programs']))
+            rec['used_by_count'] = len(progs)
+            rec['used_by']       = progs
+
+    entities = [results[name] for name in sorted(results)]
+
+    # ── System overview — one call over the consolidated picture ──────────────
+    overview = None
+    ov_prev  = ckpt.get('__OVERVIEW__')
+    if not interrupted:
+        if ov_prev and 'error' not in ov_prev and ov_prev.get('n_obs') == len(entities):
+            overview = ov_prev['record']
+        else:
+            ent_lines = [f"  {e.get('name', '')}: "
+                         f"{e.get('business_role') or e.get('description', '')[:150]} "
+                         f"({e.get('used_by_count', 0)} תוכניות)"
+                         for e in entities[:500]]
+            prompt = OVERVIEW_PROMPT.format(system_context=SYSTEM_CONTEXT,
+                                            entities_block='\n'.join(ent_lines),
+                                            n_programs=n_programs,
+                                            n_entities=len(entities))
+            try:
+                raw      = call_gemini(api_key, prompt)
+                overview = parse_json_response(raw)
+                append_checkpoint(SYNTHESIS_CHECKPOINT_PATH,
+                                  {'entity': '__OVERVIEW__', 'n_obs': len(entities),
+                                   'record': overview})
+                print("  ✓ סקירת מערכת נוצרה")
+            except Exception as e:
+                log_error(ERROR_LOG_PATH, 'SYNTHESIS', '__OVERVIEW__', str(e))
+                print(f"  ⚠ סקירת המערכת נכשלה: {e}")
+
+    synthesis = {'entities': entities, 'overview': overview}
+    with open('synthesis.json', 'w', encoding='utf-8') as f:
+        json.dump(synthesis, f, ensure_ascii=False, indent=2)
+    print(f"  ✓ synthesis.json נשמר ({len(entities)} ישויות מאוחדות)")
+    if state['errors']:
+        print(f"  ⚠ {state['errors']} ישויות נכשלו באיחוד AI ומוזגו מכנית — פירוט ב-{ERROR_LOG_PATH}")
+    return synthesis
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -690,7 +963,24 @@ def build_readme_sheet(wb):
         ("מורכבות", "הערכת מורכבות: פשוט / בינוני / מורכב"),
         ("", "space"),
 
-        ("גיליון 2 — ישויות", "sheet"),
+        ("גיליון 2 — סקירת מערכת", "sheet"),
+        ("נושא / תוכן", "תמונת-על של המערכת כולה: מטרה, תחומים עסקיים, תובנות ושאלות — מסונתז מכלל הניתוחים"),
+        ("", "space"),
+
+        ("גיליון 3 — ישויות מאוחדות", "sheet"),
+        ("ישות / DDM", "שורה אחת לכל ישות במערכת כולה — התוצר המאוחד של כל הניתוחים"),
+        ("תיאור קנוני", "תיאור אחד ממוזג מכל התוכניות שמשתמשות בישות"),
+        ("תפקיד עסקי", "תפקיד הישות במערכת כולה"),
+        ("מס' תוכניות / תוכניות", "כמה ואילו תוכניות משתמשות בישות"),
+        ("קונפליקטים", "סתירות שהתגלו בין תוכניות (סוג/אורך שונים לאותו שדה) — דורש בירור"),
+        ("אופן איחוד", "AI = איחוד מלא; מכני = ה-AI נכשל והמיזוג נעשה אוטומטית"),
+        ("", "space"),
+
+        ("גיליון 4 — שדות מאוחדים", "sheet"),
+        ("ישות / שם שדה / ...", "רשימת השדות הסופית של כל ישות — כל שדה פעם אחת, ללא כפילויות בין תוכניות"),
+        ("", "space"),
+
+        ("גיליון 5 — ישויות (פר תוכנית)", "sheet"),
         ("קובץ", "שם קובץ המקור"),
         ("תוכנית", "שם התוכנית"),
         ("ישות / DDM", "שם ה-DDM — מקביל לטבלה בבסיס נתונים רלציוני"),
@@ -698,7 +988,7 @@ def build_readme_sheet(wb):
         ("תיאור ישות", "הסבר עסקי של מה הישות מייצגת"),
         ("", "space"),
 
-        ("גיליון 3 — שדות", "sheet"),
+        ("גיליון 6 — שדות (פר תוכנית)", "sheet"),
         ("קובץ", "שם קובץ המקור"),
         ("תוכנית", "שם התוכנית"),
         ("ישות", "שם ה-DDM שאליו שייך השדה"),
@@ -710,7 +1000,7 @@ def build_readme_sheet(wb):
         ("תיאור", "הסבר עסקי של השדה ומשמעותו"),
         ("", "space"),
 
-        ("גיליון 4 — זרימות עבודה", "sheet"),
+        ("גיליון 7 — זרימות עבודה", "sheet"),
         ("קובץ", "שם קובץ המקור"),
         ("תוכנית", "שם התוכנית"),
         ("שם זרימה", "שם התהליך העסקי — כל PF-key / פעולה / מסך הוא זרימה נפרדת"),
@@ -722,7 +1012,7 @@ def build_readme_sheet(wb):
         ("טיפול בשגיאות", "מה קורה כשיש שגיאה"),
         ("", "space"),
 
-        ("גיליון 5 — חוקי עסק", "sheet"),
+        ("גיליון 8 — חוקי עסק", "sheet"),
         ("קובץ", "שם קובץ המקור"),
         ("תוכנית", "שם התוכנית"),
         ("זרימה", "שם הזרימה שאליה שייך החוק"),
@@ -733,7 +1023,7 @@ def build_readme_sheet(wb):
         ("חריגות", "מקרים שבהם החוק אינו חל"),
         ("", "space"),
 
-        ("גיליון 6 — הרשאות ותפקידים", "sheet"),
+        ("גיליון 9 — הרשאות ותפקידים", "sheet"),
         ("קובץ", "שם קובץ המקור"),
         ("תוכנית", "שם התוכנית"),
         ("תפקיד", "שם התפקיד — נגזר מבדיקות הרשאה בקוד (לדוגמה: GL-MMAD-RASHAY-SODI)"),
@@ -745,7 +1035,7 @@ def build_readme_sheet(wb):
         ("מחיקה", "הרשאת מחיקה: all | own | none"),
         ("", "space"),
 
-        ("גיליון 7 — אינטגרציות חיצוניות", "sheet"),
+        ("גיליון 10 — אינטגרציות חיצוניות", "sheet"),
         ("קובץ", "שם קובץ המקור"),
         ("תוכנית", "שם התוכנית"),
         ("מערכת חיצונית", "שם המערכת החיצונית — לא כולל תוכניות Natural פנימיות"),
@@ -755,7 +1045,7 @@ def build_readme_sheet(wb):
         ("הערות", "הערות נוספות על האינטגרציה"),
         ("", "space"),
 
-        ("גיליון 8 — גרף קריאות", "sheet"),
+        ("גיליון 11 — גרף קריאות", "sheet"),
         ("קובץ מקור", "קובץ ה-.txt שממנו מגיעה הקריאה"),
         ("תוכנית מקור", "שם התוכנית שמבצעת את הקריאה"),
         ("סוג", "סוג התלות: CALLNAT (קריאה לתוכנית) | DDM (שימוש בטבלה) | ADABAS_FILE"),
@@ -763,13 +1053,13 @@ def build_readme_sheet(wb):
         ("מטרה", "הסבר של מטרת הקריאה"),
         ("", "space"),
 
-        ("גיליון 9 — גלוסרי", "sheet"),
+        ("גיליון 12 — גלוסרי", "sheet"),
         ("מונח", "המונח הטכני (לרוב באנגלית/עברית מקוצרת) כפי שמופיע בקוד"),
         ("הגדרה", "הסבר בעברית של משמעות המונח"),
         ("קובץ", "הקובץ שממנו חולץ המונח"),
         ("", "space"),
 
-        ("גיליון 10 — שאלות פתוחות", "sheet"),
+        ("גיליון 13 — שאלות פתוחות", "sheet"),
         ("קובץ", "שם קובץ המקור"),
         ("תוכנית", "שם התוכנית"),
         ("שאלה", "שאלה שעלתה בניתוח ודורשת בירור עם בעל הידע"),
@@ -806,13 +1096,77 @@ def build_readme_sheet(wb):
     ws.sheet_view.rightToLeft = True
 
 
-def build_excel(analyses, kb, output_path):
+def build_synthesis_sheets(wb, synthesis):
+    """Sheets 2-4: system overview + consolidated entities/fields (phase 3.5)."""
+    overview = synthesis.get('overview')
+    entities = synthesis.get('entities') or []
+
+    # ── 2. System overview ───────────────────────────────────────────────────
+    ws = wb.create_sheet("סקירת מערכת", 2)
+    add_header_row(ws, ["נושא", "תוכן"])
+    rows = []
+    if overview:
+        rows.append(("מטרת המערכת", overview.get('system_purpose', '')))
+        for d in overview.get('domains', []):
+            ents = ', '.join(d.get('entities', []))
+            rows.append((f"תחום: {d.get('name', '')}",
+                         f"{d.get('description', '')}\nישויות: {ents}"))
+        for ins in overview.get('key_insights', []):
+            rows.append(("תובנה", ins))
+        for q in overview.get('open_questions', []):
+            rows.append(("שאלה פתוחה", q))
+    else:
+        rows.append(("—", "הסקירה לא נוצרה בהרצה זו — הרץ שוב להשלמה"))
+    for i, (k, v) in enumerate(rows):
+        ws.append([k, v])
+        for c in ws[ws.max_row]:
+            cell_style(c, alt=(i % 2 == 0))
+    set_col_widths(ws, {'A': 25, 'B': 100})
+    ws.sheet_view.rightToLeft = True
+
+    # ── 3. Consolidated entities ─────────────────────────────────────────────
+    ws = wb.create_sheet("ישויות מאוחדות", 3)
+    add_header_row(ws, ["ישות / DDM", "קובץ ADABAS", "תיאור קנוני", "תפקיד עסקי",
+                        "מס' תוכניות", "תוכניות", "קונפליקטים", "אופן איחוד"])
+    for i, e in enumerate(entities):
+        progs = e.get('used_by', [])
+        progs_txt = ', '.join(progs[:30])
+        if len(progs) > 30:
+            progs_txt += f" ועוד {len(progs) - 30}"
+        ws.append([
+            e.get('name', ''), e.get('adabas_file', ''), e.get('description', ''),
+            e.get('business_role', ''), e.get('used_by_count', ''),
+            progs_txt, '\n'.join(e.get('conflicts') or []),
+            'מכני' if e.get('consolidation') == 'static' else 'AI',
+        ])
+        for c in ws[ws.max_row]:
+            cell_style(c, alt=(i % 2 == 0))
+    set_col_widths(ws, {'A':22,'B':14,'C':55,'D':40,'E':12,'F':45,'G':40,'H':12})
+
+    # ── 4. Consolidated fields ───────────────────────────────────────────────
+    ws = wb.create_sheet("שדות מאוחדים", 4)
+    add_header_row(ws, ["ישות", "שם שדה", "תווית", "סוג", "אורך", "חובה", "תיאור"])
+    i = 0
+    for e in entities:
+        for f in e.get('fields', []):
+            ws.append([e.get('name', ''), f.get('name', ''), f.get('label', ''),
+                       f.get('type', ''), f.get('length', ''), f.get('required', ''),
+                       f.get('description', '')])
+            for c in ws[ws.max_row]:
+                cell_style(c, alt=(i % 2 == 0))
+            i += 1
+    set_col_widths(ws, {'A':22,'B':22,'C':22,'D':12,'E':10,'F':10,'G':55})
+
+
+def build_excel(analyses, kb, output_path, synthesis=None):
     wb = openpyxl.Workbook()
-    build_readme_sheet(wb)
 
     # ── 1. Summary ────────────────────────────────────────────────────────────
+    # Grab the default sheet BEFORE inserting the README at index 0 —
+    # otherwise wb.active points at the README and the summary lands inside it
     ws1 = wb.active
     ws1.title = "סיכום"
+    build_readme_sheet(wb)
     add_header_row(ws1, ["קובץ", "תוכנית", "מטרה עסקית", "DDMs", "CALLNAT", "מורכבות"])
 
     for i, a in enumerate(analyses):
@@ -833,6 +1187,9 @@ def build_excel(analyses, kb, output_path):
             cell_style(c, alt=(i % 2 == 0))
 
     set_col_widths(ws1, {'A':25,'B':25,'C':55,'D':30,'E':30,'F':15})
+
+    if synthesis:
+        build_synthesis_sheets(wb, synthesis)
 
     # ── 2. Entities ───────────────────────────────────────────────────────────
     ws2 = wb.create_sheet("ישויות")
@@ -1202,10 +1559,19 @@ def main():
         json.dump(analyses, f, ensure_ascii=False, indent=2)
     print(f"\n  ✓ {analyses_path} נשמר")
 
+    # ── PHASE 3.5: Synthesis — consolidate entities + system overview ─────────
+    synthesis = None
+    if interrupted:
+        print("\n  (הסינתזה תרוץ בהרצה הבאה, אחרי שכל התוכניות ינותחו)")
+    elif '--no-synthesis' in sys.argv:
+        print("\n  (הסינתזה דולגה — --no-synthesis)")
+    else:
+        synthesis = run_synthesis(api_key, analyses, workers)
+
     # ── PHASE 4: Build Excel ───────────────────────────────────────────────────
     print("\n── שלב 4: בניית Excel ─────────────────────────────────────")
     output_path = Path('natural_adabas_spec.xlsx')
-    build_excel(analyses, kb, output_path)
+    build_excel(analyses, kb, output_path, synthesis)
 
     # ── Summary ────────────────────────────────────────────────────────────────
     print("\n" + "=" * 62)
@@ -1216,6 +1582,8 @@ def main():
     print(f"  ✓ {output_path}")
     print(f"  ✓ {kb_path}")
     print(f"  ✓ {analyses_path}")
+    if synthesis:
+        print(f"  ✓ synthesis.json")
     if errors:
         print(f"  ⚠ {errors} תוכניות נכשלו — פירוט ב-{ERROR_LOG_PATH}")
     if interrupted or errors:

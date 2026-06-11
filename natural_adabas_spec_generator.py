@@ -103,6 +103,26 @@ RE_END_SUBR     = re.compile(r'^END-SUBROUTINE', re.IGNORECASE)
 RE_IF           = re.compile(r'^\s*IF\b', re.IGNORECASE)
 RE_LOOP         = re.compile(r'^\s*(FOR|REPEAT|WHILE|READ|FIND)\b', re.IGNORECASE)
 
+# Executable verbs — used to tell logic members from data-only members
+# (LDA/GDA/Copycode). Comment lines start with '*' so they never match.
+RE_EXEC_VERB    = re.compile(
+    r'^\s*(IF|FOR|REPEAT|DECIDE|COMPUTE|MOVE|ASSIGN|PERFORM|CALLNAT|CALL|INPUT|'
+    r'WRITE|DISPLAY|PRINT|FETCH|STORE|UPDATE|DELETE|READ|FIND|HISTOGRAM|ESCAPE)\b',
+    re.IGNORECASE | re.MULTILINE)
+
+
+def classify_program(code):
+    """
+    'data'  = declarations only (LDA/GDA/Copycode) — analyzed with a short
+              field-extraction prompt instead of the full analysis prompt.
+    'logic' = everything else (the conservative default).
+    """
+    if RE_EXEC_VERB.search(code):
+        return 'logic'
+    if RE_DEFINE_DATA.search(code):
+        return 'data'
+    return 'logic'
+
 
 RE_END_PROG_SEMI     = re.compile(r'^\s*END\s*;?\s*$', re.IGNORECASE)
 RE_PROG_NAME_CMT     = re.compile(r'^\*{1,2}\s*(?:PROGRAM|PROG|MODULE|NAME|ROUTINE)\s*[:\-]?\s*([A-Z0-9_-]+)', re.IGNORECASE)
@@ -280,6 +300,10 @@ def parse_file(filepath):
             db_ops.append({'op': m.group(1).upper(), 'line': i, 'context': s[:80]})
 
     programs = split_into_programs(content, filename)
+    for prog in programs:
+        prog['callnats'] = sorted({m.group(1).upper()
+                                   for m in RE_CALLNAT.finditer(prog['code'])})
+        prog['ptype']    = classify_program(prog['code'])
 
     return {
         'filename' : filename,
@@ -551,6 +575,8 @@ PROGRAM_ANALYSIS_PROMPT = """
 תוכנית: {program_name}
 DDMs בשימוש בקובץ כולו: {ddms}
 קורא ל (CALLNAT): {callnats}
+תקצירי התוכניות הנקראות (מניתוח קודם — השתמש בהם להבנת הזרימה):
+{callee_summaries}
 נקרא מ: {called_by}
 
 === קוד התוכנית ===
@@ -738,34 +764,59 @@ OVERVIEW_PROMPT = """
 """
 
 
-def build_program_prompt(fd, prog, kb, ddm_cache):
+def build_program_prompt(fd, prog, kb, ddm_cache, purpose_cache=None):
     """Build the analysis prompt for a single program."""
     filename     = fd['filename']
     prog_name    = prog['name']
     code         = prog['code'][:MAX_PROGRAM_CHARS]
+    callnats     = prog.get('callnats', fd['callnats'])
 
     # Who calls this program?
     called_by = [f for f, calls in kb['call_graph'].items()
                  if prog_name.upper() in [c.upper() for c in calls]]
 
-    # DDM context from earlier extractions
-    ddm_context = ""
-    for ddm_name in fd['ddms']:
-        if ddm_name in ddm_cache:
-            fields_summary = ", ".join(
-                f.get('name', '') for f in ddm_cache[ddm_name].get('fields', [])[:15]
-            )
-            ddm_context += f"  {ddm_name}: [{fields_summary}]\n"
+    # One-line summaries of callee programs analyzed in earlier waves
+    callee_lines = []
+    for cn in callnats:
+        purpose = (purpose_cache or {}).get(cn)
+        if purpose:
+            callee_lines.append(f"  {cn}: {purpose[:200]}")
 
     return PROGRAM_ANALYSIS_PROMPT.format(
-        system_context = SYSTEM_CONTEXT,
-        filename       = filename,
-        program_name   = prog_name,
-        ddms           = ', '.join(fd['ddms']) or 'לא זוהו',
-        callnats       = ', '.join(fd['callnats']) or 'אין',
-        called_by      = ', '.join(called_by) or 'לא זוהה',
-        code           = code,
+        system_context   = SYSTEM_CONTEXT,
+        filename         = filename,
+        program_name     = prog_name,
+        ddms             = ', '.join(fd['ddms']) or 'לא זוהו',
+        callnats         = ', '.join(callnats) or 'אין',
+        callee_summaries = '\n'.join(callee_lines) or '  (אין מידע)',
+        called_by        = ', '.join(called_by) or 'לא זוהה',
+        code             = code,
     )
+
+
+def data_analysis_from_ddms(fd, prog, raw):
+    """Convert a DDM-extraction answer (data-only member) into the standard
+    analysis shape so it flows into the same checkpoint/Excel/synthesis."""
+    entities = []
+    for d in (raw or {}).get('ddms', []):
+        entities.append({
+            'name'       : d.get('name', ''),
+            'adabas_file': d.get('adabas_file', ''),
+            'description': d.get('description', ''),
+            'fields'     : [{'name': f.get('name', ''),
+                             'label': f.get('natural_name', ''),
+                             'type': f.get('type', ''),
+                             'length': f.get('length', ''),
+                             'required': '',
+                             'description': f.get('description', '')}
+                            for f in d.get('fields', [])],
+        })
+    return {'filename': fd['filename'], 'program_name': prog['name'],
+            'program_type': 'data',
+            'business_purpose': 'אזור נתונים (LDA/GDA/Copycode) — הגדרות בלבד, ללא לוגיקה',
+            'complexity': 'פשוט', 'entities': entities, 'workflows': [],
+            'permissions': [], 'integrations': [], 'dependencies': [],
+            'glossary': [], 'open_questions': []}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1572,13 +1623,43 @@ def main():
                 tasks.append((seq, fd, prog))
     skipped = len(order) - len(tasks)
 
-    # Rebuild the DDM cache from checkpointed analyses so resumed runs give
-    # the remaining programs the same DDM context as an uninterrupted run
-    ddm_cache = {}
+    n_data = sum(1 for _, _, p in tasks if p.get('ptype') == 'data')
+    if n_data:
+        print(f"  סיווג: {len(tasks) - n_data} תוכניות לוגיקה, "
+              f"{n_data} אזורי נתונים (פרומפט מצומצם)")
+
+    # Rebuild the DDM cache and the callee-purpose cache from checkpointed
+    # analyses so resumed runs give the remaining programs the same context
+    ddm_cache     = {}
+    purpose_cache = {}   # PROG NAME → business_purpose, feeds caller prompts
     for a in checkpoint.values():
         if 'error' not in a:
             for e in a.get('entities', []):
                 ddm_cache[e['name']] = e
+            if a.get('business_purpose'):
+                purpose_cache[(a.get('program_name') or '').upper()] = a['business_purpose']
+
+    # ── Wave ordering: callees before callers, so caller prompts can include
+    #    one-line summaries of the subprograms they CALLNAT ───────────────────
+    name_to_tasks = defaultdict(list)
+    for t in tasks:
+        name_to_tasks[t[2]['name'].upper()].append(t)
+    pending  = set(name_to_tasks)
+    calls_of = {}
+    for n, ts in name_to_tasks.items():
+        cs = set()
+        for t in ts:
+            cs |= {c for c in t[2].get('callnats', []) if c in pending and c != n}
+        calls_of[n] = cs
+
+    waves, assigned, left = [], set(), set(pending)
+    while left:
+        ready = {n for n in left if calls_of[n] <= assigned}
+        if not ready:           # call cycle — analyze the rest together
+            ready = set(left)
+        waves.append(sorted(ready))
+        assigned |= ready
+        left     -= ready
 
     io_lock = threading.Lock()
     state   = {'completed': 0, 'errors': 0, 'start': time.time()}
@@ -1602,6 +1683,8 @@ def main():
                 entry = analysis
                 for e in analysis.get('entities', []):
                     ddm_cache[e['name']] = e
+                if analysis.get('business_purpose'):
+                    purpose_cache[prog['name'].upper()] = analysis['business_purpose']
                 n_ent = len(analysis.get('entities', []))
                 n_wf  = len(analysis.get('workflows', []))
                 n_req = sum(len(wf.get('business_rules', [])) for wf in analysis.get('workflows', []))
@@ -1612,19 +1695,37 @@ def main():
 
     def worker(seq_no, fd, prog):
         try:
-            prompt          = build_program_prompt(fd, prog, kb, ddm_cache)
-            analysis, error = call_and_parse(api_key, prompt)
+            if prog.get('ptype') == 'data':
+                # data-only member — short field-extraction prompt
+                prompt = DDM_EXTRACT_PROMPT.format(system_context=SYSTEM_CONTEXT,
+                                                   filename=fd['filename'],
+                                                   code=prog['code'][:MAX_PROGRAM_CHARS])
+                raw, error = call_and_parse(api_key, prompt)
+                analysis   = data_analysis_from_ddms(fd, prog, raw) if not error else None
+            else:
+                prompt = build_program_prompt(fd, prog, kb, ddm_cache, purpose_cache)
+                analysis, error = call_and_parse(api_key, prompt)
+                if analysis is not None:
+                    analysis['program_type'] = 'logic'
         except Exception as e:
             analysis, error = None, str(e)
         handle_result(seq_no, fd, prog, analysis, error)
 
     interrupted = False
     if tasks:
+        if len(waves) > 1:
+            print(f"  סדר ניתוח לפי גרף קריאות: {len(waves)} גלים "
+                  f"(תת-תוכניות קודם, ואז הקוראים להן)")
         executor = ThreadPoolExecutor(max_workers=workers)
-        futures  = [executor.submit(worker, *t) for t in tasks]
+        futures  = []
         try:
-            for fut in as_completed(futures):
-                fut.result()
+            for w_idx, wave_names in enumerate(waves):
+                wave_tasks = [t for n in wave_names for t in name_to_tasks[n]]
+                if len(waves) > 1:
+                    print(f"  ── גל {w_idx + 1}/{len(waves)} ({len(wave_tasks)} תוכניות) ──")
+                futures = [executor.submit(worker, *t) for t in wave_tasks]
+                for fut in as_completed(futures):
+                    fut.result()
         except KeyboardInterrupt:
             interrupted = True
             print(f"\n  ⏸ הופסק ידנית — ממתין לקריאות שכבר באוויר שיסתיימו (עד כמה דקות)...")

@@ -102,9 +102,52 @@ def freeze_header(ws):
 RE_DEFINE_DATA  = re.compile(r'DEFINE\s+DATA', re.IGNORECASE)
 RE_END_DEFINE   = re.compile(r'END-DEFINE', re.IGNORECASE)
 # OF is optional in Natural: "01 TASH VIEW NH-TASHLUMIM" is valid syntax
-RE_VIEW_OF      = re.compile(r'\bVIEW\s+(?:OF\s+)?([A-Z][A-Z0-9_-]+)', re.IGNORECASE)
+# OF is optional in Natural: "01 TASH VIEW NH-TASHLUMIM" is valid syntax.
+# The lookbehind keeps view *variables* like "LINES-VIEW" from triggering a
+# match that would swallow the real "VIEW OF <ddm>" right after them.
+RE_VIEW_OF      = re.compile(r'(?<![\w-])VIEW\s+(?:OF\s+)?([A-Z][A-Z0-9_-]+)', re.IGNORECASE)
 RE_CALLNAT      = re.compile(r"CALLNAT\s+['\"]?([A-Z0-9_-]+)['\"]?", re.IGNORECASE)
+# FETCH [RETURN] 'PROG' — a program transfer; models often mislabel it CALLNAT
+RE_FETCH        = re.compile(r"FETCH\s+(?:RETURN\s+)?['\"]([A-Z0-9_-]+)['\"]", re.IGNORECASE)
 RE_PERFORM      = re.compile(r'PERFORM\s+([A-Z0-9_-]+)', re.IGNORECASE)
+
+# English words that follow "VIEW" in comments/DML and are never DDM names
+VIEW_STOPWORDS  = {'OF', 'VIEW', 'BY', 'FOR', 'IN', 'TO', 'WITH', 'WHICH',
+                   'BEING', 'LOCAL', 'UPDATE', 'THE', 'AND', 'AS', 'ON', 'IS',
+                   'GETS', 'FROM', 'INTO', 'THAT', 'THIS'}
+
+
+def _code_lines(code, include_comments=False):
+    """Yield statement lines, skipping comment lines and inline /* comments."""
+    for line in code.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if include_comments:
+            yield s
+        elif not s.startswith('*'):
+            yield s.split('/*')[0]
+
+
+def extract_views(code, include_comments=False):
+    """DDM names referenced via VIEW [OF] — comment-free by default so the
+    validator doesn't get junk from English comments ("VIEW WHICH GETS...")."""
+    names = set()
+    for s in _code_lines(code, include_comments):
+        for m in RE_VIEW_OF.finditer(s):
+            n = m.group(1).upper()
+            if n not in VIEW_STOPWORDS:
+                names.add(n)
+    return names
+
+
+def extract_calls(code, regex):
+    """Call/transfer targets from statement lines only — a commented-out
+    CALLNAT is not a live dependency and must not count as a 'miss'."""
+    names = set()
+    for s in _code_lines(code):
+        names.update(m.group(1).upper() for m in regex.finditer(s))
+    return names
 RE_DB_OP        = re.compile(r'\b(READ|FIND|STORE|UPDATE|DELETE|GET\s+SAME|HISTOGRAM)\b', re.IGNORECASE)
 RE_PROGRAM_HDR  = re.compile(r'^\*\s*(?:PROGRAM|MODULE|NAME|ROUTINE)\s*[:\-]?\s*(\S+)', re.IGNORECASE)
 RE_SUBR_DEF     = re.compile(r'^DEFINE\s+SUBROUTINE\s+([A-Z0-9_-]+)', re.IGNORECASE)
@@ -323,12 +366,11 @@ def parse_file(filepath):
     programs = split_into_programs(content, filename)
     for prog in programs:
         prog['code']     = strip_source_prefix(prog['code'])
-        prog['callnats'] = sorted({m.group(1).upper()
-                                   for m in RE_CALLNAT.finditer(prog['code'])})
+        prog['callnats'] = sorted(extract_calls(prog['code'], RE_CALLNAT))
+        prog['fetches']  = sorted(extract_calls(prog['code'], RE_FETCH))
         prog['ptype']    = classify_program(prog['code'])
         prog['hash']     = program_code_hash(prog['code'])
-        prog['ddms']     = sorted({m.group(1).upper()
-                                   for m in RE_VIEW_OF.finditer(prog['code'])})
+        prog['ddms']     = sorted(extract_views(prog['code']))
 
     # File-level scan over the de-prefixed source
     ddms      = set()
@@ -389,6 +431,19 @@ def _norm_name(s):
     return re.sub(r'[^A-Z0-9]', '', (s or '').upper())
 
 
+def _name_variants(s):
+    """AI entity names sometimes come as 'NH-IKUVIM (IKUVIM)' — DDM plus view
+    alias. Return normalized variants so either part can match the code."""
+    s = (s or '').strip()
+    if '(' not in s:
+        return {_norm_name(s)} - {''}
+    variants = {_norm_name(s.split('(')[0])}
+    m = re.search(r'\(([^)]*)\)', s)
+    if m:
+        variants.add(_norm_name(m.group(1)))
+    return variants - {''}
+
+
 def build_validation(files_data, analyses):
     """
     Cross-check the static regex findings against what the AI reported,
@@ -403,13 +458,19 @@ def build_validation(files_data, analyses):
     """
     by_key = {(a.get('filename', ''), a.get('program_name', '')): a for a in analyses}
 
-    # Global static inventories — for telling attribution issues from inventions
-    all_ddms_n = {_norm_name(d) for fd in files_data for d in fd['ddms']}
+    # Global static inventories — for telling attribution issues from inventions.
+    # The DDM inventory includes comment-mentioned views (e.g. "/* VIEW X" next
+    # to LOCAL USING) so LDA-defined entities tier as misattribution, not
+    # hallucination.
+    all_ddms_n = set()
     all_targets_n = set()                       # known program names + call targets
     for fd in files_data:
         for p in fd['programs']:
+            all_ddms_n.update(_norm_name(d)
+                              for d in extract_views(p['code'], include_comments=True))
             all_targets_n.add(_norm_name(p['name']))
             all_targets_n.update(_norm_name(c) for c in p.get('callnats', []))
+            all_targets_n.update(_norm_name(c) for c in p.get('fetches', []))
 
     rows = []
     for fd in files_data:
@@ -418,32 +479,35 @@ def build_validation(files_data, analyses):
             a = by_key.get((fd['filename'], prog['name']))
             if not a or 'error' in a:
                 continue
-            code           = prog['code']
-            static_ddms    = {m.group(1).upper() for m in RE_VIEW_OF.finditer(code)}
+            static_ddms    = prog.get('ddms', [])
             static_ddms_n  = {_norm_name(d) for d in static_ddms}
-            static_calls   = {m.group(1).upper() for m in RE_CALLNAT.finditer(code)}
-            static_calls_n = {_norm_name(c) for c in static_calls}
+            # FETCH targets count as calls — models often label them CALLNAT
+            static_calls   = set(prog.get('callnats', []))
+            static_calls_n = {_norm_name(c) for c in static_calls} \
+                             | {_norm_name(c) for c in prog.get('fetches', [])}
             ai_entities    = {(e.get('name') or '').strip().upper()
                               for e in a.get('entities', [])} - {''}
+            ai_entities_n  = set().union(*(_name_variants(e) for e in ai_entities)) \
+                             if ai_entities else set()
             ai_callnats    = {(d.get('name') or '').strip().upper()
                               for d in a.get('dependencies', [])
                               if (d.get('type') or '').upper() == 'CALLNAT'} - {''}
 
             for name in sorted(ai_entities):
-                n = _norm_name(name)
-                if n in static_ddms_n:
+                variants = _name_variants(name)
+                if variants & static_ddms_n:
                     continue
-                if n in file_ddms_n:
+                if variants & file_ddms_n:
                     rows.append((fd['filename'], prog['name'], 'ישות', name,
                                  'שיוך שגוי — הישות קיימת בקובץ אך אין לה VIEW OF בתוכנית זו (ייתכן LDA חיצוני)'))
-                elif n in all_ddms_n:
+                elif variants & all_ddms_n:
                     rows.append((fd['filename'], prog['name'], 'ישות', name,
                                  'שיוך שגוי — הישות קיימת במערכת אך לא בתוכנית זו'))
                 else:
                     rows.append((fd['filename'], prog['name'], 'ישות', name,
                                  'הישות לא נמצאה בשום מקום במערכת — חשד להזיה'))
             for name in sorted(static_ddms):
-                if _norm_name(name) not in {_norm_name(e) for e in ai_entities}:
+                if _norm_name(name) not in ai_entities_n:
                     rows.append((fd['filename'], prog['name'], 'ישות', name,
                                  'נמצא VIEW OF בקוד אך ה-AI לא דיווח על הישות — פספוס'))
 
@@ -690,7 +754,9 @@ def run_review(sample_size=8):
     print(f"\n  {out_path} created — open in a browser and review program by program")
 
 
-PACK_CODE_CHAR_CAP = 40_000   # per program, keeps the pack sendable
+# Per-program source cap in the pack. 40K truncated large programs mid-logic
+# (review pack cut two 6,000-line programs at ~1,050 lines) — keep it generous.
+PACK_CODE_CHAR_CAP = 250_000
 
 
 def run_pack(sample_size=8):
@@ -979,6 +1045,31 @@ DDMs נוספים בקובץ — להקשר בלבד, אל תדווח עליהם
 חשוב: דווח ב-entities רק על ישויות שתוכנית זו באמת משתמשת בהן —
 כאלה שמופיעות ב-VIEW OF בקוד שלה או ששדותיהן נקראים/נכתבים בקוד בפועל.
 
+כללי דיוק מחייבים:
+1. dependencies: כלול אך ורק תלות שאתה יכול להצביע על השורה שבה היא מופיעה
+   בקוד התוכנית. אל תכלול שמות מרשימות ההקשר למעלה. שורות הערה (מתחילות
+   ב-*) אינן תלות. הבחן בין CALLNAT (תת-תוכנית), FETCH / FETCH RETURN
+   (העברת שליטה לתוכנית) ו-PERFORM (שגרה פנימית — לא תלות חיצונית).
+2. ב-logic של חוקי עסק: צטט את התנאי כפי שהוא בקוד — ערכים מדויקים, כיוון
+   ההשוואה (LT/LE/GT/GE/EQ/NE), וה-IF העוטף שקובע מתי החוק בכלל נבדק.
+3. סמנטיקת Natural שחובה לדייק בה:
+   - DECIDE ... WHEN ANY מתבצע כאשר תנאי כלשהו התקיים (זה לא "אחרת"!);
+     WHEN NONE הוא ה"אחרת".
+   - ESCAPE ROUTINE מסיים את השגרה/תת-התוכנית מיד; ESCAPE BOTTOM יוצא
+     מהלולאה והביצוע ממשיך אחריה; ESCAPE TOP חוזר לראש הלולאה.
+   - READ ... STARTING FROM היא קריאת מיקום (>=) ולא התאמה מדויקת.
+4. לכל ענף שגיאה / IF NO RECORDS FOUND: ציין מה מתבצע אחרי הענף בפועל
+   (האם הקריאה הבאה עדיין מתבצעת? עם אילו ערכים?).
+5. משמעות עסקית של ערכי קוד (סטטוסים, קודי פעולה) שאינה כתובה בקוד או
+   בהערותיו — סמן "(משוער)" ואל תציג כעובדה.
+6. אם זו תת-תוכנית (SUBPROGRAM עם PARAMETER): תעד את חוזה הפרמטרים —
+   אילו שדות קלט, אילו פלט, והיכן בקוד כל פרמטר פלט נקבע. זה המידע
+   החשוב ביותר לתוכניות הקוראות.
+7. לפני כתיבת workflows: מנה לעצמך את כל מקשי ה-PF, כל ענפי DECIDE על
+   קוד פעולה, וכל DEFINE SUBROUTINE — וכסה את כולם. אל תדלג על נתיבים.
+8. קוד שמסומן כהערה (גם CALLNAT בהערה) אינו פעיל — אל תדווח עליו כחוק
+   או כתלות; מותר לציין אותו ב-open_questions.
+
 {{
   "filename": "{filename}",
   "program_name": "{program_name}",
@@ -1215,6 +1306,34 @@ def data_analysis_from_ddms(fd, prog, raw):
             'complexity': 'פשוט', 'entities': entities, 'workflows': [],
             'permissions': [], 'integrations': [], 'dependencies': [],
             'glossary': [], 'open_questions': []}
+
+
+def sanitize_dependencies(analysis, prog):
+    """
+    Drop CALLNAT-type dependencies with no anchor in this program's code.
+    Models echo context lists into dependencies (review found 73 phantom
+    CALLNATs in one program, including steplib tokens) — CALLNAT/FETCH are
+    syntactically explicit, so anything not in the static sets is noise.
+    Relabels FETCH targets reported as CALLNAT. DDM/file deps are kept
+    (they can legitimately come from external LDAs).
+    """
+    deps = analysis.get('dependencies')
+    if not isinstance(deps, list):
+        return
+    calls_n   = {_norm_name(c) for c in prog.get('callnats', [])}
+    fetches_n = {_norm_name(c) for c in prog.get('fetches', [])}
+    kept = []
+    for d in deps:
+        if not isinstance(d, dict):
+            continue
+        if (d.get('type') or '').upper() == 'CALLNAT':
+            n = _norm_name(d.get('name'))
+            if n in fetches_n and n not in calls_n:
+                d['type'] = 'FETCH'
+            elif n not in calls_n:
+                continue
+        kept.append(d)
+    analysis['dependencies'] = kept
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2166,6 +2285,7 @@ def main():
                 analysis, error = call_and_parse(api_key, prompt)
                 if analysis is not None:
                     analysis['program_type'] = 'logic'
+                    sanitize_dependencies(analysis, prog)
         except Exception as e:
             analysis, error = None, str(e)
         handle_result(seq_no, fd, prog, analysis, error)

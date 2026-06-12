@@ -319,6 +319,8 @@ def parse_file(filepath):
                                    for m in RE_CALLNAT.finditer(prog['code'])})
         prog['ptype']    = classify_program(prog['code'])
         prog['hash']     = program_code_hash(prog['code'])
+        prog['ddms']     = sorted({m.group(1).upper()
+                                   for m in RE_VIEW_OF.finditer(prog['code'])})
 
     return {
         'filename' : filename,
@@ -357,41 +359,83 @@ def build_knowledge_base(files_data):
     }
 
 
+def _norm_name(s):
+    """Normalize a technical name for fuzzy matching (strip punctuation/case)."""
+    return re.sub(r'[^A-Z0-9]', '', (s or '').upper())
+
+
 def build_validation(files_data, analyses):
     """
     Cross-check the static regex findings against what the AI reported,
     per program. No API calls. Returns rows of:
       (filename, program, kind, name, finding)
-    AI claims with no anchor in the code are suspected hallucinations;
-    code findings the AI didn't report are misses.
+
+    Severity tiers for AI claims with no anchor in the program's own code:
+      - the name exists elsewhere (same file / anywhere in the system, e.g.
+        defined in an external LDA) → "שיוך שגוי" (attribution issue, mild)
+      - the name exists nowhere in the system → "חשד להזיה" (real concern)
+    Code findings the AI didn't report are misses.
     """
     by_key = {(a.get('filename', ''), a.get('program_name', '')): a for a in analyses}
+
+    # Global static inventories — for telling attribution issues from inventions
+    all_ddms_n = {_norm_name(d) for fd in files_data for d in fd['ddms']}
+    all_targets_n = set()                       # known program names + call targets
+    for fd in files_data:
+        for p in fd['programs']:
+            all_targets_n.add(_norm_name(p['name']))
+            all_targets_n.update(_norm_name(c) for c in p.get('callnats', []))
+
     rows = []
     for fd in files_data:
+        file_ddms_n = {_norm_name(d) for d in fd['ddms']}
         for prog in fd['programs']:
             a = by_key.get((fd['filename'], prog['name']))
             if not a or 'error' in a:
                 continue
-            code         = prog['code']
-            static_ddms  = {m.group(1).upper() for m in RE_VIEW_OF.finditer(code)}
-            static_calls = {m.group(1).upper() for m in RE_CALLNAT.finditer(code)}
-            ai_entities  = {(e.get('name') or '').strip().upper()
-                            for e in a.get('entities', [])} - {''}
-            ai_callnats  = {(d.get('name') or '').strip().upper()
-                            for d in a.get('dependencies', [])
-                            if (d.get('type') or '').upper() == 'CALLNAT'} - {''}
-            for name in sorted(ai_entities - static_ddms):
-                rows.append((fd['filename'], prog['name'], 'ישות', name,
-                             'ה-AI דיווח על הישות אך לא נמצא VIEW OF בקוד — חשד להזיה (או הגדרה ב-LDA חיצוני)'))
-            for name in sorted(static_ddms - ai_entities):
-                rows.append((fd['filename'], prog['name'], 'ישות', name,
-                             'נמצא VIEW OF בקוד אך ה-AI לא דיווח על הישות — פספוס'))
-            for name in sorted(ai_callnats - static_calls):
-                rows.append((fd['filename'], prog['name'], 'CALLNAT', name,
-                             'ה-AI דיווח על קריאה אך לא נמצא CALLNAT בקוד — חשד להזיה'))
-            for name in sorted(static_calls - ai_callnats):
-                rows.append((fd['filename'], prog['name'], 'CALLNAT', name,
-                             'נמצא CALLNAT בקוד אך ה-AI לא דיווח עליו — פספוס'))
+            code           = prog['code']
+            static_ddms    = {m.group(1).upper() for m in RE_VIEW_OF.finditer(code)}
+            static_ddms_n  = {_norm_name(d) for d in static_ddms}
+            static_calls   = {m.group(1).upper() for m in RE_CALLNAT.finditer(code)}
+            static_calls_n = {_norm_name(c) for c in static_calls}
+            ai_entities    = {(e.get('name') or '').strip().upper()
+                              for e in a.get('entities', [])} - {''}
+            ai_callnats    = {(d.get('name') or '').strip().upper()
+                              for d in a.get('dependencies', [])
+                              if (d.get('type') or '').upper() == 'CALLNAT'} - {''}
+
+            for name in sorted(ai_entities):
+                n = _norm_name(name)
+                if n in static_ddms_n:
+                    continue
+                if n in file_ddms_n:
+                    rows.append((fd['filename'], prog['name'], 'ישות', name,
+                                 'שיוך שגוי — הישות קיימת בקובץ אך אין לה VIEW OF בתוכנית זו (ייתכן LDA חיצוני)'))
+                elif n in all_ddms_n:
+                    rows.append((fd['filename'], prog['name'], 'ישות', name,
+                                 'שיוך שגוי — הישות קיימת במערכת אך לא בתוכנית זו'))
+                else:
+                    rows.append((fd['filename'], prog['name'], 'ישות', name,
+                                 'הישות לא נמצאה בשום מקום במערכת — חשד להזיה'))
+            for name in sorted(static_ddms):
+                if _norm_name(name) not in {_norm_name(e) for e in ai_entities}:
+                    rows.append((fd['filename'], prog['name'], 'ישות', name,
+                                 'נמצא VIEW OF בקוד אך ה-AI לא דיווח על הישות — פספוס'))
+
+            for name in sorted(ai_callnats):
+                n = _norm_name(name)
+                if n in static_calls_n:
+                    continue
+                if n in all_targets_n:
+                    rows.append((fd['filename'], prog['name'], 'CALLNAT', name,
+                                 'שיוך שגוי — התוכנית קיימת במערכת אך אין CALLNAT אליה בקוד תוכנית זו'))
+                else:
+                    rows.append((fd['filename'], prog['name'], 'CALLNAT', name,
+                                 'תוכנית היעד לא נמצאה בשום מקום במערכת — חשד להזיה'))
+            for name in sorted(static_calls):
+                if _norm_name(name) not in {_norm_name(c) for c in ai_callnats}:
+                    rows.append((fd['filename'], prog['name'], 'CALLNAT', name,
+                                 'נמצא CALLNAT בקוד אך ה-AI לא דיווח עליו — פספוס'))
     return rows
 
 
@@ -535,8 +579,12 @@ def generate_review_html(sample, code_map, validation_rows, stats, out_path):
          f"<div class='card'><div class='num'>{stats['total']}</div>תוכניות נותחו</div>",
          f"<div class='card{' warn' if stats['errors'] else ''}'><div class='num'>{stats['errors']}</div>שגיאות</div>",
          f"<div class='card{' warn' if stats['halluc'] else ''}'><div class='num'>{stats['halluc']}</div>חשדות הזיה</div>",
+         f"<div class='card'><div class='num'>{stats.get('attrib', 0)}</div>שיוכים שגויים</div>",
          f"<div class='card{' warn' if stats['misses'] else ''}'><div class='num'>{stats['misses']}</div>פספוסים</div>",
-         "</div>"]
+         "</div>",
+         "<div class='checklist'><b>מקרא:</b> חשד הזיה = שם שלא קיים בשום מקום במערכת (חמור). "
+         "שיוך שגוי = ישות/תוכנית אמיתית שיוחסה לתוכנית הלא נכונה — לרוב הגדרה ב-LDA חיצוני "
+         "או הקשר קובץ; כמעט לא פוגע בגיליונות המאוחדים. פספוס = נמצא בקוד ולא דווח.</div>"]
     if top_files_txt:
         h.append(f"<div class='checklist'>ריכוזי פערים לפי קובץ: {top_files_txt}</div>")
     h.append("<div class='checklist'><b>לכל תוכנית בדגימה, בדוק 4 שאלות:</b> "
@@ -587,6 +635,7 @@ def run_review(sample_size=8):
         'total' : len([a for a in analyses if 'error' not in a]),
         'errors': len([a for a in analyses if 'error' in a]),
         'halluc': len([r for r in validation_rows if 'חשד להזיה' in r[4]]),
+        'attrib': len([r for r in validation_rows if 'שיוך שגוי' in r[4]]),
         'misses': len([r for r in validation_rows if 'פספוס' in r[4]]),
     }
     sample = select_review_sample(files_data, analyses, validation_rows, sample_size)
@@ -598,7 +647,8 @@ def run_review(sample_size=8):
     print("  סקירת איכות — סיכום")
     print("=" * 62)
     print(f"  תוכניות שנותחו: {stats['total']}   שגיאות: {stats['errors']}")
-    print(f"  חשדות הזיה: {stats['halluc']}   פספוסים: {stats['misses']}")
+    print(f"  חשדות הזיה: {stats['halluc']}   שיוכים שגויים: {stats['attrib']}   "
+          f"פספוסים: {stats['misses']}")
     print(f"\n  דגימה לבדיקה אנושית ({len(sample)} תוכניות):")
     for a, reason in sample:
         print(f"    • {a.get('program_name', ''):20s} ({a.get('filename', '')})  — {reason}")
@@ -798,7 +848,8 @@ PROGRAM_ANALYSIS_PROMPT = """
 === הקשר הקובץ ===
 קובץ: {filename}
 תוכנית: {program_name}
-DDMs בשימוש בקובץ כולו: {ddms}
+DDMs בשימוש בתוכנית זו (זוהו סטטית בקוד): {prog_ddms}
+DDMs נוספים בקובץ — להקשר בלבד, אל תדווח עליהם כישויות של תוכנית זו: {other_ddms}
 קורא ל (CALLNAT): {callnats}
 תקצירי התוכניות הנקראות (מניתוח קודם — השתמש בהם להבנת הזרימה):
 {callee_summaries}
@@ -809,6 +860,8 @@ DDMs בשימוש בקובץ כולו: {ddms}
 
 === משימה ===
 נתח את הקוד והחזר JSON תקני בלבד (ללא markdown fences, ללא טקסט נוסף).
+חשוב: דווח ב-entities רק על ישויות שתוכנית זו באמת משתמשת בהן —
+כאלה שמופיעות ב-VIEW OF בקוד שלה או ששדותיהן נקראים/נכתבים בקוד בפועל.
 
 {{
   "filename": "{filename}",
@@ -1007,11 +1060,15 @@ def build_program_prompt(fd, prog, kb, ddm_cache, purpose_cache=None):
         if purpose:
             callee_lines.append(f"  {cn}: {purpose[:200]}")
 
+    prog_ddms  = prog.get('ddms', [])
+    other_ddms = [d for d in fd['ddms'] if d not in prog_ddms]
+
     return PROGRAM_ANALYSIS_PROMPT.format(
         system_context   = SYSTEM_CONTEXT,
         filename         = filename,
         program_name     = prog_name,
-        ddms             = ', '.join(fd['ddms']) or 'לא זוהו',
+        prog_ddms        = ', '.join(prog_ddms) or 'לא זוהו (ייתכן שימוש דרך LDA חיצוני)',
+        other_ddms       = ', '.join(other_ddms) or 'אין',
         callnats         = ', '.join(callnats) or 'אין',
         callee_summaries = '\n'.join(callee_lines) or '  (אין מידע)',
         called_by        = ', '.join(called_by) or 'לא זוהה',
@@ -1423,7 +1480,7 @@ def build_readme_sheet(wb):
         ("קובץ / תוכנית", "היכן נמצא הפער"),
         ("סוג", "ישות (VIEW OF) או CALLNAT"),
         ("שם", "שם הישות / התוכנית שבמחלוקת"),
-        ("ממצא", "הצלבה אוטומטית בין סריקת הקוד לדיווח ה-AI: דיווח ללא עיגון בקוד = חשד להזיה; ממצא בקוד שלא דווח = פספוס. גיליון ריק = הניתוח עקבי עם הקוד"),
+        ("ממצא", "הצלבה אוטומטית בין סריקת הקוד לדיווח ה-AI. שלוש רמות: חשד להזיה = שם שלא קיים בשום מקום במערכת (חמור); שיוך שגוי = ישות/תוכנית אמיתית שיוחסה לתוכנית הלא נכונה (קל — לרוב LDA חיצוני); פספוס = נמצא בקוד ולא דווח"),
     ]
 
     row = 1
@@ -2053,9 +2110,11 @@ def main():
     validation_rows = build_validation(files_data, analyses)
     if validation_rows:
         n_hall = len([r for r in validation_rows if 'חשד להזיה' in r[4]])
-        n_miss = len(validation_rows) - n_hall
+        n_attr = len([r for r in validation_rows if 'שיוך שגוי' in r[4]])
+        n_miss = len([r for r in validation_rows if 'פספוס' in r[4]])
         print(f"\n  🔎 ולידציה: {len(validation_rows)} פערים בין הקוד לדיווחי ה-AI "
-              f"(חשדות הזיה: {n_hall}, פספוסים: {n_miss}) — ראה גיליון 'ולידציה'")
+              f"(חשדות הזיה: {n_hall}, שיוכים שגויים: {n_attr}, פספוסים: {n_miss}) "
+              f"— ראה גיליון 'ולידציה'")
     else:
         print(f"\n  🔎 ולידציה: דיווחי ה-AI עקביים עם הקוד — אין פערים")
 

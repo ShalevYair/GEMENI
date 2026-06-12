@@ -13,6 +13,10 @@ Usage:
   5. After a run: python natural_adabas_spec_generator.py --review [N]
      builds review.html — a smart sample of N programs (default 8) with
      code and analysis side by side, for human quality checking. No API.
+  6. python natural_adabas_spec_generator.py --pack [N]
+     bundles run conclusions + the selected programs (analysis JSON +
+     source code) into a single review_pack.txt, ready to send to an
+     AI/expert for deep review. No API.
 
 Resume support:
   Every analyzed program is checkpointed to analyses_checkpoint.jsonl as it
@@ -496,20 +500,20 @@ def select_review_sample(files_data, analyses, validation_rows, n=8):
 
     for a in sorted([a for a in ok if a.get('complexity') == 'מורכב'],
                     key=richness, reverse=True)[:3]:
-        add(a, f"מורכבת במיוחד ({len(a.get('workflows', []))} זרימות, {n_rules(a)} חוקים)")
+        add(a, f"most complex ({len(a.get('workflows', []))} flows, {n_rules(a)} rules)")
     for a in sorted(ok, key=n_callers, reverse=True)[:2]:
         if n_callers(a) > 0:
-            add(a, f"מרכזית בגרף הקריאות ({n_callers(a)} תוכניות קוראות לה)")
+            add(a, f"central in call graph ({n_callers(a)} callers)")
     for a in sorted(ok, key=lambda x: gaps.get(key(x), 0), reverse=True)[:2]:
         if gaps.get(key(a), 0) >= 2:
-            add(a, f"{gaps[key(a)]} פערי ולידציה")
+            add(a, f"{gaps[key(a)]} validation gaps")
     for a in [a for a in ok if a.get('complexity') == 'בינוני'][:2]:
-        add(a, "מורכבות בינונית")
+        add(a, "medium complexity")
     for a in [a for a in ok if a.get('program_type') == 'data'][:1]:
-        add(a, "אזור נתונים (פרומפט מצומצם)")
+        add(a, "data-only member (short prompt)")
     # top up with the richest programs if the sample is still small
     for a in sorted(ok, key=richness, reverse=True):
-        add(a, "השלמת דגימה")
+        add(a, "sample top-up")
     return sample[:n]
 
 
@@ -633,8 +637,8 @@ def generate_review_html(sample, code_map, validation_rows, stats, out_path):
         f.write("\n".join(h))
 
 
-def run_review(sample_size=8):
-    """--review entry point: build review.html from existing outputs. No API."""
+def _load_review_inputs():
+    """Shared loader for --review/--pack: analyses + parsed sources + stats."""
     analyses_path = Path('analyses.json')
     if analyses_path.exists():
         with open(analyses_path, 'r', encoding='utf-8') as f:
@@ -642,7 +646,7 @@ def run_review(sample_size=8):
     else:
         ckpt = load_checkpoint(CHECKPOINT_PATH)
         if not ckpt:
-            print("לא נמצאו analyses.json או checkpoint — הרץ קודם את הניתוח.")
+            print("No analyses.json or checkpoint found — run the analysis first.")
             sys.exit(1)
         analyses = list(ckpt.values())
 
@@ -659,21 +663,112 @@ def run_review(sample_size=8):
         'attrib': len([r for r in validation_rows if 'שיוך שגוי' in r[4]]),
         'misses': len([r for r in validation_rows if 'פספוס' in r[4]]),
     }
+    return analyses, files_data, code_map, validation_rows, stats
+
+
+def _print_review_summary(stats, sample):
+    print("=" * 62)
+    print("  Quality review — summary")
+    print("=" * 62)
+    print(f"  Programs analyzed: {stats['total']}   errors: {stats['errors']}")
+    print(f"  Hallucination suspicions: {stats['halluc']}   "
+          f"misattributions: {stats['attrib']}   misses: {stats['misses']}")
+    print(f"\n  Selected sample ({len(sample)} programs):")
+    for a, reason in sample:
+        print(f"    - {a.get('program_name', ''):20s} ({a.get('filename', '')})  — {reason}")
+
+
+def run_review(sample_size=8):
+    """--review entry point: build review.html from existing outputs. No API."""
+    analyses, files_data, code_map, validation_rows, stats = _load_review_inputs()
     sample = select_review_sample(files_data, analyses, validation_rows, sample_size)
 
     out_path = Path('review.html')
     generate_review_html(sample, code_map, validation_rows, stats, out_path)
 
-    print("=" * 62)
-    print("  סקירת איכות — סיכום")
-    print("=" * 62)
-    print(f"  תוכניות שנותחו: {stats['total']}   שגיאות: {stats['errors']}")
-    print(f"  חשדות הזיה: {stats['halluc']}   שיוכים שגויים: {stats['attrib']}   "
-          f"פספוסים: {stats['misses']}")
-    print(f"\n  דגימה לבדיקה אנושית ({len(sample)} תוכניות):")
+    _print_review_summary(stats, sample)
+    print(f"\n  {out_path} created — open in a browser and review program by program")
+
+
+PACK_CODE_CHAR_CAP = 40_000   # per program, keeps the pack sendable
+
+
+def run_pack(sample_size=8):
+    """
+    --pack entry point: bundle run conclusions + the selected programs
+    (full analysis JSON + full source code) into ONE text file,
+    review_pack.txt, ready to hand to an AI/expert for deep review. No API.
+    """
+    analyses, files_data, code_map, validation_rows, stats = _load_review_inputs()
+    sample = select_review_sample(files_data, analyses, validation_rows, sample_size)
+
+    gaps_by_prog = defaultdict(list)
+    for r in validation_rows:
+        gaps_by_prog[(r[0], r[1])].append(r)
+    gap_files = defaultdict(int)
+    for r in validation_rows:
+        gap_files[r[0]] += 1
+
+    err_entries = [a for a in analyses if 'error' in a]
+
+    L = []
+    L.append("=" * 78)
+    L.append("REVIEW PACK — Natural ADABAS spec generator")
+    L.append(f"Generated: {time.strftime('%Y-%m-%d %H:%M')}")
+    L.append("Purpose: deep quality review of AI-generated analyses against source code.")
+    L.append("For each program below: check business purpose, workflow coverage of all")
+    L.append("code paths (incl. subroutines), rule correctness INCLUDING direction")
+    L.append("(< vs >, before/after dates), and fields vs DEFINE DATA.")
+    L.append("=" * 78)
+    L.append("")
+    L.append("== RUN CONCLUSIONS ==")
+    L.append(f"Programs analyzed OK : {stats['total']}")
+    L.append(f"Failed programs      : {stats['errors']}")
+    L.append(f"Hallucination susp.  : {stats['halluc']}  (name found nowhere in system)")
+    L.append(f"Misattributions      : {stats['attrib']}  (real name, wrong program — usually external LDA)")
+    L.append(f"Misses               : {stats['misses']}  (in code, not reported)")
+    if gap_files:
+        top = sorted(gap_files.items(), key=lambda x: -x[1])[:8]
+        L.append("Gap concentration by file: " + ", ".join(f"{f}({c})" for f, c in top))
+    if err_entries:
+        L.append("")
+        L.append(f"Failed programs ({min(len(err_entries), 15)} of {len(err_entries)}):")
+        for a in err_entries[:15]:
+            L.append(f"  - {a.get('filename', '')} / {a.get('program_name', '')}: "
+                     f"{a.get('error', '')}")
+    L.append("")
+    L.append(f"== SELECTED PROGRAMS ({len(sample)}) ==")
     for a, reason in sample:
-        print(f"    • {a.get('program_name', ''):20s} ({a.get('filename', '')})  — {reason}")
-    print(f"\n  ✓ {out_path} נוצר — פתח בדפדפן ועבור תוכנית-תוכנית מול הקוד")
+        L.append(f"  - {a.get('program_name', '')} ({a.get('filename', '')}) — {reason}")
+    L.append("")
+
+    for i, (a, reason) in enumerate(sample, 1):
+        k    = (a.get('filename', ''), a.get('program_name', ''))
+        code = code_map.get(k, '(source code not found)')
+        if len(code) > PACK_CODE_CHAR_CAP:
+            code = code[:PACK_CODE_CHAR_CAP] + "\n... (truncated for packing)"
+        L.append("#" * 78)
+        L.append(f"# PROGRAM {i}/{len(sample)}: {k[1]}   (file: {k[0]})")
+        L.append(f"# Selected because: {reason}")
+        L.append("#" * 78)
+        prog_gaps = gaps_by_prog.get(k)
+        if prog_gaps:
+            L.append("-- VALIDATION GAPS FOR THIS PROGRAM --")
+            for r in prog_gaps:
+                L.append(f"  [{r[2]}] {r[3]}: {r[4]}")
+        L.append("-- AI ANALYSIS (JSON) --")
+        L.append(json.dumps(a, ensure_ascii=False, indent=2))
+        L.append("-- SOURCE CODE --")
+        L.append(code)
+        L.append("")
+
+    out_path = Path('review_pack.txt')
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(L))
+
+    _print_review_summary(stats, sample)
+    size_kb = out_path.stat().st_size / 1024
+    print(f"\n  {out_path} created ({size_kb:.0f} KB) — send this single file for deep review")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -683,7 +778,7 @@ def run_review(sample_size=8):
 class GeminiTruncated(Exception):
     """The response hit MAX_TOKENS and was cut off mid-output."""
     def __init__(self, partial_text):
-        super().__init__("תשובה נקטעה (MAX_TOKENS)")
+        super().__init__("Response truncated (MAX_TOKENS)")
         self.partial_text = partial_text
 
 
@@ -703,7 +798,7 @@ def call_gemini(api_key, prompt, attempt=0):
         resp = requests.post(url, json=body, timeout=360)
         if resp.status_code in (429, 503) and attempt < 4:
             wait = 30 * (2 ** attempt)  # 30s, 60s, 120s, 240s
-            print(f"    ⏳ Rate limit ({resp.status_code}) — ממתין {wait}s...", flush=True)
+            print(f"    Rate limit ({resp.status_code}) — waiting {wait}s...", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         resp.raise_for_status()
@@ -717,14 +812,14 @@ def call_gemini(api_key, prompt, attempt=0):
     except requests.Timeout:
         if attempt < 3:
             wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
-            print(f"    ⏳ Timeout — ממתין {wait}s לפני ניסיון חוזר...", flush=True)
+            print(f"    Timeout — waiting {wait}s before retry...", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         raise
     except requests.RequestException as e:
         if attempt < 4:
             wait = 15 * (2 ** attempt)  # 15s, 30s, 60s, 120s
-            print(f"    ⚠ Network error: {e} — ממתין {wait}s...", flush=True)
+            print(f"    Network error: {e} — waiting {wait}s...", flush=True)
             time.sleep(wait)
             return call_gemini(api_key, prompt, attempt + 1)
         raise
@@ -785,7 +880,7 @@ def call_and_parse(api_key, prompt):
             raw = call_gemini(api_key, current)
         except GeminiTruncated:
             if truncated:
-                return None, "תשובה נקטעה (MAX_TOKENS) גם אחרי בקשת תמצות"
+                return None, "Truncated (MAX_TOKENS) even after concise retry"
             truncated = True
             current   = prompt + CONCISE_SUFFIX
             continue
@@ -797,7 +892,7 @@ def call_and_parse(api_key, prompt):
             json_err = e
     if json_err is not None:
         return None, f"JSON parse: {json_err}"
-    return None, "לא התקבלה תשובה תקינה"
+    return None, "No valid response received"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1228,9 +1323,9 @@ def run_synthesis(api_key, analyses, workers):
         else:
             tasks.append((name, o, n_obs))
 
-    print(f"\n── שלב 3.5: סינתזה — איחוד {len(obs)} ישויות ────────────────")
+    print(f"\n-- Phase 3.5: synthesis — consolidating {len(obs)} entities --------")
     if results:
-        print(f"  ↻ {len(results)} ישויות נטענו מה-checkpoint")
+        print(f"  {len(results)} entities loaded from checkpoint")
 
     io_lock = threading.Lock()
     state   = {'completed': 0, 'errors': 0}
@@ -1248,14 +1343,14 @@ def run_synthesis(api_key, analyses, workers):
                 append_checkpoint(SYNTHESIS_CHECKPOINT_PATH,
                                   {'entity': name, 'n_obs': n_obs, 'error': error})
                 results[name] = static_merge_entity(name, o)
-                print(f"  ⚠ [{state['completed']}/{len(tasks)}] {name}  {error} — מיזוג מכני", flush=True)
+                print(f"  WARN [{state['completed']}/{len(tasks)}] {name}  {error} — static merge", flush=True)
             else:
                 record.setdefault('name', name)
                 append_checkpoint(SYNTHESIS_CHECKPOINT_PATH,
                                   {'entity': name, 'n_obs': n_obs, 'record': record})
                 results[name] = record
-                print(f"  ✓ [{state['completed']}/{len(tasks)}] {name}  "
-                      f"שדות:{len(record.get('fields', []))}", flush=True)
+                print(f"  OK [{state['completed']}/{len(tasks)}] {name}  "
+                      f"fields:{len(record.get('fields', []))}", flush=True)
 
     interrupted = False
     if tasks:
@@ -1266,7 +1361,7 @@ def run_synthesis(api_key, analyses, workers):
                 fut.result()
         except KeyboardInterrupt:
             interrupted = True
-            print("\n  ⏸ הסינתזה הופסקה — ישויות שלא אוחדו ימוזגו מכנית; הרץ שוב להשלמה")
+            print("\n  Synthesis interrupted — remaining entities merged statically; rerun to complete")
         finally:
             try:
                 executor.shutdown(wait=True, cancel_futures=True)
@@ -1308,17 +1403,17 @@ def run_synthesis(api_key, analyses, workers):
                 append_checkpoint(SYNTHESIS_CHECKPOINT_PATH,
                                   {'entity': '__OVERVIEW__', 'n_obs': len(entities),
                                    'record': overview})
-                print("  ✓ סקירת מערכת נוצרה")
+                print("  System overview generated")
             except Exception as e:
                 log_error(ERROR_LOG_PATH, 'SYNTHESIS', '__OVERVIEW__', str(e))
-                print(f"  ⚠ סקירת המערכת נכשלה: {e}")
+                print(f"  WARN system overview failed: {e}")
 
     synthesis = {'entities': entities, 'overview': overview}
     with open('synthesis.json', 'w', encoding='utf-8') as f:
         json.dump(synthesis, f, ensure_ascii=False, indent=2)
-    print(f"  ✓ synthesis.json נשמר ({len(entities)} ישויות מאוחדות)")
+    print(f"  synthesis.json saved ({len(entities)} consolidated entities)")
     if state['errors']:
-        print(f"  ⚠ {state['errors']} ישויות נכשלו באיחוד AI ומוזגו מכנית — פירוט ב-{ERROR_LOG_PATH}")
+        print(f"  WARN {state['errors']} entities failed AI consolidation (merged statically) — see {ERROR_LOG_PATH}")
     return synthesis
 
 
@@ -1823,14 +1918,15 @@ def main():
         debug_file(target)
         return  # debug_file calls sys.exit, but just in case
 
-    # ── Review mode — quality-check package from existing outputs, no API ─────
-    if '--review' in sys.argv:
-        idx = sys.argv.index('--review')
-        size = 8
-        if len(sys.argv) > idx + 1 and sys.argv[idx + 1].isdigit():
-            size = max(1, int(sys.argv[idx + 1]))
-        run_review(size)
-        return
+    # ── Review/pack modes — quality-check from existing outputs, no API ───────
+    for flag, fn in (('--review', run_review), ('--pack', run_pack)):
+        if flag in sys.argv:
+            idx = sys.argv.index(flag)
+            size = 8
+            if len(sys.argv) > idx + 1 and sys.argv[idx + 1].isdigit():
+                size = max(1, int(sys.argv[idx + 1]))
+            fn(size)
+            return
 
     # ── Parallelism level ──────────────────────────────────────────────────────
     workers = MAX_WORKERS
@@ -1838,33 +1934,33 @@ def main():
         try:
             workers = max(1, int(sys.argv[sys.argv.index('--workers') + 1]))
         except (IndexError, ValueError):
-            print("שימוש: python natural_adabas_spec_generator.py --workers N")
+            print("Usage: python natural_adabas_spec_generator.py --workers N")
             sys.exit(1)
 
     print("=" * 62)
-    print("  Natural ADABAS → מחולל אפיון טכני  ")
+    print("  Natural ADABAS -> Technical Spec Generator  ")
     print("=" * 62)
 
     # ── Get API key ────────────────────────────────────────────────────────────
     api_key = os.environ.get('GEMINI_API_KEY', '').strip()
     if not api_key:
-        api_key = input("\nהכנס מפתח Gemini API: ").strip()
+        api_key = input("\nEnter Gemini API key: ").strip()
     if not api_key:
-        print("שגיאה: מפתח API חסר. הפסקת הרצה.")
+        print("Error: missing API key. Aborting.")
         sys.exit(1)
 
     # ── Find .txt files ────────────────────────────────────────────────────────
     txt_files = sorted(Path('.').glob('*.txt'))
     if not txt_files:
-        print("לא נמצאו קבצי .txt בתיקייה הנוכחית.")
+        print("No .txt files found in the current directory.")
         sys.exit(1)
 
-    print(f"\nנמצאו {len(txt_files)} קבצים:")
+    print(f"\nFound {len(txt_files)} files:")
     for fp in txt_files:
         print(f"  {fp.name:35s}  {fp.stat().st_size/1024:.0f} KB")
 
     # ── PHASE 1: Static parse ──────────────────────────────────────────────────
-    print("\n── שלב 1: ניתוח סטטי ────────────────────────────────────")
+    print("\n-- Phase 1: static parse ------------------------------------")
     files_data = []
     total_programs = 0
     for fp in txt_files:
@@ -1873,10 +1969,10 @@ def main():
         n_prog = len(fd['programs'])
         total_programs += n_prog
         print(f"  {fd['filename']:35s} "
-              f"תוכניות: {n_prog:3d}  DDMs: {', '.join(fd['ddms']) or '—'}  "
+              f"programs: {n_prog:3d}  DDMs: {len(fd['ddms']):3d}  "
               f"CALLNATs: {len(fd['callnats'])}")
 
-    print(f"\n  סה\"כ תוכניות/שגרות: {total_programs}")
+    print(f"\n  Total programs/routines: {total_programs}")
 
     # ── Resume: load checkpoint from a previous (interrupted) run ─────────────
     # An entry is reused only if the program's current code hash matches the
@@ -1897,12 +1993,12 @@ def main():
     remaining = [(fd, prog) for fd in files_data for prog in fd['programs']
                  if (fd['filename'], prog['name']) not in done]
     if done or stale:
-        print(f"\n  ↻ נמצא checkpoint ({CHECKPOINT_PATH}): "
-              f"{len(done)} תוכניות כבר נותחו, נותרו {len(remaining)}")
-        print(f"    (למחוק את הקובץ כדי לנתח הכל מחדש)")
+        print(f"\n  Checkpoint found ({CHECKPOINT_PATH}): "
+              f"{len(done)} programs already analyzed, {len(remaining)} remaining")
+        print(f"    (delete the file to re-analyze everything)")
     if stale:
-        print(f"  ↻ {len(stale)} ניתוחים נפסלו — פענוח הקוד השתנה מאז שנותחו "
-              f"(למשל הסרת קידומת *S**) — ינותחו מחדש")
+        print(f"  {len(stale)} analyses invalidated — code parsing changed since "
+              f"they were analyzed (e.g. *S** prefix) — will be redone")
 
     # ── Token estimate warning (remaining unique programs only) ───────────────
     if remaining:
@@ -1915,35 +2011,35 @@ def main():
                 uniq.append(p)
         n_dups = len(remaining) - len(uniq)
         if n_dups:
-            print(f"\n  ⧉ זוהו {n_dups} כפילויות (קוד זהה) — ינותחו פעם אחת בלבד")
+            print(f"\n  {n_dups} duplicates detected (identical code) — analyzed only once")
         total_chars   = sum(len(p['code']) for p in uniq)
         est_in_tokens = total_chars // 4          # ~4 chars per token
         est_out_tok   = len(uniq) * 3000          # ~3K output tokens per program
-        print(f"\n  ⚠  אומדן טוקנים ({len(uniq)} תוכניות ייחודיות):")
-        print(f"     קלט:  ~{est_in_tokens:,} טוקנים  ({total_chars/1e6:.1f}MB)")
-        print(f"     פלט:  ~{est_out_tok:,} טוקנים")
-        print(f"     סה\"כ: ~{(est_in_tokens+est_out_tok):,} טוקנים")
-        ans = input("  להמשיך? (y/n): ").strip().lower()
+        print(f"\n  Token estimate ({len(uniq)} unique programs):")
+        print(f"     input:  ~{est_in_tokens:,} tokens  ({total_chars/1e6:.1f}MB)")
+        print(f"     output: ~{est_out_tok:,} tokens")
+        print(f"     total:  ~{(est_in_tokens+est_out_tok):,} tokens")
+        ans = input("  Continue? (y/n): ").strip().lower()
         if ans != 'y':
-            print("  בוטל.")
+            print("  Cancelled.")
             sys.exit(0)
     else:
-        print("\n  ✓ כל התוכניות כבר נותחו — מדלג ישר לבניית הפלט")
+        print("\n  All programs already analyzed — skipping straight to output build")
 
     # ── PHASE 2: Knowledge base ────────────────────────────────────────────────
-    print("\n── שלב 2: בניית Knowledge Base ────────────────────────────")
+    print("\n-- Phase 2: knowledge base ----------------------------------")
     kb = build_knowledge_base(files_data)
-    print(f"  DDMs ייחודיים: {len(kb['all_ddms'])}")
-    print(f"  קשרי CALLNAT:  {sum(len(v) for v in kb['call_graph'].values())}")
+    print(f"  Unique DDMs: {len(kb['all_ddms'])}")
+    print(f"  CALLNAT links: {sum(len(v) for v in kb['call_graph'].values())}")
 
     kb_path = Path('knowledge_base.json')
     with open(kb_path, 'w', encoding='utf-8') as f:
         json.dump(kb, f, ensure_ascii=False, indent=2)
-    print(f"  ✓ {kb_path} נשמר")
+    print(f"  {kb_path} saved")
 
     # ── PHASE 3: Gemini analysis (parallel) ────────────────────────────────────
-    print(f"\n── שלב 3: ניתוח AI ({len(remaining)}/{total_programs} תוכניות, "
-          f"{workers} קריאות במקביל) ──────────")
+    print(f"\n-- Phase 3: AI analysis ({len(remaining)}/{total_programs} programs, "
+          f"{workers} parallel calls) ----------")
 
     # Ordered task list; checkpointed programs are pre-filled into results
     order   = []   # (seq, key) in original program order — keeps Excel stable
@@ -1978,12 +2074,12 @@ def main():
             claimed_hashes.add(h)
             primary_tasks.append(t)
     if dup_tasks:
-        print(f"  ⧉ {len(dup_tasks)} כפילויות — ינותחו פעם אחת וישוכפלו בסוף")
+        print(f"  {len(dup_tasks)} duplicates — analyzed once, copied at the end")
 
     n_data = sum(1 for _, _, p in primary_tasks if p.get('ptype') == 'data')
     if n_data:
-        print(f"  סיווג: {len(primary_tasks) - n_data} תוכניות לוגיקה, "
-              f"{n_data} אזורי נתונים (פרומפט מצומצם)")
+        print(f"  Classification: {len(primary_tasks) - n_data} logic programs, "
+              f"{n_data} data-only members (short prompt)")
 
     # Rebuild the DDM cache and the callee-purpose cache from checkpointed
     # analyses (valid ones only — not entries invalidated by a hash change)
@@ -2035,7 +2131,7 @@ def main():
                 entry = {'filename': fd['filename'], 'program_name': prog['name'],
                          'error': error}
                 log_error(ERROR_LOG_PATH, fd['filename'], prog['name'], error)
-                print(f"  ⚠ {label}  {error}", flush=True)
+                print(f"  WARN {label}  {error}", flush=True)
             else:
                 entry = analysis
                 # Force the identity fields — the checkpoint key depends on
@@ -2051,8 +2147,8 @@ def main():
                 n_ent = len(analysis.get('entities', []))
                 n_wf  = len(analysis.get('workflows', []))
                 n_req = sum(len(wf.get('business_rules', [])) for wf in analysis.get('workflows', []))
-                print(f"  ✓ {label}  ישויות:{n_ent} זרימות:{n_wf} חוקים:{n_req}  "
-                      f"~{eta_min/60:.1f} שעות נותרו", flush=True)
+                print(f"  OK {label}  entities:{n_ent} flows:{n_wf} rules:{n_req}  "
+                      f"~{eta_min/60:.1f}h left", flush=True)
             append_checkpoint(CHECKPOINT_PATH, entry)
             results[seq_no] = entry
 
@@ -2077,22 +2173,22 @@ def main():
     interrupted = False
     if tasks:
         if len(waves) > 1:
-            print(f"  סדר ניתוח לפי גרף קריאות: {len(waves)} גלים "
-                  f"(תת-תוכניות קודם, ואז הקוראים להן)")
+            print(f"  Call-graph wave order: {len(waves)} waves "
+                  f"(subprograms first, then their callers)")
         executor = ThreadPoolExecutor(max_workers=workers)
         futures  = []
         try:
             for w_idx, wave_names in enumerate(waves):
                 wave_tasks = [t for n in wave_names for t in name_to_tasks[n]]
                 if len(waves) > 1:
-                    print(f"  ── גל {w_idx + 1}/{len(waves)} ({len(wave_tasks)} תוכניות) ──")
+                    print(f"  -- wave {w_idx + 1}/{len(waves)} ({len(wave_tasks)} programs) --")
                 futures = [executor.submit(worker, *t) for t in wave_tasks]
                 for fut in as_completed(futures):
                     fut.result()
         except KeyboardInterrupt:
             interrupted = True
-            print(f"\n  ⏸ הופסק ידנית — ממתין לקריאות שכבר באוויר שיסתיימו (עד כמה דקות)...")
-            print(f"    כל מה שהסתיים נשמר ב-checkpoint; הרץ שוב כדי להמשיך מאותה נקודה.")
+            print(f"\n  Interrupted — waiting for in-flight calls to finish (up to a few minutes)...")
+            print(f"    Everything completed is checkpointed; rerun to resume from this point.")
         finally:
             try:
                 executor.shutdown(wait=True, cancel_futures=True)
@@ -2113,18 +2209,18 @@ def main():
                 copied += 1
             else:   # the identical primary failed — both retried next run
                 entry = {'filename': fd['filename'], 'program_name': prog['name'],
-                         'error': 'כפילות — ניתוח התוכנית הזהה נכשל; ינוסה שוב בהרצה הבאה'}
+                         'error': 'Duplicate — analysis of the identical program failed; will retry next run'}
                 state['errors'] += 1
             append_checkpoint(CHECKPOINT_PATH, entry)
             results[seq_no] = entry
         if copied:
-            print(f"\n  ⧉ {copied} כפילויות שוכפלו מניתוח קיים (ללא קריאות API)")
+            print(f"\n  {copied} duplicates copied from existing analyses (no API calls)")
 
     errors = state['errors']
     if skipped:
-        print(f"\n  ↻ {skipped} תוכניות נטענו מה-checkpoint (לא נשלחו שוב ל-API)")
+        print(f"\n  {skipped} programs loaded from checkpoint (not re-sent to API)")
     if errors:
-        print(f"  ⚠ {errors} תוכניות נכשלו — פירוט ב-{ERROR_LOG_PATH}")
+        print(f"  WARN {errors} programs failed — details in {ERROR_LOG_PATH}")
 
     analyses = [results[s] for s, _ in order if s in results]
 
@@ -2132,14 +2228,14 @@ def main():
     analyses_path = Path('analyses.json')
     with open(analyses_path, 'w', encoding='utf-8') as f:
         json.dump(analyses, f, ensure_ascii=False, indent=2)
-    print(f"\n  ✓ {analyses_path} נשמר")
+    print(f"\n  {analyses_path} saved")
 
     # ── PHASE 3.5: Synthesis — consolidate entities + system overview ─────────
     synthesis = None
     if interrupted:
-        print("\n  (הסינתזה תרוץ בהרצה הבאה, אחרי שכל התוכניות ינותחו)")
+        print("\n  (synthesis will run on the next run, after all programs are analyzed)")
     elif '--no-synthesis' in sys.argv:
-        print("\n  (הסינתזה דולגה — --no-synthesis)")
+        print("\n  (synthesis skipped — --no-synthesis)")
     else:
         synthesis = run_synthesis(api_key, analyses, workers)
 
@@ -2149,35 +2245,35 @@ def main():
         n_hall = len([r for r in validation_rows if 'חשד להזיה' in r[4]])
         n_attr = len([r for r in validation_rows if 'שיוך שגוי' in r[4]])
         n_miss = len([r for r in validation_rows if 'פספוס' in r[4]])
-        print(f"\n  🔎 ולידציה: {len(validation_rows)} פערים בין הקוד לדיווחי ה-AI "
-              f"(חשדות הזיה: {n_hall}, שיוכים שגויים: {n_attr}, פספוסים: {n_miss}) "
-              f"— ראה גיליון 'ולידציה'")
+        print(f"\n  Validation: {len(validation_rows)} gaps between code and AI reports "
+              f"(hallucination suspicions: {n_hall}, misattributions: {n_attr}, "
+              f"misses: {n_miss}) — see the validation sheet")
     else:
-        print(f"\n  🔎 ולידציה: דיווחי ה-AI עקביים עם הקוד — אין פערים")
+        print(f"\n  Validation: AI reports consistent with the code — no gaps")
 
     # ── PHASE 4: Build Excel ───────────────────────────────────────────────────
-    print("\n── שלב 4: בניית Excel ─────────────────────────────────────")
+    print("\n-- Phase 4: building Excel ----------------------------------")
     output_path = Path('natural_adabas_spec.xlsx')
     build_excel(analyses, kb, output_path, synthesis, validation_rows)
 
     # ── Summary ────────────────────────────────────────────────────────────────
     print("\n" + "=" * 62)
     if interrupted:
-        print("  הופסק באמצע — נוצר פלט חלקי")
+        print("  Interrupted — partial output created")
     else:
-        print("  הושלם!")
-    print(f"  ✓ {output_path}")
-    print(f"  ✓ {kb_path}")
-    print(f"  ✓ {analyses_path}")
+        print("  Done!")
+    print(f"  {output_path}")
+    print(f"  {kb_path}")
+    print(f"  {analyses_path}")
     if synthesis:
-        print(f"  ✓ synthesis.json")
+        print(f"  synthesis.json")
     if errors:
-        print(f"  ⚠ {errors} תוכניות נכשלו — פירוט ב-{ERROR_LOG_PATH}")
+        print(f"  WARN {errors} programs failed — details in {ERROR_LOG_PATH}")
     if interrupted or errors:
-        print(f"  ↻ הרץ שוב את הסקריפט כדי להמשיך מאותה נקודה "
-              f"(תוכניות שהושלמו לא יישלחו שוב)")
+        print(f"  Rerun the script to resume from this point "
+              f"(completed programs are not re-sent)")
     elif CHECKPOINT_PATH.exists():
-        print(f"  ℹ checkpoint נשמר ב-{CHECKPOINT_PATH} — מחק אותו כדי לנתח הכל מחדש")
+        print(f"  Checkpoint kept at {CHECKPOINT_PATH} — delete it to re-analyze everything")
 
     # Print sheet summary
     successful = [a for a in analyses if 'error' not in a]
@@ -2190,13 +2286,13 @@ def main():
                           for a in successful for wf in a.get('workflows', []))
     total_perms     = sum(len(a.get('permissions', [])) for a in successful)
 
-    print(f"\n  סטטיסטיקות:")
-    print(f"    תוכניות שנותחו:  {len(successful):>5}")
-    print(f"    ישויות (DDMs):   {total_entities:>5}")
-    print(f"    שדות:            {total_fields:>5}")
-    print(f"    זרימות עבודה:    {total_workflows:>5}")
-    print(f"    חוקי עסק:        {total_rules:>5}")
-    print(f"    הרשאות:          {total_perms:>5}")
+    print(f"\n  Statistics:")
+    print(f"    programs analyzed: {len(successful):>5}")
+    print(f"    entities (DDMs):   {total_entities:>5}")
+    print(f"    fields:            {total_fields:>5}")
+    print(f"    workflows:         {total_workflows:>5}")
+    print(f"    business rules:    {total_rules:>5}")
+    print(f"    permissions:       {total_perms:>5}")
     print("=" * 62)
 
 

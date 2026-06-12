@@ -97,7 +97,8 @@ def freeze_header(ws):
 # Patterns for Natural ADABAS constructs
 RE_DEFINE_DATA  = re.compile(r'DEFINE\s+DATA', re.IGNORECASE)
 RE_END_DEFINE   = re.compile(r'END-DEFINE', re.IGNORECASE)
-RE_VIEW_OF      = re.compile(r'VIEW\s+OF\s+([A-Z0-9_-]+)', re.IGNORECASE)
+# OF is optional in Natural: "01 TASH VIEW NH-TASHLUMIM" is valid syntax
+RE_VIEW_OF      = re.compile(r'\bVIEW\s+(?:OF\s+)?([A-Z][A-Z0-9_-]+)', re.IGNORECASE)
 RE_CALLNAT      = re.compile(r"CALLNAT\s+['\"]?([A-Z0-9_-]+)['\"]?", re.IGNORECASE)
 RE_PERFORM      = re.compile(r'PERFORM\s+([A-Z0-9_-]+)', re.IGNORECASE)
 RE_DB_OP        = re.compile(r'\b(READ|FIND|STORE|UPDATE|DELETE|GET\s+SAME|HISTOGRAM)\b', re.IGNORECASE)
@@ -289,20 +290,49 @@ def debug_file(filepath):
     sys.exit(0)
 
 
+# Some mainframe exports prefix every SOURCE line with *S** (catalog lines
+# are *C**, metadata *D..). Without de-prefixing, all code looks like
+# comments: programs get classified as data-only and regexes match nothing.
+RE_SOURCE_PREFIX = re.compile(r'^\*S\*\*')
+
+
+def strip_source_prefix(code):
+    """Remove the *S** source-line prefix when it dominates the segment.
+    A prefixed comment (*S***...) correctly becomes a plain * comment."""
+    lines     = code.splitlines()
+    non_empty = [l for l in lines if l.strip()]
+    n_pref    = sum(1 for l in non_empty if RE_SOURCE_PREFIX.match(l))
+    if n_pref >= 3 and n_pref >= 0.3 * max(1, len(non_empty)):
+        return '\n'.join(RE_SOURCE_PREFIX.sub('', l) for l in lines)
+    return code
+
+
 def parse_file(filepath):
     """Static parse of one .txt Natural file — no AI required."""
     with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
         content = f.read()
 
-    lines    = content.splitlines()
     filename = os.path.basename(filepath)
 
+    # Split first (the *C** separators must stay intact), then de-prefix
+    # each program's source so the real code is visible to all regexes
+    programs = split_into_programs(content, filename)
+    for prog in programs:
+        prog['code']     = strip_source_prefix(prog['code'])
+        prog['callnats'] = sorted({m.group(1).upper()
+                                   for m in RE_CALLNAT.finditer(prog['code'])})
+        prog['ptype']    = classify_program(prog['code'])
+        prog['hash']     = program_code_hash(prog['code'])
+        prog['ddms']     = sorted({m.group(1).upper()
+                                   for m in RE_VIEW_OF.finditer(prog['code'])})
+
+    # File-level scan over the de-prefixed source
     ddms      = set()
     callnats  = set()
     performs  = set()
     db_ops    = []
-
-    for i, line in enumerate(lines, 1):
+    clean_lines = '\n'.join(p['code'] for p in programs).splitlines()
+    for i, line in enumerate(clean_lines, 1):
         s = line.strip()
         for m in RE_VIEW_OF.finditer(s):
             ddms.add(m.group(1).upper())
@@ -313,15 +343,6 @@ def parse_file(filepath):
         for m in RE_DB_OP.finditer(s):
             db_ops.append({'op': m.group(1).upper(), 'line': i, 'context': s[:80]})
 
-    programs = split_into_programs(content, filename)
-    for prog in programs:
-        prog['callnats'] = sorted({m.group(1).upper()
-                                   for m in RE_CALLNAT.finditer(prog['code'])})
-        prog['ptype']    = classify_program(prog['code'])
-        prog['hash']     = program_code_hash(prog['code'])
-        prog['ddms']     = sorted({m.group(1).upper()
-                                   for m in RE_VIEW_OF.finditer(prog['code'])})
-
     return {
         'filename' : filename,
         'content'  : content,
@@ -330,7 +351,7 @@ def parse_file(filepath):
         'callnats' : sorted(callnats),
         'performs' : sorted(performs),
         'db_ops'   : db_ops,
-        'line_count': len(lines),
+        'line_count': len(content.splitlines()),
     }
 
 
@@ -1858,14 +1879,30 @@ def main():
     print(f"\n  סה\"כ תוכניות/שגרות: {total_programs}")
 
     # ── Resume: load checkpoint from a previous (interrupted) run ─────────────
+    # An entry is reused only if the program's current code hash matches the
+    # one stored at analysis time — so parsing fixes (e.g. the *S** source
+    # prefix) automatically invalidate analyses made on misread code.
     checkpoint = load_checkpoint(CHECKPOINT_PATH)
-    done = {k for k, a in checkpoint.items() if 'error' not in a}
+    prog_hash  = {(fd['filename'], p['name']): p['hash']
+                  for fd in files_data for p in fd['programs']}
+    done, stale = set(), set()
+    for k, a in checkpoint.items():
+        if 'error' in a:
+            continue
+        h = a.get('code_hash')
+        if h is not None and k in prog_hash and h != prog_hash[k]:
+            stale.add(k)
+        else:
+            done.add(k)
     remaining = [(fd, prog) for fd in files_data for prog in fd['programs']
                  if (fd['filename'], prog['name']) not in done]
-    if done:
+    if done or stale:
         print(f"\n  ↻ נמצא checkpoint ({CHECKPOINT_PATH}): "
               f"{len(done)} תוכניות כבר נותחו, נותרו {len(remaining)}")
         print(f"    (למחוק את הקובץ כדי לנתח הכל מחדש)")
+    if stale:
+        print(f"  ↻ {len(stale)} ניתוחים נפסלו — פענוח הקוד השתנה מאז שנותחו "
+              f"(למשל הסרת קידומת *S**) — ינותחו מחדש")
 
     # ── Token estimate warning (remaining unique programs only) ───────────────
     if remaining:
@@ -1949,11 +1986,11 @@ def main():
               f"{n_data} אזורי נתונים (פרומפט מצומצם)")
 
     # Rebuild the DDM cache and the callee-purpose cache from checkpointed
-    # analyses so resumed runs give the remaining programs the same context
+    # analyses (valid ones only — not entries invalidated by a hash change)
     ddm_cache     = {}
     purpose_cache = {}   # PROG NAME → business_purpose, feeds caller prompts
-    for a in checkpoint.values():
-        if 'error' not in a:
+    for k, a in checkpoint.items():
+        if k in done:
             for e in a.get('entities', []):
                 ddm_cache[e['name']] = e
             if a.get('business_purpose'):

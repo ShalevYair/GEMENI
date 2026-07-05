@@ -53,20 +53,6 @@ const OUTPUT_FORMATS_BASIC = `
   - <excel-table name="קודי שגיאה"> — כל RESPONSE-CODE/ON ERROR (עמודות: קוד, תנאי_הפעלה, משמעות_עסקית, פעולה)
   - <excel-table name="גישות נתונים"> — כל READ/FIND/STORE/UPDATE/DELETE (עמודות: מקור, פעולה, מפתח_תנאי, מטרה_עסקית)`;
 
-const OUTPUT_FORMATS_PART1 = `
-**פורמטים נדרשים בחלק א':**
-- בסיום סעיף 3, הפק תרשים Mermaid של זרימת התהליך (flowchart TD).
-- הפק: <excel-table name="מיפוי קלט-פלט"> (עמודות: שם_מקורי, כיוון, סוג_ואורך, תיאור_עסקי)`;
-
-const OUTPUT_FORMATS_PART2 = `
-**פורמטים נדרשים בחלק ב':**
-- הפק: <excel-table name="קודי שגיאה"> (עמודות: קוד, תנאי_הפעלה, משמעות_עסקית, פעולה)
-- הפק: <excel-table name="גישות נתונים"> (עמודות: מקור, פעולה, מפתח_תנאי, מטרה_עסקית)
-- בסוף סעיף 9, הפק קוד פסאודו Python/Java style עבור הלוגיקה המרכזית:
-  \`\`\`python
-  # pseudo-code
-  \`\`\``;
-
 const OUTPUT_FORMATS_HIGH_2 = `
 **פורמטים נדרשים בחלק ב':**
 - בסיום האלגוריתם, הפק תרשים Mermaid מפורט (flowchart TD) — כולל כל ענפי IF ו-CALLNAT.
@@ -79,6 +65,93 @@ const OUTPUT_FORMATS_HIGH_3 = `
 - הפק: <excel-table name="גישות נתונים"> (עמודות: מקור, פעולה, מפתח_תנאי, שדות_נגישים, מטרה_עסקית)
 - הפק: <excel-table name="מספרי קסם"> — כל Hardcoded value (עמודות: ערך, מיקום_בקוד, משמעות_עסקית_מוערכת)
 - בסוף, הפק קוד פסאודו Python style מפורט לכל הלוגיקה המרכזית:
+  \`\`\`python
+  # pseudo-code
+  \`\`\`
+- לבסוף, הפק קוד draw.io XML של תרשים הזרימה המלא (כולל צמתי החלטה, CALLNAT, DB):
+  <drawio-xml>
+  <mxGraphModel>...</mxGraphModel>
+  </drawio-xml>`;
+
+// ── Fine-grained blocks — used only for "high" depth (6 calls) ─────────────
+// These re-slice the same content as SECTIONS_HIGH_2/3 + their format blocks
+// above, one call per section (or small section pair), for maximum depth.
+
+const SECTION_3_ONLY = `
+## Output — חלק: זרימה לוגית (עומק מקסימלי)
+(המשך — אותו קובץ Natural)
+
+### 3. זרימה לוגית — מפורטת
+רשימה ממוספרת מעמיקה. לכל שלב — גם ההיגיון העסקי.
+- אתחולים → מה מאופס ולמה חשוב.
+- IF/DECIDE → כל ענף עם ההיגיון העסקי, כולל edge cases.
+- READ/FIND → DDM + תנאי + מה אם לא נמצא + כפילות.
+- לולאה → על מה, כל איטרציה, תנאי יציאה, סיכוני לולאה אינסופית.
+- STORE/UPDATE/DELETE → אילו שדות בדיוק, commit strategy.
+- CALLNAT → כל פרמטר עם כיוון ומשמעות עסקית.
+- INPUT/REINPUT → שם Map, מה מוזן, validations.`;
+
+const FORMAT_3_ONLY = `
+**פורמטים נדרשים בחלק זה:**
+- בסיום האלגוריתם, הפק תרשים Mermaid מפורט (flowchart TD) — כולל כל ענפי IF ו-CALLNAT.
+- הפק: <excel-table name="מיפוי קלט-פלט"> (עמודות: שם_מקורי, כיוון, סוג_ואורך, scope, תיאור_עסקי)`;
+
+const SECTION_4_ONLY = `
+## Output — חלק: כללים עסקיים (עומק מקסימלי)
+(המשך — אותו קובץ Natural)
+
+### 4. כללים עסקיים — מפורט
+כל IF/DECIDE/WHERE/WHEN עם:
+- **תנאי:** [ניסוח עסקי]
+- **פעולה:** [חסימה/ניתוב/חישוב/הודעה]
+- **מספרי קסם:** כל hardcoded value עם משמעות מוערכת.`;
+
+const FORMAT_4_ONLY = `
+**פורמטים נדרשים בחלק זה:**
+- הפק: <excel-table name="מספרי קסם"> — כל Hardcoded value (עמודות: ערך, מיקום_בקוד, משמעות_עסקית_מוערכת)
+- אם יש INPUT/MAP/REINPUT — הפק html-screen mockup בסגנון terminal ירוק.`;
+
+const SECTION_56_ONLY = `
+## Output — חלק: גישות נתונים ואינטגרציה (עומק מקסימלי)
+(המשך — אותו קובץ Natural)
+
+### 5. גישות לנתונים — מפורט
+טבלה: מקור | פעולה | מפתח/תנאי | שדות נגישים | מטרה עסקית
+
+### 6. נקודות אינטגרציה — מפורט
+לכל קריאה: שם, סוג, כל פרמטר (קלט/פלט + משמעות עסקית), תפקיד, מה קורה אחרי החזרה.`;
+
+const FORMAT_56_ONLY = `
+**פורמטים נדרשים בחלק זה:**
+- הפק: <excel-table name="גישות נתונים"> (עמודות: מקור, פעולה, מפתח_תנאי, שדות_נגישים, מטרה_עסקית)`;
+
+const SECTION_78_ONLY = `
+## Output — חלק: תחזוקה וטיפול בשגיאות (עומק מקסימלי)
+(המשך — אותו קובץ Natural)
+
+### 7. היסטוריית תחזוקה — מפורט
+הערות עם תאריכים / BUS/BUG/Y2K/שמות/CR numbers. לכל ממצא: מה שינוי + מתי + למה.
+אם אין — ציין ורשום מה ניתן להסיק מ-code smells.
+
+### 8. טיפול בשגיאות — מפורט
+ON ERROR (כולל BACKOUT), RESPONSE-CODE לכל ערך, כשל DB לכל סוג, logging, סיכון לנתונים פגומים.`;
+
+const FORMAT_78_ONLY = `
+**פורמטים נדרשים בחלק זה:**
+- הפק: <excel-table name="קודי שגיאה"> (עמודות: קוד, תנאי_הפעלה, משמעות_עסקית, פעולה, יש_backout)`;
+
+const SECTION_9_ONLY = `
+## Output — חלק: ביקורת בונה (עומק מקסימלי)
+(המשך — אותו קובץ Natural)
+
+### 9. ביקורת בונה — מפורט
+חוב טכני (GOTO/קוד מת/כפילויות/hardcoded/global vars/deprecated),
+סיכונים תפעוליים (READ ללא LIMIT / לולאות / DB ללא RESPONSE-CODE / END TRANSACTION חסר),
+חוסר בהירות (נדרש בירור), הצעות שיפור ומודרניזציה.`;
+
+const FORMAT_9_ONLY = `
+**פורמטים נדרשים בחלק זה:**
+- הפק קוד פסאודו Python style מפורט לכל הלוגיקה המרכזית:
   \`\`\`python
   # pseudo-code
   \`\`\`
@@ -133,49 +206,6 @@ const SECTIONS_ALL = `
 
 ### 8. טיפול בשגיאות
 ON ERROR? RESPONSE-CODE? כשל DB? BACKOUT TRANSACTION?
-
-### 9. ביקורת בונה
-חוב טכני, סיכונים, חוסר בהירות, הצעות שיפור.`;
-
-const SECTIONS_PART1 = `
-## Output — Part A (Sections 1–4):
-
-### 1. מטאדטה
-| שדה | ערך |
-|-----|-----|
-| שם האובייקט | |
-| סוג | |
-| מטרה כללית | |
-| ישויות עסקיות | |
-| קלטים | |
-| פלטים | |
-| תלויות חיצוניות | |
-| בסיסי נתונים / קבצים | |
-
-### 2. תיאור עסקי
-3-6 שורות: מה הקוד עושה ולמה, מנקודת מבט עסקית.
-
-### 3. זרימה לוגית — שלבים מרכזיים
-רשימה ממוספרת. כל שלב = פעולה לוגית. כלל: אתחולים → שלב אחד; IF/DECIDE → תת-סעיפים לכל ענף; READ/FIND/LOOP/CALLNAT/STORE/DISPLAY → שלבים נפרדים.
-
-### 4. כללים עסקיים מרכזיים
-כל IF/DECIDE/WHERE → "אם [תנאי] → [פעולה]". כלול מספרי קסם (Hardcoded).`;
-
-const SECTIONS_PART2 = `
-## Output — Part B (Sections 5–9):
-(המשך — אותו קובץ Natural)
-
-### 5. גישות לנתונים (CRUD)
-טבלה: מקור | פעולה | מפתח/תנאי | מטרה עסקית
-
-### 6. נקודות אינטגרציה
-לכל CALLNAT/FETCH: שם, סוג, פרמטרים קלט/פלט, תפקיד.
-
-### 7. היסטוריית תחזוקה
-הערות עם תאריכים / BUS/BUG/Y2K. סיכום שינויים. אם אין — ציין.
-
-### 8. טיפול בשגיאות
-ON ERROR, RESPONSE-CODE, כשל DB, BACKOUT.
 
 ### 9. ביקורת בונה
 חוב טכני, סיכונים, חוסר בהירות, הצעות שיפור.`;
@@ -280,8 +310,10 @@ const SECTIONS_REWRITE_APPENDIX = `
 - **מה לשמור מהלוגיקה הקיימת** (כללים עסקיים שתוקפם נשמר)
 - **מה לזרוק** (חוב טכני שאין טעם להעתיק)`;
 
-const SECTIONS_CODE_CHANGE_1 = (changeDesc) => `
-## Output — Part A: ניתוח הקוד הקיים (לפני השינוי)
+// ── Code-change building blocks (composable into 1 / 3 / 6 calls) ─────────
+
+const CC_META_CHANGE = (changeDesc) => `
+## Output — ניתוח קוד קיים: מטאדטה והשינוי המבוקש
 
 ### 1. מטאדטה וסיכום
 | שדה | ערך |
@@ -292,19 +324,27 @@ const SECTIONS_CODE_CHANGE_1 = (changeDesc) => `
 | ישויות עסקיות | |
 
 ### 2. השינוי המבוקש
-**תיאור השינוי:** ${changeDesc || '(לא צוין — נסה להסיק מהקשר)'}
+**תיאור השינוי:** ${changeDesc || '(לא צוין — נסה להסיק מהקשר)'}`;
+
+const CC_IMPACT = `
+## Output — ניתוח השפעה: משתנים ומודולים
+(המשך — אותו קובץ Natural)
 
 ### 3. ניתוח השפעה — משתנים ומודולים
 - **משתנים מושפעים:** כל DEFINE DATA / LOCAL / PARAMETER שקשור לשינוי
 - **לוגיקה מושפעת:** IF/DECIDE/PERFORM blocks שיצטרכו שינוי
 - **CALLNATs מושפעים:** תוכניות חיצוניות שיושפעו משינוי הפרמטרים
-- **DDMs/קבצים מושפעים:** גישות נתונים שיושפעו
+- **DDMs/קבצים מושפעים:** גישות נתונים שיושפעו`;
+
+const CC_RULES = `
+## Output — כללים עסקיים המושפעים מהשינוי
+(המשך — אותו קובץ Natural)
 
 ### 4. כללים עסקיים שמשפיעים על השינוי
 כל IF/DECIDE הקשור לתחום השינוי — "אם [תנאי] → [פעולה]"`;
 
-const SECTIONS_CODE_CHANGE_2 = `
-## Output — Part B: יישום השינוי וניהול סיכונים
+const CC_PSEUDOCODE = `
+## Output — לפני/אחרי: פסאודו-קוד
 (המשך — אותו קובץ Natural)
 
 ### 5. לפני/אחרי — פסאודו-קוד
@@ -316,12 +356,20 @@ const SECTIONS_CODE_CHANGE_2 = `
 \`\`\`python
 # AFTER — קוד מוצע (עם השינוי)
 
-\`\`\`
+\`\`\``;
+
+const CC_RISK = `
+## Output — סיכון רגרסיה
+(המשך — אותו קובץ Natural)
 
 ### 6. סיכון רגרסיה
 <excel-table name="ניתוח סיכון רגרסיה">
 [{"תחום_סיכון": "", "תרחיש_כשל": "", "רמת_סיכון": "גבוה/בינוני/נמוך", "בדיקה_מומלצת": ""}]
-</excel-table>
+</excel-table>`;
+
+const CC_STEPS_TESTS = `
+## Output — יישום ובדיקות
+(המשך — אותו קובץ Natural)
 
 ### 7. צעדי יישום מומלצים
 רשימה ממוספרת: כל שינוי קוד נדרש, לפי סדר מומלץ לביצוע.
@@ -346,7 +394,7 @@ function injectNaturalModal() {
   modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:center;justify-content:center;';
 
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:16px;max-width:580px;width:calc(100% - 2rem);max-height:92vh;direction:rtl;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Heebo,sans-serif;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="background:#fff;border-radius:16px;max-width:660px;width:calc(100% - 2rem);max-height:92vh;direction:rtl;box-shadow:0 20px 60px rgba(0,0,0,.25);font-family:Heebo,sans-serif;display:flex;flex-direction:column;overflow:hidden;">
 
       <!-- Header -->
       <div style="padding:1.25rem 1.5rem .9rem;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
@@ -371,7 +419,7 @@ function injectNaturalModal() {
           </label>
           <div id="nat-file-display" style="margin-top:.5rem;"></div>
           <div id="nat-multifile-note" style="display:none;margin-top:.4rem;padding:.45rem .7rem;background:#fefce8;border:1px solid #fde68a;border-radius:7px;font-size:.78rem;color:#92400e;">
-            💡 מצב ריבוי קבצים — יתבצע ניתוח כל קובץ בנפרד + ניתוח קשרים ותלויות בין הקבצים. בחירת עומק מתעלמת במצב זה.
+            💡 מצב ריבוי קבצים — יתבצע ניתוח כל קובץ בנפרד + ניתוח קשרים ותלויות בין הקבצים. בחירת מטרה ורמת עומק מתעלמות במצב זה.
           </div>
         </div>
 
@@ -381,23 +429,24 @@ function injectNaturalModal() {
           <textarea id="nat-context" rows="2" placeholder="לדוגמה: תוכנית זו רצה ב-Control-M לאחר PROG-A ולפני PROG-C. מטרת ההרצה: עדכון יתרות יומי." style="width:100%;padding:.55rem .7rem;border:1px solid #e2e8f0;border-radius:8px;font-family:Heebo,sans-serif;font-size:.82rem;color:#1e293b;resize:vertical;direction:rtl;box-sizing:border-box;"></textarea>
         </div>
 
-        <!-- Depth selector -->
-        <div id="nat-depth-section">
-          <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.5rem;">רמת עומק הניתוח:</div>
-          <div style="display:flex;flex-direction:column;gap:.3rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.65rem .9rem;">
+        <!-- Purpose selector -->
+        <div id="nat-purpose-section">
+          <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.5rem;">מטרה — מה תרצה לקבל:</div>
+          <div style="display:flex;flex-direction:column;gap:.55rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.65rem .9rem;">
             ${[
-              { v:'lite',        checked:false, label:'Lite',               calls:'1 קריאה',  tip:'לקריאה מהירה לפני פגישה.\nמפיק: מטאדטה, תיאור עסקי, זרימה עליונה וכללים עסקיים.\nללא תרשימים, ללא טבלאות Excel.\nמתאים: "רק צריך להבין מה התוכנית עושה."' },
-              { v:'standard',    checked:true,  label:'Standard',           calls:'2 קריאות', tip:'תיעוד מלא לתחזוקה שוטפת.\nכולל: כל 9 הסעיפים + Mermaid flowchart + טבלאות Excel + פסאודו-קוד.\nברירת המחדל לרוב המקרים.' },
-              { v:'enterprise',  checked:false, label:'Enterprise',         calls:'3 קריאות', tip:'ניתוח עמוק מקסימלי.\nכולל: כל מה שב-Standard + draw.io XML + ניתוח מסכים (INPUT/MAP) + פירוט DPT.\nמתאים: תיעוד רגולטורי, ביקורת פנים, הכנה לשינויים מורכבים.' },
-              { v:'migration',   checked:false, label:'Migration Readiness',calls:'3 קריאות', tip:'להסבה למערכת מודרנית.\nכולל: Enterprise + ניתוח מסלול מיגרציה, מיפוי Adabas→SQL, מיפוי DPT לקבועים/קונפיגורציה, הערכת סיכונים.\nמתאים: פרויקטי מודרניזציה.' },
-              { v:'rewrite',     checked:false, label:'Rewrite Blueprint',  calls:'3 קריאות', tip:'למתכנת שיכתוב את הקוד מחדש בשפה מודרנית.\nכולל: Enterprise + מפרט ממשקים מלא, תרחישי בדיקה, הצעת ארכיטקטורה.\nמתאים: מעבר שפה מוחלט.' },
-              { v:'code-change', checked:false, label:'Code Change',        calls:'2 קריאות', tip:'לניתוח השפעת שינוי נקודתי.\nמגדיר את השינוי המבוקש ומנתח: אילו משתנים ומודולים מושפעים, לפני/אחרי פסאודו-קוד, סיכון רגרסיה.\nמתאים: בקשת שינוי ספציפית.' },
+              { v:'general',      checked:true,  label:'ניתוח מלא',           desc:'מסמך אפיון טכני-עסקי מלא — כל 9 הסעיפים, תרשימים וטבלאות. ברירת המחדל לרוב המקרים.' },
+              { v:'migration',    checked:false, label:'מוכנות למיגרציה',      desc:'ניתוח מלא + מסלול הסבה למערכת מודרנית: מיפוי Adabas→SQL, ערכים לקונפיגורציה, הערכת סיכוני מיגרציה.' },
+              { v:'rewrite',      checked:false, label:'כתיבה מחדש (Rewrite)', desc:'ניתוח מלא + מפרט לכתיבת הקוד מחדש בשפה מודרנית: ממשקים, תרחישי בדיקה, הצעת ארכיטקטורה.' },
+              { v:'code-change',  checked:false, label:'שינוי קוד',           desc:'מנתח השפעת שינוי נקודתי שתתאר: אילו משתנים/מודולים מושפעים, לפני/אחרי, סיכון רגרסיה.' },
+              { v:'line-by-line', checked:false, label:'פירוט שורה-שורה',     desc:'עובר על כל שורת קוד ומסביר מה היא עושה. מפיק קובץ Word (עברית, RTL) — לא מסמך אפיון, אלא תרגום מלא של הקוד.' },
+              { v:'overview',     checked:false, label:'מבט על',              desc:'מפת מחשבה אינטראקטיבית (אופקית) של הקוד, נפתחת ומוצגת בדף חדש עם צ׳אט לשאלות + קובץ Excel נלווה.' },
             ].map(o => `
-            <label style="display:flex;align-items:center;gap:.45rem;cursor:pointer;font-size:.83rem;padding:.15rem 0;">
-              <input type="radio" name="nat-depth" value="${o.v}" ${o.checked ? 'checked' : ''} style="accent-color:#0891b2;" onchange="window.natDepthChanged()">
-              <span style="color:#1e293b;min-width:130px;"><strong>${o.label}</strong></span>
-              <span style="color:#64748b;font-size:.75rem;">— ${o.calls}</span>
-              <span title="${o.tip.replace(/"/g,'&quot;')}" style="margin-right:auto;color:#0891b2;font-size:.78rem;cursor:help;user-select:none;" tabindex="0">ⓘ</span>
+            <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;font-size:.83rem;">
+              <input type="radio" name="nat-purpose" value="${o.v}" ${o.checked ? 'checked' : ''} style="accent-color:#0891b2;margin-top:.2rem;" onchange="window.natPurposeChanged()">
+              <span>
+                <span style="color:#1e293b;display:block;"><strong>${o.label}</strong></span>
+                <span style="color:#64748b;font-size:.76rem;line-height:1.4;">${o.desc}</span>
+              </span>
             </label>`).join('')}
           </div>
 
@@ -405,6 +454,27 @@ function injectNaturalModal() {
           <div id="nat-change-field" style="display:none;margin-top:.55rem;padding:.6rem .75rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;">
             <div style="font-size:.8rem;font-weight:600;color:#92400e;margin-bottom:.3rem;">תאר את השינוי המבוקש:</div>
             <textarea id="nat-change-desc" rows="2" placeholder="לדוגמה: הוספת פטור ל-4 שנים לרכבים חשמליים רשומים אחרי 2024." style="width:100%;padding:.45rem .6rem;border:1px solid #fed7aa;border-radius:6px;font-family:Heebo,sans-serif;font-size:.81rem;direction:rtl;resize:vertical;box-sizing:border-box;"></textarea>
+          </div>
+        </div>
+
+        <!-- Depth selector -->
+        <div id="nat-depth-section">
+          <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.5rem;">רמת עומק:</div>
+          <div style="display:flex;flex-direction:column;gap:.4rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.65rem .9rem;">
+            ${[
+              { v:'low',      checked:false, label:'נמוכה',       calls:'קריאה אחת',  desc:'סקירה מהירה — כל הפרטים בבת אחת, פחות מעמיק.' },
+              { v:'standard', checked:true,  label:'רגילה',       calls:'3 קריאות',   desc:'ברירת המחדל — איזון טוב בין מהירות לעומק.' },
+              { v:'high',     checked:false, label:'גבוהה',       calls:'6 קריאות',   desc:'המרבי — כל סעיף/זוג סעיפים בקריאה נפרדת, הכי מפורט.' },
+              { v:'auto',     checked:false, label:'✨ אוטומטי',  calls:'1–6 קריאות', desc:'הסוכן מנתח את מורכבות הקוד ומחליט בעצמו כמה קריאות נדרשות.' },
+            ].map(o => `
+            <label style="display:flex;align-items:center;gap:.45rem;cursor:pointer;font-size:.83rem;padding:.1rem 0;">
+              <input type="radio" name="nat-depth" value="${o.v}" ${o.checked ? 'checked' : ''} style="accent-color:#0891b2;">
+              <span style="color:#1e293b;min-width:75px;"><strong>${o.label}</strong></span>
+              <span style="color:#64748b;font-size:.75rem;">— ${o.calls} · ${o.desc}</span>
+            </label>`).join('')}
+          </div>
+          <div id="nat-depth-note" style="display:none;margin-top:.4rem;font-size:.75rem;color:#0891b2;">
+            ℹ️ בפירוט שורה-שורה, רמת העומק קובעת את רמת הפירוט בהסבר — לא את מספר הקריאות (זה נקבע לפי אורך הקובץ).
           </div>
         </div>
       </div>
@@ -470,17 +540,20 @@ function renderNatFileDisplay() {
   if (!el) return;
 
   const note = document.getElementById('nat-multifile-note');
+  const purposeSection = document.getElementById('nat-purpose-section');
   const depthSection = document.getElementById('nat-depth-section');
 
   if (!natFiles.length) {
     el.innerHTML = '';
     if (note) note.style.display = 'none';
+    if (purposeSection) purposeSection.style.opacity = '1';
     if (depthSection) depthSection.style.opacity = '1';
     return;
   }
 
   const isMulti = natFiles.length > 1;
   if (note) note.style.display = isMulti ? '' : 'none';
+  if (purposeSection) purposeSection.style.opacity = isMulti ? '0.45' : '1';
   if (depthSection) depthSection.style.opacity = isMulti ? '0.45' : '1';
 
   el.innerHTML = natFiles.map((f, i) => `
@@ -493,10 +566,12 @@ function renderNatFileDisplay() {
     <div style="font-size:.75rem;color:#0891b2;padding:.15rem .25rem;font-weight:600;">${natFiles.length} קבצים נבחרו</div>` : '');
 }
 
-window.natDepthChanged = function () {
-  const v = document.querySelector('input[name="nat-depth"]:checked')?.value;
+window.natPurposeChanged = function () {
+  const v = document.querySelector('input[name="nat-purpose"]:checked')?.value;
   const field = document.getElementById('nat-change-field');
   if (field) field.style.display = v === 'code-change' ? '' : 'none';
+  const note = document.getElementById('nat-depth-note');
+  if (note) note.style.display = v === 'line-by-line' ? '' : 'none';
 };
 
 window.natClearFile = function (idx) {
@@ -527,7 +602,8 @@ window.generateNatural = async function () {
     return;
   }
 
-  const depth         = document.querySelector('input[name="nat-depth"]:checked')?.value || 'standard';
+  const purpose       = document.querySelector('input[name="nat-purpose"]:checked')?.value || 'general';
+  const depthChoice   = document.querySelector('input[name="nat-depth"]:checked')?.value || 'standard';
   const context       = (document.getElementById('nat-context')?.value || '').trim();
   const changeDesc    = (document.getElementById('nat-change-desc')?.value || '').trim();
   const isMultiFile   = natFiles.length > 1;
@@ -555,7 +631,20 @@ window.generateNatural = async function () {
     return;
   }
 
+  if (!isMultiFile && purpose === 'line-by-line') {
+    await runLineByLine(progressId, filesData[0], depthChoice, context);
+    return;
+  }
+  if (!isMultiFile && purpose === 'overview') {
+    await runOverview(progressId, filesData[0], depthChoice, context);
+    return;
+  }
+
+  let mIdx = deps.getModelIdx();
   let chunks;
+  const DEPTH_LABELS = { low: 'נמוכה (קריאה אחת)', standard: 'רגילה (3 קריאות)', high: 'גבוהה (6 קריאות)' };
+  let resolvedDepthLabel = DEPTH_LABELS[depthChoice] || depthChoice;
+
   if (isMultiFile) {
     chunks = buildMultiFileChunks(filesData, context);
   } else {
@@ -564,16 +653,40 @@ window.generateNatural = async function () {
     if (context) fileHeader += `\nהקשר הרצה: ${context}\n`;
     fileHeader += '\n';
     const codeBlock = `\`\`\`natural\n${text}\n\`\`\``;
-    chunks = buildChunks(depth, fileHeader, codeBlock, changeDesc);
+
+    let depthLevel = depthChoice;
+    if (depthChoice === 'auto') {
+      deps.updateTyping(progressId, '✨ מנתח את מורכבות הקוד…');
+      try {
+        const analysisText = await natCallWithFallback(buildAutoDepthPromptNatural(codeBlock), mIdx);
+        mIdx = deps.getModelIdx();
+        const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
+          depthLevel = depthLevelForCount(n);
+          if (parsed.reason) {
+            deps.appendMessage('assistant', `✨ **ניתוח קוד:** ${parsed.reason}\n→ נבחרה רמת עומק **${DEPTH_LABELS[depthLevel]}**`);
+          }
+          resolvedDepthLabel = `אוטומטי → ${DEPTH_LABELS[depthLevel]}`;
+        } else {
+          depthLevel = 'standard';
+        }
+      } catch {
+        depthLevel = 'standard';
+      }
+    }
+
+    chunks = buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc);
   }
 
   const results = [];
-  let mIdx = deps.getModelIdx();
 
   try {
     for (let i = 0; i < chunks.length; i++) {
       deps.updateTyping(progressId, `מנתח… (${i + 1}/${chunks.length})`);
       results.push(await natCallWithFallback(chunks[i], mIdx));
+      mIdx = deps.getModelIdx();
     }
   } catch (err) {
     deps.removeTyping(progressId);
@@ -701,12 +814,12 @@ window.generateNatural = async function () {
 
   // ── Chat message ──────────────────────────────────────────────────────────
 
-  const depthLabels = { lite: 'Lite (קריאה אחת)', standard: 'Standard (2 קריאות)', enterprise: 'Enterprise (3 קריאות)', migration: 'Migration Readiness (3 קריאות)', rewrite: 'Rewrite Blueprint (3 קריאות)', 'code-change': 'Code Change (2 קריאות)' };
-  const depthLabel  = depthLabels[depth] || depth;
+  const purposeLabels = { general: 'ניתוח מלא', migration: 'מוכנות למיגרציה', rewrite: 'כתיבה מחדש', 'code-change': 'שינוי קוד' };
+  const purposeLabel = purposeLabels[purpose] || purpose;
 
   const displayName = isMultiFile ? `${fileNames.length} קבצים (${fileNames.join(', ')})` : `\`${fileNames[0]}\``;
   let summary = `✅ ניתוח ${displayName} הסתיים\n\n` +
-    (isMultiFile ? `**מצב:** ריבוי קבצים — ניתוח כל קובץ + קשרים` : `**עומק:** ${depthLabel}`);
+    (isMultiFile ? `**מצב:** ריבוי קבצים — ניתוח כל קובץ + קשרים` : `**מטרה:** ${purposeLabel} · **עומק:** ${resolvedDepthLabel}`);
   if (tableCount > 0) summary += ` · **${tableCount} טבלאות** (Excel + מציג)`;
   if (mermaidDiagrams.length > 0) summary += ` · **${mermaidDiagrams.length} תרשימים** (מציג)`;
   if (drawioXml) summary += ` · **draw.io XML** הורד`;
@@ -714,6 +827,265 @@ window.generateNatural = async function () {
   summary += `\n\n📋 מציג האפיונים נפתח עם הנתונים.\n💬 הקבצים טעונים בהקשר — ניתן לשאול שאלות בצ'אט.`;
   deps.appendMessage('assistant', summary);
 };
+
+// ── Purpose: פירוט שורה-שורה ───────────────────────────────────────────────
+
+const DETAIL_LABELS = { low: 'נמוכה', standard: 'רגילה', high: 'גבוהה' };
+
+async function runLineByLine(progressId, fileData, depthChoice, context) {
+  const { name, text } = fileData;
+  let mIdx = deps.getModelIdx();
+  let detailLevel = depthChoice === 'auto' ? 'standard' : depthChoice;
+
+  if (depthChoice === 'auto') {
+    deps.updateTyping(progressId, '✨ מנתח את מורכבות הקוד…');
+    try {
+      const analysisText = await natCallWithFallback(buildAutoDepthPromptNatural(text), mIdx);
+      mIdx = deps.getModelIdx();
+      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
+        detailLevel = depthLevelForCount(n);
+        if (parsed.reason) {
+          deps.appendMessage('assistant', `✨ **ניתוח קוד:** ${parsed.reason}\n→ נבחרה רמת פירוט **${DETAIL_LABELS[detailLevel]}**`);
+        }
+      }
+    } catch { /* keep standard */ }
+  }
+
+  const LINES_PER_CHUNK = { low: 220, standard: 150, high: 90 }[detailLevel] || 150;
+  const VERBOSITY = {
+    low: 'הסבר תמציתי ביותר — עד משפט קצר אחד לכל שורת קוד או קבוצת שורות רצופות פשוטות.',
+    standard: 'הסבר ברור ומדויק — משפט עד שניים לכל בלוק לוגי קטן (כ-2–5 שורות קוד).',
+    high: 'הסבר מפורט — לכל שורה או בלוק קטן, כולל המשמעות העסקית, edge cases, וההשפעה על שורות אחרות.',
+  }[detailLevel];
+
+  const lines = text.split(/\r?\n/);
+  const chunkTexts = [];
+  for (let i = 0; i < lines.length; i += LINES_PER_CHUNK) {
+    chunkTexts.push({ start: i + 1, code: lines.slice(i, i + LINES_PER_CHUNK).join('\n') });
+  }
+
+  const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
+  const results = [];
+  try {
+    for (let i = 0; i < chunkTexts.length; i++) {
+      const c = chunkTexts[i];
+      deps.updateTyping(progressId, `מפרט שורות ${c.start}–${c.start + c.code.split('\n').length - 1}… (${i + 1}/${chunkTexts.length})`);
+      const prompt = `אתה אנליסט מערכות בכיר המתמחה ב-Natural (Software AG). קיבלת קטע מתוך קובץ Natural בשם "${name}", החל משורה ${c.start} בקובץ המקורי.${contextLine}
+עבור על הקטע **שורה אחר שורה, לפי הסדר** והסבר בעברית מה כל שורה/פקודה עושה מבחינה טכנית ועסקית. אל תדלג על אף שורה משמעותית (ניתן לקבץ שורות ריקות/הערות טכניות זניחות).
+${VERBOSITY}
+פורמט הפלט: לכל שורה או קבוצת שורות — ציין את מספרי השורות המקוריים בסוגריים, ואז את ההסבר. השתמש בכותרות Markdown (###) לחלוקה לוגית אם רלוונטי. כתוב בעברית, RTL, ללא הקדמות או סיכומים — רק את הפירוט עצמו.
+
+\`\`\`natural
+${c.code}
+\`\`\``;
+      results.push(await natCallWithFallback(prompt, mIdx));
+      mIdx = deps.getModelIdx();
+    }
+  } catch (err) {
+    deps.removeTyping(progressId);
+    deps.setLoading(false);
+    deps.appendMessage('error', 'שגיאה: ' + err.message);
+    return;
+  }
+
+  deps.removeTyping(progressId);
+  deps.setLoading(false);
+
+  const combined  = results.join('\n\n---\n\n');
+  const html      = lineByLineToWordHtml(name, combined);
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const baseName  = `natural-line-by-line-${name.replace(/\.[^.]+$/, '')}-${timestamp}`;
+  const blob = new Blob(['﻿', html], { type: 'application/msword' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `${baseName}.doc`; a.click();
+  URL.revokeObjectURL(url);
+
+  deps.appendMessage('assistant',
+    `✅ פירוט שורה-שורה של \`${name}\` הסתיים\n\n` +
+    `**רמת פירוט:** ${DETAIL_LABELS[detailLevel]} · **${chunkTexts.length} קריאות API** (לפי אורך הקובץ)\n\n` +
+    `📄 קובץ Word הורד עם ההסבר המלא לכל שורות הקוד.`);
+}
+
+function lineByLineToWordHtml(fileName, markdownText) {
+  let bodyHtml = '';
+  if (window.marked) {
+    try { bodyHtml = window.marked.parse(markdownText, { breaks: true, gfm: true }); }
+    catch { bodyHtml = deps.escHtml(markdownText).replace(/\n/g, '<br>'); }
+  } else {
+    bodyHtml = deps.escHtml(markdownText).replace(/\n/g, '<br>');
+  }
+  return `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+  <meta charset='utf-8'>
+  <title>פירוט שורה-שורה — ${deps.escHtml(fileName)}</title>
+  <style>
+    body  { font-family: Arial, sans-serif; direction: rtl; font-size: 11pt; margin: 2cm; color: #1a202c; }
+    h1,h2,h3 { color: #1a365d; }
+    hr    { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
+    code  { font-family: Consolas, monospace; background: #f7fafc; padding: 1pt 4pt; font-size: 10pt; }
+    pre   { background: #f7fafc; padding: 8pt; border-radius: 4pt; direction: ltr; }
+  </style>
+</head>
+<body>
+  <h1>פירוט שורה-שורה — ${deps.escHtml(fileName)}</h1>
+  ${bodyHtml}
+</body>
+</html>`;
+}
+
+// ── Purpose: מבט על (mind map) ─────────────────────────────────────────────
+
+async function runOverview(progressId, fileData, depthChoice, context) {
+  const { name, text } = fileData;
+  let mIdx = deps.getModelIdx();
+  let numCalls;
+  let autoReason = '';
+
+  const codeBlock = `\`\`\`natural\n${text}\n\`\`\``;
+
+  if (depthChoice === 'auto') {
+    deps.updateTyping(progressId, '✨ מנתח את מורכבות הקוד…');
+    try {
+      const analysisText = await natCallWithFallback(buildAutoDepthPromptNatural(codeBlock), mIdx);
+      mIdx = deps.getModelIdx();
+      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        numCalls = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
+        autoReason = parsed.reason || '';
+      } else {
+        numCalls = 3;
+      }
+    } catch {
+      numCalls = 3;
+    }
+  } else {
+    numCalls = { low: 1, standard: 3, high: 6 }[depthChoice] || 3;
+  }
+
+  const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
+
+  let tree = null;
+  try {
+    for (let i = 0; i < numCalls; i++) {
+      deps.updateTyping(progressId, `בונה מפת מחשבה… (${i + 1}/${numCalls})`);
+      const prompt = buildOverviewPrompt(name, codeBlock, contextLine, tree, i, numCalls);
+      const resultText = await natCallWithFallback(prompt, mIdx);
+      mIdx = deps.getModelIdx();
+      const parsed = parseOverviewTree(resultText);
+      if (parsed) tree = parsed;
+    }
+  } catch (err) {
+    deps.removeTyping(progressId);
+    deps.setLoading(false);
+    deps.appendMessage('error', 'שגיאה: ' + err.message);
+    return;
+  }
+
+  deps.removeTyping(progressId);
+  deps.setLoading(false);
+
+  if (!tree) {
+    deps.appendMessage('error', 'לא ניתן היה לבנות מפת מחשבה מהקוד. נסה שוב.');
+    return;
+  }
+
+  if (autoReason) deps.appendMessage('assistant', `✨ **ניתוח קוד:** ${autoReason}\n→ נבנו ${numCalls} שכבות פירוט`);
+
+  // Flatten to Excel
+  const rows = [];
+  flattenTree(tree, [], rows);
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const baseName  = `natural-overview-${name.replace(/\.[^.]+$/, '')}-${timestamp}`;
+  if (typeof XLSX !== 'undefined' && rows.length) {
+    const wb  = XLSX.utils.book_new();
+    const aoa = [['רמה 1', 'רמה 2', 'רמה 3', 'רמה 4', 'תיאור'], ...rows];
+    const ws  = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'מבט על');
+    XLSX.writeFile(wb, `${baseName}.xlsx`);
+  }
+
+  try {
+    localStorage.setItem('natural-mindmap-data', JSON.stringify({
+      tree,
+      meta: { fileName: name, timestamp: new Date().toISOString() },
+    }));
+    try { new BroadcastChannel('natural-mindmap').postMessage('update'); } catch {}
+    window.open('natural-mindmap.html', 'natural-mindmap');
+  } catch { /* localStorage unavailable */ }
+
+  deps.appendMessage('assistant',
+    `✅ מבט על עבור \`${name}\` הופק\n\n` +
+    `**${numCalls} קריאות API** · קובץ Excel הורד\n\n` +
+    `🗺️ מפת המחשבה נפתחה בדף חדש — לחץ על "שאל" בתוכה כדי לשאול שאלות על הקוד.`);
+}
+
+function buildOverviewPrompt(fileName, codeBlock, contextLine, existingTree, callIdx, totalCalls) {
+  const base = `אתה אנליסט מערכות בכיר המתמחה בקוד Natural (Software AG). קיבלת את הקובץ "${fileName}".${contextLine}
+המשימה: להפיק מפת מחשבה (עץ) של הקוד — בעברית — שמתארת את הזרימה העסקית והטכנית בצורה היררכית: מהתמונה הכללית ועד לפרטים.
+
+הפלט הנדרש: אובייקט JSON יחיד בלבד (ללא טקסט נלווה, ללא code fence), במבנה:
+{"name": "שם התוכנית/התהליך", "desc": "תיאור קצר (1-2 משפטים)", "children": [ { "name": "...", "desc": "...", "children": [...] }, ... ]}
+כל node חייב "name" ו-"desc". "children" הוא מערך (יכול להיות ריק).
+
+\`\`\`natural
+${codeBlock}
+\`\`\``;
+
+  if (totalCalls === 1 || !existingTree) {
+    return base + `
+
+זוהי קריאה יחידה — הפק עץ מלא בעל 3–4 רמות עומק: התוכנית עצמה בשורש, שלבי התהליך המרכזיים כילדים ישירים, ותתי-פרטים (כללים עסקיים, גישות נתונים, אינטגרציות) כילדי-ילדים. השב אך ורק ב-JSON.`;
+  }
+
+  return base + `
+
+הנה העץ שנבנה עד כה (מקריאות קודמות):
+${JSON.stringify(existingTree)}
+
+זוהי קריאה ${callIdx + 1} מתוך ${totalCalls}. **החזר את העץ המלא והמעודכן** — הוסף עוד רמות עומק, עוד ילדים לכל node קיים שרלוונטי, ופרטים נוספים (edge cases, כללי ולידציה, גישות נתונים ספציפיות, אינטגרציות). אל תמחק מידע קיים — רק הרחב והעמק. השב אך ורק ב-JSON של העץ המלא.`;
+}
+
+function parseOverviewTree(text) {
+  if (!text) return null;
+  const s = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  try {
+    const v = JSON.parse(s);
+    if (v && typeof v === 'object' && v.name) return normalizeTreeNode(v);
+  } catch { /* try to extract */ }
+  const first = s.indexOf('{');
+  const last  = s.lastIndexOf('}');
+  if (first !== -1 && last !== -1 && last > first) {
+    try {
+      const v = JSON.parse(s.slice(first, last + 1));
+      if (v && typeof v === 'object' && v.name) return normalizeTreeNode(v);
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
+function normalizeTreeNode(node) {
+  return {
+    name:     String(node.name || '').trim() || 'ללא שם',
+    desc:     String(node.desc || '').trim(),
+    children: Array.isArray(node.children) ? node.children.map(normalizeTreeNode) : [],
+  };
+}
+
+function flattenTree(node, path, rows, depth = 0) {
+  const newPath = [...path, node.name];
+  const cols = ['', '', '', ''];
+  for (let i = 0; i < Math.min(newPath.length, 4); i++) cols[i] = newPath[i];
+  if (!node.children || node.children.length === 0 || depth > 0) {
+    rows.push([...cols, node.desc || '']);
+  }
+  (node.children || []).forEach(c => flattenTree(c, newPath, rows, depth + 1));
+}
 
 // ── File reader ───────────────────────────────────────────────────────────
 
@@ -824,56 +1196,96 @@ flowchart TD
 
 // ── Single-file prompt assembly ────────────────────────────────────────────
 
-function buildChunks(depth, fileHeader, codeBlock, changeDesc) {
+function buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc) {
   const intro = `${NATURAL_SYSTEM}\n\n---\n\n## הקובץ לניתוח:\n\n${fileHeader}${codeBlock}\n\n---\n\n`;
 
-  if (depth === 'lite') {
-    return [intro + SECTIONS_PART1 + '\n\nפלט **סעיפים 1–4 בלבד**. ללא תרשימים, ללא טבלאות Excel.'];
-  }
+  const appendix = purpose === 'migration' ? SECTIONS_MIGRATION_APPENDIX
+    : purpose === 'rewrite' ? SECTIONS_REWRITE_APPENDIX
+    : '';
+  const appendixLabel = purpose === 'migration' ? ' + סעיף 10 מוכנות למיגרציה'
+    : purpose === 'rewrite' ? ' + סעיף 10 Rewrite Blueprint'
+    : '';
 
-  if (depth === 'standard') {
+  if (purpose === 'code-change') {
+    if (depthLevel === 'low') {
+      return [
+        intro + CC_META_CHANGE(changeDesc) + CC_IMPACT + CC_RULES + CC_PSEUDOCODE + CC_RISK + CC_STEPS_TESTS +
+        '\n\nפלט מלא — כל הסעיפים (1–8) בקריאה אחת.',
+      ];
+    }
+    if (depthLevel === 'high') {
+      return [
+        intro + CC_META_CHANGE(changeDesc) + '\n\nפלט **סעיפים 1–2 בלבד**.',
+        intro + CC_IMPACT + '\n\nפלט **סעיף 3 בלבד**.',
+        intro + CC_RULES + '\n\nפלט **סעיף 4 בלבד**.',
+        intro + CC_PSEUDOCODE + '\n\nפלט **סעיף 5 בלבד**.',
+        intro + CC_RISK + '\n\nפלט **סעיף 6 בלבד**.',
+        intro + CC_STEPS_TESTS + '\n\nפלט **סעיפים 7–8 בלבד**.',
+      ];
+    }
+    // standard (3 calls) — default
     return [
-      intro + SECTIONS_PART1 + '\n\n' + OUTPUT_FORMATS_PART1 + '\n\nפלט **Part A בלבד** (סעיפים 1–4).',
-      intro + SECTIONS_PART2 + '\n\n' + OUTPUT_FORMATS_PART2 + '\n\nפלט **Part B בלבד** (סעיפים 5–9).',
+      intro + CC_META_CHANGE(changeDesc) + CC_IMPACT + CC_RULES + '\n\nפלט **סעיפים 1–4 בלבד** — ניתוח השפעה.',
+      intro + CC_PSEUDOCODE + '\n\nפלט **סעיף 5 בלבד** — פסאודו-קוד לפני/אחרי.',
+      intro + CC_RISK + CC_STEPS_TESTS + '\n\nפלט **סעיפים 6–8 בלבד** — סיכונים ויישום.',
     ];
   }
 
-  if (depth === 'enterprise') {
+  // general / migration / rewrite
+  if (depthLevel === 'low') {
     return [
-      intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
-      intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
-      intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + '\n\nפלט **Part C בלבד** (סעיפים 5–9 + טבלאות + פסאודו-קוד + draw.io XML).',
+      intro + SECTIONS_ALL + appendix + '\n\n' + OUTPUT_FORMATS_BASIC +
+      `\n\nפלט מלא — כל הסעיפים (1–9${appendix ? '+10' : ''}) בקריאה אחת.`,
     ];
   }
 
-  if (depth === 'migration') {
+  if (depthLevel === 'high') {
     return [
-      intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
-      intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
-      intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + SECTIONS_MIGRATION_APPENDIX + '\n\nפלט **Part C בלבד** (סעיפים 5–9 + סעיף 10 מוכנות למיגרציה + טבלאות + פסאודו-קוד + draw.io XML).',
+      intro + SECTIONS_HIGH_1 + '\n\nפלט **סעיפים 1–2 בלבד**.',
+      intro + SECTION_3_ONLY + '\n\n' + FORMAT_3_ONLY + '\n\nפלט **סעיף 3 בלבד** + Mermaid + טבלת I/O.',
+      intro + SECTION_4_ONLY + '\n\n' + FORMAT_4_ONLY + '\n\nפלט **סעיף 4 בלבד** + טבלת מספרי קסם.',
+      intro + SECTION_56_ONLY + '\n\n' + FORMAT_56_ONLY + '\n\nפלט **סעיפים 5–6 בלבד** + טבלת גישות נתונים.',
+      intro + SECTION_78_ONLY + '\n\n' + FORMAT_78_ONLY + '\n\nפלט **סעיפים 7–8 בלבד** + טבלת קודי שגיאה.',
+      intro + SECTION_9_ONLY + '\n\n' + FORMAT_9_ONLY + appendix +
+      `\n\nפלט **סעיף 9${appendixLabel} בלבד** + פסאודו-קוד + draw.io XML.`,
     ];
   }
 
-  if (depth === 'rewrite') {
-    return [
-      intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
-      intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
-      intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + SECTIONS_REWRITE_APPENDIX + '\n\nפלט **Part C בלבד** (סעיפים 5–9 + סעיף 10 Rewrite Blueprint + טבלאות + פסאודו-קוד + draw.io XML).',
-    ];
-  }
-
-  if (depth === 'code-change') {
-    return [
-      intro + SECTIONS_CODE_CHANGE_1(changeDesc) + '\n\nפלט **Part A בלבד** — ניתוח השפעה (סעיפים 1–4).',
-      intro + SECTIONS_CODE_CHANGE_2 + '\n\nפלט **Part B בלבד** — יישום וסיכונים (סעיפים 5–8).',
-    ];
-  }
-
-  // fallback → standard
+  // standard (3 calls) — default
   return [
-    intro + SECTIONS_PART1 + '\n\n' + OUTPUT_FORMATS_PART1 + '\n\nפלט **Part A בלבד** (סעיפים 1–4).',
-    intro + SECTIONS_PART2 + '\n\n' + OUTPUT_FORMATS_PART2 + '\n\nפלט **Part B בלבד** (סעיפים 5–9).',
+    intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
+    intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
+    intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + appendix +
+    `\n\nפלט **Part C בלבד** (סעיפים 5–9${appendixLabel} + טבלאות + פסאודו-קוד + draw.io XML).`,
   ];
+}
+
+// ── Auto-depth: ניתוח קוד לבחירת מספר קריאות ───────────────────────────────
+
+function buildAutoDepthPromptNatural(codeBlock) {
+  return `אתה מנתח קוד Natural. קרא את הקוד הבא והחלט כמה קריאות API נדרשות כדי לייצר מסמך אפיון מלא ומדויק.
+
+קריטריונים להחלטה:
+- 1 קריאה: תוכנית קצרה ופשוטה, לוגיקה מעטה
+- 2-3 קריאות: תוכנית בינונית, מספר תהליכים וגישות נתונים
+- 4-5 קריאות: תוכנית מורכבת, הרבה ענפי לוגיקה, אינטגרציות וטבלאות
+- 6 קריאות: תוכנית ארוכה ומורכבת מאוד — אל תגיע ל-6 אלא אם באמת נדרש
+
+החלטה מקסימלית: 6 קריאות.
+
+השב אך ורק ב-JSON הבא, ללא שום טקסט נוסף:
+{"chunks": <מספר שלם בין 1 ל-6>, "reason": "<סיבה קצרה בעברית, עד 20 מילה>"}
+
+═══════════════════════════════════════════════════
+הקוד לניתוח
+═══════════════════════════════════════════════════
+${codeBlock}`;
+}
+
+function depthLevelForCount(n) {
+  if (n <= 1) return 'low';
+  if (n >= 5) return 'high';
+  return 'standard';
 }
 
 // ── Gemini call with model fallback ──────────────────────────────────────

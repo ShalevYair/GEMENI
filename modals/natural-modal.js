@@ -942,11 +942,12 @@ async function runLineByLine(progressId, fileData, depthChoice, context) {
   for (let i = 0; i < lines.length; i += LINES_PER_CHUNK) {
     chunkTexts.push({ start: i + 1, code: lines.slice(i, i + LINES_PER_CHUNK).join('\n') });
   }
+  const totalPlannedCalls = chunkTexts.length + 1; // +1 for the general summary page
 
-  if (chunkTexts.length > CONFIRM_CALLS_THRESHOLD) {
+  if (totalPlannedCalls > CONFIRM_CALLS_THRESHOLD) {
     deps.removeTyping(progressId);
     const proceed = confirm(
-      `הקובץ "${name}" יידרש כ-${chunkTexts.length} קריאות API ברמת פירוט "${DETAIL_LABELS[detailLevel]}" (זה עלול לקחת מספר דקות).\n\n` +
+      `הקובץ "${name}" יידרש כ-${totalPlannedCalls} קריאות API ברמת פירוט "${DETAIL_LABELS[detailLevel]}" (זה עלול לקחת מספר דקות).\n\n` +
       `לחץ "אישור" כדי להמשיך, או "ביטול" כדי לבטל ולבחור רמת פירוט נמוכה יותר (פחות קריאות) מהתפריט.`
     );
     if (!proceed) {
@@ -960,7 +961,18 @@ async function runLineByLine(progressId, fileData, depthChoice, context) {
 
   const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
   let results;
+  let programSummary = '';
   try {
+    deps.updateTyping(progressId, '📝 מכין הסבר כללי על התוכנית…');
+    checkCancelled();
+    try {
+      programSummary = await natCallWithFallback(buildLineByLineSummaryPrompt(name, text, context), mIdx);
+      mIdx = deps.getModelIdx();
+    } catch (summaryErr) {
+      if (summaryErr instanceof NatCancelled) throw summaryErr;
+      programSummary = ''; // non-fatal — skip the summary page if this single call fails
+    }
+
     results = await runPool(chunkTexts, CONCURRENCY_LIMIT, async (c) => {
       const prompt = `אתה אנליסט מערכות בכיר המתמחה ב-Natural (Software AG). קיבלת קטע מתוך קובץ Natural בשם "${name}", החל משורה ${c.start} בקובץ המקורי.${contextLine}
 עבור על הקטע **שורה אחר שורה, לפי הסדר** והסבר בעברית מה כל שורה/פקודה עושה מבחינה טכנית ועסקית. אל תדלג על אף שורה משמעותית (ניתן לקבץ שורות ריקות/הערות טכניות זניחות).
@@ -987,7 +999,7 @@ ${c.code}
   hideCancelButton();
 
   const combined  = results.join('\n\n---\n\n');
-  const html      = lineByLineToWordHtml(name, combined);
+  const html      = lineByLineToWordHtml(name, combined, programSummary);
   const timestamp = new Date().toISOString().slice(0, 10);
   const baseName  = `natural-line-by-line-${name.replace(/\.[^.]+$/, '')}-${timestamp}`;
   const blob = new Blob(['﻿', html], { type: 'application/msword' });
@@ -998,11 +1010,24 @@ ${c.code}
 
   deps.appendMessage('assistant',
     `✅ פירוט שורה-שורה של \`${name}\` הסתיים\n\n` +
-    `**רמת פירוט:** ${DETAIL_LABELS[detailLevel]} · **${chunkTexts.length} קריאות API** (לפי אורך הקובץ)\n\n` +
-    `📄 קובץ Word הורד עם ההסבר המלא לכל שורות הקוד.`);
+    `**רמת פירוט:** ${DETAIL_LABELS[detailLevel]} · **${chunkTexts.length + 1} קריאות API** (לפי אורך הקובץ)\n\n` +
+    `📄 קובץ Word הורד — עמוד ראשון: הסבר כללי על התוכנית, ואז ההסבר המלא לכל שורות הקוד.`);
 }
 
-function lineByLineToWordHtml(fileName, markdownText) {
+function buildLineByLineSummaryPrompt(fileName, text, context) {
+  const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
+  return `אתה אנליסט מערכות בכיר המתמחה ב-Natural (Software AG). קיבלת קובץ Natural בשם "${fileName}".${contextLine}
+
+המשימה: כתוב הסבר כללי באורך של כעמוד אחד (כ-300–500 מילים) בעברית, ברור וזורם (פסקאות מופרדות בשורה ריקה, לא רשימה), שיתאר: מה התוכנית הזו עושה, למה היא קיימת (הקשר העסקי), מי מריץ אותה ומתי, מה הקלט והפלט העיקריים, ומה קורה בקווים כלליים מתחילת הריצה ועד סופה. זהו הסבר למי שלא מכיר את הקוד כלל — אל תרד לפירוט טכני של שורות ספציפיות (זה יגיע בהמשך בנפרד, בפירוט שורה-שורה).
+
+השב בטקסט רגיל בלבד (לא Markdown, לא JSON, ללא כותרות מסומנות) — רק פסקאות ההסבר עצמן.
+
+\`\`\`natural
+${text}
+\`\`\``;
+}
+
+function lineByLineToWordHtml(fileName, markdownText, programSummary) {
   let bodyHtml = '';
   if (window.marked) {
     try { bodyHtml = window.marked.parse(markdownText, { breaks: true, gfm: true }); }
@@ -1010,6 +1035,10 @@ function lineByLineToWordHtml(fileName, markdownText) {
   } else {
     bodyHtml = deps.escHtml(markdownText).replace(/\n/g, '<br>');
   }
+  const summaryHtml = (programSummary || '').trim()
+    ? deps.escHtml(programSummary.trim()).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n')
+    : '<p style="color:#94a3b8;">(לא הופק הסבר כללי עבור קובץ זה.)</p>';
+
   return `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
   <meta charset='utf-8'>
@@ -1020,9 +1049,16 @@ function lineByLineToWordHtml(fileName, markdownText) {
     hr    { border: none; border-top: 1px solid #e2e8f0; margin: 12pt 0; }
     code  { font-family: Consolas, monospace; background: #f7fafc; padding: 1pt 4pt; font-size: 10pt; }
     pre   { background: #f7fafc; padding: 8pt; border-radius: 4pt; direction: ltr; }
+    p     { line-height: 1.6; margin: 0 0 10pt; }
+    .page-break { page-break-before: always; mso-break-type: page-break; }
   </style>
 </head>
 <body>
+  <h1>מה התוכנית עושה — ${deps.escHtml(fileName)}</h1>
+  ${summaryHtml}
+
+  <div class="page-break"></div>
+
   <h1>פירוט שורה-שורה — ${deps.escHtml(fileName)}</h1>
   ${bodyHtml}
 </body>
@@ -1070,7 +1106,10 @@ async function runOverview(progressId, fileData, depthChoice, context) {
       const resultText = await natCallWithFallback(prompt, mIdx);
       mIdx = deps.getModelIdx();
       const parsed = parseOverviewTree(resultText);
-      if (parsed) tree = parsed;
+      if (parsed) {
+        if (!parsed.summary && tree?.summary) parsed.summary = tree.summary;
+        tree = parsed;
+      }
     }
   } catch (err) {
     deps.removeTyping(progressId);
@@ -1130,8 +1169,10 @@ function buildOverviewPrompt(fileName, codeBlock, contextLine, existingTree, cal
 המשימה: להפיק מפת מחשבה (עץ) של הקוד — בעברית — שמתארת את הזרימה העסקית והטכנית בצורה היררכית: מהתמונה הכללית ועד לפרטים.
 
 הפלט הנדרש: אובייקט JSON יחיד בלבד (ללא טקסט נלווה, ללא code fence), במבנה:
-{"name": "תווית עסקית קצרה וברורה בעברית", "code": "השם/הזיהוי הטכני המקורי מהקוד (אם רלוונטי, אחרת מחרוזת ריקה)", "desc": "תיאור קצר (1-2 משפטים)", "children": [ { "name": "...", "code": "...", "desc": "...", "children": [...] }, ... ]}
-כל node חייב "name", "code" (יכול להיות ריק) ו-"desc". "children" הוא מערך (יכול להיות ריק).
+{"name": "תווית עסקית קצרה וברורה בעברית", "code": "השם/הזיהוי הטכני המקורי מהקוד (אם רלוונטי, אחרת מחרוזת ריקה)", "desc": "תיאור קצר (1-2 משפטים)", "summary": "רק בצומת השורש (ראה הנחיה נפרדת למטה) — אחרת מחרוזת ריקה", "children": [ { "name": "...", "code": "...", "desc": "...", "summary": "", "children": [...] }, ... ]}
+כל node חייב "name", "code" (יכול להיות ריק), "desc" ו-"summary" (ריק בכל הצמתים מלבד השורש). "children" הוא מערך (יכול להיות ריק).
+
+**חשוב — "summary" בצומת השורש בלבד:** בצומת השורש (התוכנית עצמה) הוסף שדה "summary" — הסבר כללי באורך של כעמוד אחד (כ-300–500 מילים), בעברית, ברור וזורם (פסקאות מופרדות ב-\\n\\n, לא רשימה). ההסבר מיועד למי שלא מכיר את הקוד בכלל: מה התוכנית עושה, למה היא קיימת (הקשר עסקי), מי משתמש בה/מריץ אותה, מה הקלט והפלט העיקריים, ומה קורה בקווים כלליים משלב ההרצה ועד סיומה. זהו שדה נפרד מ-"desc" (שנשאר קצר) — "summary" מיועד לקריאה מלאה ועצמאית.
 
 **חשוב — "name" הוא תמיד תווית עסקית קריאה** (למשל "בדיקת הגבלת רישוי" ולא "RC0851N3"). את השם/הקוד הטכני הגולמי (שם שדה, שם תת-שגרה, קוד תוכנית) שים תמיד ב-"code", לעולם לא בתוך "name".
 
@@ -1155,7 +1196,7 @@ ${codeBlock}
 הנה העץ שנבנה עד כה (מקריאות קודמות):
 ${JSON.stringify(existingTree)}
 
-זוהי קריאה ${callIdx + 1} מתוך ${totalCalls}. **החזר את העץ המלא והמעודכן** — הוסף עוד רמות עומק, עוד ילדים לכל node קיים שרלוונטי, ופרטים נוספים (edge cases, כללי ולידציה, גישות נתונים ספציפיות, אינטגרציות), **בענפים העסקיים/הלוגיים בעיקר** — לא בהרחבת מבנה הנתונים הגולמי. אל תמחק מידע קיים — רק הרחב והעמק. השב אך ורק ב-JSON של העץ המלא.`;
+זוהי קריאה ${callIdx + 1} מתוך ${totalCalls}. **החזר את העץ המלא והמעודכן** — הוסף עוד רמות עומק, עוד ילדים לכל node קיים שרלוונטי, ופרטים נוספים (edge cases, כללי ולידציה, גישות נתונים ספציפיות, אינטגרציות), **בענפים העסקיים/הלוגיים בעיקר** — לא בהרחבת מבנה הנתונים הגולמי. אל תמחק מידע קיים — רק הרחב והעמק. את שדה ה-"summary" בשורש **העתק בדיוק כפי שהוא** מהעץ הקיים למעלה, ללא שינוי. השב אך ורק ב-JSON של העץ המלא.`;
 }
 
 function parseOverviewTree(text) {
@@ -1181,6 +1222,7 @@ function normalizeTreeNode(node) {
     name:     String(node.name || '').trim() || 'ללא שם',
     code:     String(node.code || '').trim(),
     desc:     String(node.desc || '').trim(),
+    summary:  String(node.summary || '').trim(),
     children: Array.isArray(node.children) ? node.children.map(normalizeTreeNode) : [],
   };
 }

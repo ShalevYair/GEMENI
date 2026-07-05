@@ -8,12 +8,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="DSLCstyles.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
     <div class="header">
         <h1>🗺 מבט על — <span id="header-filename">קובץ Natural</span></h1>
         <div class="header-controls">
+            <button class="chat-btn" onclick="document.getElementById('nat-load-file-input').click()" title="טען מפת מחשבה מקובץ Excel">📂 טען</button>
+            <input type="file" id="nat-load-file-input" accept=".xlsx" style="display:none;" onchange="window.loadMindmapFromExcel(this.files[0])">
             <button class="chat-btn" onclick="openChat()" title="שאל שאלה על הקוד">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                 שאל
@@ -22,6 +25,7 @@
                 <button class="ctrl-btn" onclick="changeFontSize(1)" title="הגדל טקסט">+</button>
                 <button class="ctrl-btn" onclick="changeFontSize(-1)" title="הקטן טקסט">-</button>
             </div>
+            <button class="chat-btn" onclick="togglePanel()" id="panel-toggle-btn" title="הסתר/הצג פאנל צד">⟨⟩ פאנל</button>
             <button class="dark-mode-btn" onclick="toggleDarkMode()" id="dark-mode-btn" title="מצב בהיר/כהה">&#9788;</button>
         </div>
     </div>
@@ -31,7 +35,7 @@
             <div id="empty-state">
                 <div style="color:#94a3b8;margin-bottom:15px;font-size:3rem;">⏳</div>
                 <h2 style="font-weight:300;margin:10px 0;">ממתין לנתונים...</h2>
-                <p style="font-size:1.1rem;opacity:0.7;">מפת המחשבה תיטען אוטומטית לאחר יצירתה בסוכן NATURAL</p>
+                <p style="font-size:1.1rem;opacity:0.7;">מפת המחשבה תיטען אוטומטית לאחר יצירתה בסוכן NATURAL, או לחץ "📂 טען" כדי לטעון קובץ Excel שנוצר בעבר</p>
             </div>
         </div>
 

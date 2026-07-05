@@ -23,6 +23,7 @@ All pages are standalone HTML files that import JS via `<script type="module">`.
 | `spec-viewer.html` | Spec viewer — 4-tab layout (Markdown, Excel, Mermaid, Screens) |
 | `sf-agent.html` | Salesforce Killer — separate chat page |
 | `SDLCMindMap.html` | Interactive SDLC mind-map |
+| `natural-mindmap.html` | NATURAL "מבט על" — standalone horizontal (top-down) mind-map of an analyzed code file, with embedded chat; no sidebar (not wrapped by `nav.js`) |
 | `nav.js` | Injects sidebar + header into every page at runtime |
 | `styles.css` | Global dark-mode-first CSS (CSS variables, sidebar, agent cards) |
 | `agent-chat.js` | Chat logic: file reading, chunking, auto-download, model fallback, modal init |
@@ -216,4 +217,7 @@ For generators (modals), fallback is handled inside `callWithFallback()` in each
 | שרגא | `.doc` (Word-compatible HTML, RTL) |
 | המסכם | `.xlsx` (hierarchical summary) |
 | אוסף הדרישות | `.md` or `.doc` |
+| NATURAL — ניתוח מלא/מיגרציה/כתיבה מחדש/שינוי קוד | `.md` + `.xlsx` + optional `.drawio` (spec-viewer) |
+| NATURAL — פירוט שורה-שורה | `.doc` (Word-compatible HTML, RTL) |
+| NATURAL — מבט על | `.xlsx` + live mind-map page (`natural-mindmap.html`) with embedded chat |
 | Most chat agents | inline (auto-download `.md` if > 8,000 chars) |

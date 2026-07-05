@@ -91,11 +91,17 @@ function loadFromStorage() {
         if (el) el.textContent = fileName;
         document.getElementById('empty-state').style.display = 'none';
         initChart(buildEchartsNode(currentTree, 0));
+        showRootSummary(currentTree);
         if (typeof onTreeLoaded === 'function') onTreeLoaded(currentTree);
         return true;
     } catch {
         return false;
     }
+}
+
+function showRootSummary(tree) {
+    if (!tree) return;
+    showPanel({ name: tree.name, code: tree.code, desc: tree.summary || tree.desc });
 }
 
 const LABEL_MAX_WIDTH = 130;
@@ -216,8 +222,8 @@ window.loadMindmapFromExcel = async function (file) {
         const el = document.getElementById('header-filename');
         if (el) el.textContent = fileName;
         document.getElementById('empty-state').style.display = 'none';
-        hidePanel();
         initChart(buildEchartsNode(currentTree, 0));
+        showRootSummary(currentTree);
         if (typeof onTreeLoaded === 'function') onTreeLoaded(currentTree);
         try {
             localStorage.setItem('natural-mindmap-data', JSON.stringify({ tree: currentTree, meta: { fileName } }));

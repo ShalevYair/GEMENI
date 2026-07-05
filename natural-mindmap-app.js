@@ -98,6 +98,8 @@ function loadFromStorage() {
     }
 }
 
+const LABEL_MAX_WIDTH = 130;
+
 function buildEchartsNode(node, depth) {
     const idx = Math.min(depth, 3);
     const sizes = [22, 16, 12, 8];
@@ -108,12 +110,33 @@ function buildEchartsNode(node, depth) {
     const fontSizes = [BASE_FONT_SIZES.root, BASE_FONT_SIZES.level1, BASE_FONT_SIZES.level2, BASE_FONT_SIZES.level3];
     return {
         name: node.name,
+        code: node.code || '',
         desc: node.desc || '',
         symbolSize: sizes[idx],
         itemStyle: { color: colors[idx] },
-        label: { fontWeight: fontWeights[idx], fontSize: fontSizes[idx], color: labelColor },
+        label: {
+            fontWeight: fontWeights[idx], fontSize: fontSizes[idx], color: labelColor,
+            overflow: 'truncate', width: LABEL_MAX_WIDTH, ellipsis: '…',
+        },
         children: (node.children || []).map(c => buildEchartsNode(c, depth + 1)),
     };
+}
+
+const INITIAL_TREE_DEPTH = 2;
+
+function computeInitialZoom(rootNode) {
+    const counts = {};
+    (function walk(node, depth) {
+        if (depth > INITIAL_TREE_DEPTH) return;
+        counts[depth] = (counts[depth] || 0) + 1;
+        if (node.children) node.children.forEach(c => walk(c, depth + 1));
+    })(rootNode, 0);
+    const maxSiblings = Math.max(1, ...Object.values(counts));
+    const chartDom = document.getElementById('chart-area');
+    const containerWidth = (chartDom && chartDom.clientWidth) || 1000;
+    const estPxPerNode = 150;
+    const neededWidth = maxSiblings * estPxPerNode;
+    return Math.max(0.3, Math.min(1, containerWidth / neededWidth));
 }
 
 function initChart(data) {
@@ -128,12 +151,17 @@ function initChart(data) {
             orient: 'TB',
             top: '10%', left: '8%', bottom: '5%', right: '8%',
             roam: true,
-            label: { position: 'top', verticalAlign: 'bottom', align: 'center', fontFamily: 'Heebo', padding: [5, 10], backgroundColor: '#1e293b', borderRadius: 6, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5, shadowOffsetY: 2 },
+            zoom: computeInitialZoom(data),
+            label: {
+                position: 'top', verticalAlign: 'bottom', align: 'center', fontFamily: 'Heebo', padding: [5, 10],
+                backgroundColor: '#1e293b', borderRadius: 6, shadowColor: 'rgba(0,0,0,0.3)', shadowBlur: 5, shadowOffsetY: 2,
+                overflow: 'truncate', width: LABEL_MAX_WIDTH, ellipsis: '…',
+            },
             leaves: { label: { position: 'bottom', verticalAlign: 'top', align: 'center' } },
             lineStyle: { color: '#475569', width: 2, curveness: 0.5 },
             expandAndCollapse: true,
             animationDuration: 550,
-            initialTreeDepth: 2
+            initialTreeDepth: INITIAL_TREE_DEPTH
         }]
     });
     myChart.on('click', function (params) {
@@ -148,13 +176,58 @@ function showPanel(d) {
     document.getElementById('info-default').style.display = 'none';
     document.getElementById('info-content-view').style.display = 'block';
     document.getElementById('info-title').innerText = d.name;
-    document.getElementById('info-desc').innerText = d.desc || 'אין תיאור נוסף לצומת זה.';
+    const codeLine = d.code ? `קוד טכני: ${d.code}\n\n` : '';
+    document.getElementById('info-desc').innerText = codeLine + (d.desc || 'אין תיאור נוסף לצומת זה.');
 }
 
 function hidePanel() {
     document.getElementById('info-default').style.display = 'block';
     document.getElementById('info-content-view').style.display = 'none';
 }
+
+function togglePanel() {
+    const panel = document.getElementById('info-panel');
+    const btn = document.getElementById('panel-toggle-btn');
+    const isHidden = panel.style.display === 'none';
+    panel.style.display = isHidden ? 'flex' : 'none';
+    if (btn) btn.textContent = isHidden ? '⟨⟩ פאנל' : '⟨⟩ הצג';
+    if (myChart) setTimeout(() => myChart.resize(), 60);
+}
+
+// ── Load an existing mind map from a previously-downloaded Excel file ──────
+
+window.loadMindmapFromExcel = async function (file) {
+    if (!file) return;
+    const input = document.getElementById('nat-load-file-input');
+    try {
+        if (typeof XLSX === 'undefined') throw new Error('ספריית Excel לא נטענה.');
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const dataSheet = wb.Sheets['_data'];
+        const cell = dataSheet && dataSheet['A1'];
+        if (!cell || !cell.v) {
+            throw new Error('קובץ זה אינו מכיל נתוני מפת מחשבה (גיליון "_data" חסר) — ודא שזהו קובץ Excel שהופק על ידי "מבט על" בסוכן NATURAL.');
+        }
+        const parsed = JSON.parse(cell.v);
+        if (!parsed || !parsed.tree) throw new Error('פורמט הנתונים בקובץ אינו תקין.');
+
+        currentTree = parsed.tree;
+        const fileName = (parsed.meta && parsed.meta.fileName) || file.name;
+        const el = document.getElementById('header-filename');
+        if (el) el.textContent = fileName;
+        document.getElementById('empty-state').style.display = 'none';
+        hidePanel();
+        initChart(buildEchartsNode(currentTree, 0));
+        if (typeof onTreeLoaded === 'function') onTreeLoaded(currentTree);
+        try {
+            localStorage.setItem('natural-mindmap-data', JSON.stringify({ tree: currentTree, meta: { fileName } }));
+        } catch { /* localStorage unavailable */ }
+    } catch (err) {
+        alert('שגיאה בטעינת הקובץ: ' + (err.message || err));
+    } finally {
+        if (input) input.value = '';
+    }
+};
 
 document.addEventListener('DOMContentLoaded', function () {
     var savedMode = localStorage.getItem('sdlc-dark-mode');

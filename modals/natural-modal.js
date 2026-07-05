@@ -386,6 +386,36 @@ export function initNaturalModal() {
   injectNaturalModal();
 }
 
+// ── Cancel control (shared by all NATURAL runs) ────────────────────────────
+
+class NatCancelled extends Error {}
+
+let natCancelRequested = false;
+let natCancelBtn = null;
+
+function showCancelButton() {
+  natCancelRequested = false;
+  if (natCancelBtn) return;
+  natCancelBtn = document.createElement('button');
+  natCancelBtn.id = 'nat-cancel-btn';
+  natCancelBtn.textContent = '⏹ עצור ניתוח';
+  natCancelBtn.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:950;padding:.55rem 1.1rem;background:#dc2626;color:#fff;border:none;border-radius:20px;cursor:pointer;font-size:.85rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 4px 14px rgba(220,38,38,.4);';
+  natCancelBtn.onclick = () => {
+    natCancelRequested = true;
+    natCancelBtn.textContent = '⏳ עוצר…';
+    natCancelBtn.disabled = true;
+  };
+  document.body.appendChild(natCancelBtn);
+}
+
+function hideCancelButton() {
+  if (natCancelBtn) { natCancelBtn.remove(); natCancelBtn = null; }
+}
+
+function checkCancelled() {
+  if (natCancelRequested) throw new NatCancelled('cancelled');
+}
+
 function injectNaturalModal() {
   const modal = document.createElement('div');
   modal.id = 'natural-modal';
@@ -480,9 +510,12 @@ function injectNaturalModal() {
       </div>
 
       <!-- Footer -->
-      <div style="padding:.9rem 1.5rem;border-top:1px solid #f1f5f9;display:flex;gap:.75rem;justify-content:flex-end;flex-shrink:0;">
-        <button onclick="window.closeNaturalModal()" style="padding:.5rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.88rem;font-family:Heebo,sans-serif;color:#374151;">ביטול</button>
-        <button id="nat-generate-btn" onclick="window.generateNatural()" style="padding:.5rem 1.25rem;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(8,145,178,.35);">🖥️ נתח</button>
+      <div style="padding:.9rem 1.5rem;border-top:1px solid #f1f5f9;display:flex;gap:.75rem;justify-content:space-between;align-items:center;flex-shrink:0;">
+        <button onclick="window.openNaturalMindmapViewer()" style="padding:.4rem .75rem;border:none;background:none;cursor:pointer;font-size:.78rem;font-family:Heebo,sans-serif;color:#0891b2;text-decoration:underline;">🗺️ כבר יש לך מפת מחשבה? טען אותה</button>
+        <div style="display:flex;gap:.75rem;">
+          <button onclick="window.closeNaturalModal()" style="padding:.5rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.88rem;font-family:Heebo,sans-serif;color:#374151;">ביטול</button>
+          <button id="nat-generate-btn" onclick="window.generateNatural()" style="padding:.5rem 1.25rem;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(8,145,178,.35);">🖥️ נתח</button>
+        </div>
       </div>
     </div>`;
 
@@ -510,6 +543,10 @@ window.closeNaturalModal = function () {
   natFiles = [];
   const fi = document.getElementById('nat-file-input');
   if (fi) fi.value = '';
+};
+
+window.openNaturalMindmapViewer = function () {
+  window.open('natural-mindmap.html', 'natural-mindmap');
 };
 
 window.natHandleDrop = function (event) {
@@ -614,10 +651,12 @@ window.generateNatural = async function () {
   deps.hideEmpty();
   deps.setLoading(true);
   const progressId = deps.appendTyping();
+  showCancelButton();
 
   const filesData = [];
   try {
     for (let i = 0; i < filesToProcess.length; i++) {
+      checkCancelled();
       const f = filesToProcess[i];
       deps.updateTyping(progressId, `קורא קובץ ${i + 1}/${filesToProcess.length}: ${f.name}…`);
       const text = await readNaturalFile(f);
@@ -627,7 +666,8 @@ window.generateNatural = async function () {
   } catch (e) {
     deps.removeTyping(progressId);
     deps.setLoading(false);
-    deps.appendMessage('error', 'שגיאה בקריאת הקובץ: ' + e.message);
+    hideCancelButton();
+    deps.appendMessage(e instanceof NatCancelled ? 'assistant' : 'error', e instanceof NatCancelled ? '⏹ הניתוח בוטל.' : 'שגיאה בקריאת הקובץ: ' + e.message);
     return;
   }
 
@@ -644,46 +684,47 @@ window.generateNatural = async function () {
   let chunks;
   const DEPTH_LABELS = { low: 'נמוכה (קריאה אחת)', standard: 'רגילה (3 קריאות)', high: 'גבוהה (6 קריאות)' };
   let resolvedDepthLabel = DEPTH_LABELS[depthChoice] || depthChoice;
-
-  if (isMultiFile) {
-    chunks = buildMultiFileChunks(filesData, context);
-  } else {
-    const { name, text } = filesData[0];
-    let fileHeader = `שם הקובץ: ${name}\n`;
-    if (context) fileHeader += `\nהקשר הרצה: ${context}\n`;
-    fileHeader += '\n';
-    const codeBlock = `\`\`\`natural\n${text}\n\`\`\``;
-
-    let depthLevel = depthChoice;
-    if (depthChoice === 'auto') {
-      deps.updateTyping(progressId, '✨ מנתח את מורכבות הקוד…');
-      try {
-        const analysisText = await natCallWithFallback(buildAutoDepthPromptNatural(codeBlock), mIdx);
-        mIdx = deps.getModelIdx();
-        const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
-          depthLevel = depthLevelForCount(n);
-          if (parsed.reason) {
-            deps.appendMessage('assistant', `✨ **ניתוח קוד:** ${parsed.reason}\n→ נבחרה רמת עומק **${DEPTH_LABELS[depthLevel]}**`);
-          }
-          resolvedDepthLabel = `אוטומטי → ${DEPTH_LABELS[depthLevel]}`;
-        } else {
-          depthLevel = 'standard';
-        }
-      } catch {
-        depthLevel = 'standard';
-      }
-    }
-
-    chunks = buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc);
-  }
-
   const results = [];
 
   try {
+    if (isMultiFile) {
+      chunks = buildMultiFileChunks(filesData, context);
+    } else {
+      const { name, text } = filesData[0];
+      let fileHeader = `שם הקובץ: ${name}\n`;
+      if (context) fileHeader += `\nהקשר הרצה: ${context}\n`;
+      fileHeader += '\n';
+      const codeBlock = `\`\`\`natural\n${text}\n\`\`\``;
+
+      let depthLevel = depthChoice;
+      if (depthChoice === 'auto') {
+        deps.updateTyping(progressId, '✨ מנתח את מורכבות הקוד…');
+        checkCancelled();
+        try {
+          const analysisText = await natCallWithFallback(buildAutoDepthPromptNatural(codeBlock), mIdx);
+          mIdx = deps.getModelIdx();
+          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
+            depthLevel = depthLevelForCount(n);
+            if (parsed.reason) {
+              deps.appendMessage('assistant', `✨ **ניתוח קוד:** ${parsed.reason}\n→ נבחרה רמת עומק **${DEPTH_LABELS[depthLevel]}**`);
+            }
+            resolvedDepthLabel = `אוטומטי → ${DEPTH_LABELS[depthLevel]}`;
+          } else {
+            depthLevel = 'standard';
+          }
+        } catch {
+          depthLevel = 'standard';
+        }
+      }
+
+      chunks = buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc);
+    }
+
     for (let i = 0; i < chunks.length; i++) {
+      checkCancelled();
       deps.updateTyping(progressId, `מנתח… (${i + 1}/${chunks.length})`);
       results.push(await natCallWithFallback(chunks[i], mIdx));
       mIdx = deps.getModelIdx();
@@ -691,12 +732,14 @@ window.generateNatural = async function () {
   } catch (err) {
     deps.removeTyping(progressId);
     deps.setLoading(false);
-    deps.appendMessage('error', 'שגיאה: ' + err.message);
+    hideCancelButton();
+    deps.appendMessage(err instanceof NatCancelled ? 'assistant' : 'error', err instanceof NatCancelled ? '⏹ הניתוח בוטל.' : 'שגיאה: ' + err.message);
     return;
   }
 
   deps.removeTyping(progressId);
   deps.setLoading(false);
+  hideCancelButton();
 
   if (deps.setNatContext) deps.setNatContext(filesData);
 
@@ -828,6 +871,30 @@ window.generateNatural = async function () {
   deps.appendMessage('assistant', summary);
 };
 
+// ── Concurrency-limited runner (shared) ─────────────────────────────────────
+
+async function runPool(items, limit, worker, onProgress) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  let completed = 0;
+  async function runner() {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= items.length) return;
+      checkCancelled();
+      results[i] = await worker(items[i], i);
+      completed++;
+      if (onProgress) onProgress(completed, items.length);
+    }
+  }
+  const poolSize = Math.max(1, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: poolSize }, () => runner()));
+  return results;
+}
+
+const CONCURRENCY_LIMIT = 5;
+const CONFIRM_CALLS_THRESHOLD = 8;
+
 // ── Purpose: פירוט שורה-שורה ───────────────────────────────────────────────
 
 const DETAIL_LABELS = { low: 'נמוכה', standard: 'רגילה', high: 'גבוהה' };
@@ -837,21 +904,30 @@ async function runLineByLine(progressId, fileData, depthChoice, context) {
   let mIdx = deps.getModelIdx();
   let detailLevel = depthChoice === 'auto' ? 'standard' : depthChoice;
 
-  if (depthChoice === 'auto') {
-    deps.updateTyping(progressId, '✨ מנתח את מורכבות הקוד…');
-    try {
-      const analysisText = await natCallWithFallback(buildAutoDepthPromptNatural(text), mIdx);
-      mIdx = deps.getModelIdx();
-      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
-        detailLevel = depthLevelForCount(n);
-        if (parsed.reason) {
-          deps.appendMessage('assistant', `✨ **ניתוח קוד:** ${parsed.reason}\n→ נבחרה רמת פירוט **${DETAIL_LABELS[detailLevel]}**`);
+  try {
+    if (depthChoice === 'auto') {
+      deps.updateTyping(progressId, '✨ מנתח את מורכבות הקוד…');
+      checkCancelled();
+      try {
+        const analysisText = await natCallWithFallback(buildAutoDepthPromptNatural(text), mIdx);
+        mIdx = deps.getModelIdx();
+        const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
+          detailLevel = depthLevelForCount(n);
+          if (parsed.reason) {
+            deps.appendMessage('assistant', `✨ **ניתוח קוד:** ${parsed.reason}\n→ נבחרה רמת פירוט **${DETAIL_LABELS[detailLevel]}**`);
+          }
         }
-      }
-    } catch { /* keep standard */ }
+      } catch { /* keep standard */ }
+    }
+  } catch (err) {
+    deps.removeTyping(progressId);
+    deps.setLoading(false);
+    hideCancelButton();
+    deps.appendMessage(err instanceof NatCancelled ? 'assistant' : 'error', err instanceof NatCancelled ? '⏹ הניתוח בוטל.' : 'שגיאה: ' + err.message);
+    return;
   }
 
   const LINES_PER_CHUNK = { low: 220, standard: 150, high: 90 }[detailLevel] || 150;
@@ -867,12 +943,25 @@ async function runLineByLine(progressId, fileData, depthChoice, context) {
     chunkTexts.push({ start: i + 1, code: lines.slice(i, i + LINES_PER_CHUNK).join('\n') });
   }
 
+  if (chunkTexts.length > CONFIRM_CALLS_THRESHOLD) {
+    deps.removeTyping(progressId);
+    const proceed = confirm(
+      `הקובץ "${name}" יידרש כ-${chunkTexts.length} קריאות API ברמת פירוט "${DETAIL_LABELS[detailLevel]}" (זה עלול לקחת מספר דקות).\n\n` +
+      `לחץ "אישור" כדי להמשיך, או "ביטול" כדי לבטל ולבחור רמת פירוט נמוכה יותר (פחות קריאות) מהתפריט.`
+    );
+    if (!proceed) {
+      deps.setLoading(false);
+      hideCancelButton();
+      deps.appendMessage('assistant', '⏹ הפעולה בוטלה. אפשר לפתוח את הסוכן שוב ולבחור רמת פירוט נמוכה יותר.');
+      return;
+    }
+    progressId = deps.appendTyping();
+  }
+
   const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
-  const results = [];
+  let results;
   try {
-    for (let i = 0; i < chunkTexts.length; i++) {
-      const c = chunkTexts[i];
-      deps.updateTyping(progressId, `מפרט שורות ${c.start}–${c.start + c.code.split('\n').length - 1}… (${i + 1}/${chunkTexts.length})`);
+    results = await runPool(chunkTexts, CONCURRENCY_LIMIT, async (c) => {
       const prompt = `אתה אנליסט מערכות בכיר המתמחה ב-Natural (Software AG). קיבלת קטע מתוך קובץ Natural בשם "${name}", החל משורה ${c.start} בקובץ המקורי.${contextLine}
 עבור על הקטע **שורה אחר שורה, לפי הסדר** והסבר בעברית מה כל שורה/פקודה עושה מבחינה טכנית ועסקית. אל תדלג על אף שורה משמעותית (ניתן לקבץ שורות ריקות/הערות טכניות זניחות).
 ${VERBOSITY}
@@ -881,18 +970,21 @@ ${VERBOSITY}
 \`\`\`natural
 ${c.code}
 \`\`\``;
-      results.push(await natCallWithFallback(prompt, mIdx));
-      mIdx = deps.getModelIdx();
-    }
+      return natCallWithFallback(prompt, mIdx);
+    }, (completed, total) => {
+      deps.updateTyping(progressId, `מפרט קוד… (${completed}/${total} קריאות הושלמו)`);
+    });
   } catch (err) {
     deps.removeTyping(progressId);
     deps.setLoading(false);
-    deps.appendMessage('error', 'שגיאה: ' + err.message);
+    hideCancelButton();
+    deps.appendMessage(err instanceof NatCancelled ? 'assistant' : 'error', err instanceof NatCancelled ? '⏹ הניתוח בוטל.' : 'שגיאה: ' + err.message);
     return;
   }
 
   deps.removeTyping(progressId);
   deps.setLoading(false);
+  hideCancelButton();
 
   const combined  = results.join('\n\n---\n\n');
   const html      = lineByLineToWordHtml(name, combined);
@@ -972,6 +1064,7 @@ async function runOverview(progressId, fileData, depthChoice, context) {
   let tree = null;
   try {
     for (let i = 0; i < numCalls; i++) {
+      checkCancelled();
       deps.updateTyping(progressId, `בונה מפת מחשבה… (${i + 1}/${numCalls})`);
       const prompt = buildOverviewPrompt(name, codeBlock, contextLine, tree, i, numCalls);
       const resultText = await natCallWithFallback(prompt, mIdx);
@@ -982,12 +1075,14 @@ async function runOverview(progressId, fileData, depthChoice, context) {
   } catch (err) {
     deps.removeTyping(progressId);
     deps.setLoading(false);
-    deps.appendMessage('error', 'שגיאה: ' + err.message);
+    hideCancelButton();
+    deps.appendMessage(err instanceof NatCancelled ? 'assistant' : 'error', err instanceof NatCancelled ? '⏹ הניתוח בוטל.' : 'שגיאה: ' + err.message);
     return;
   }
 
   deps.removeTyping(progressId);
   deps.setLoading(false);
+  hideCancelButton();
 
   if (!tree) {
     deps.appendMessage('error', 'לא ניתן היה לבנות מפת מחשבה מהקוד. נסה שוב.');
@@ -1003,10 +1098,15 @@ async function runOverview(progressId, fileData, depthChoice, context) {
   const baseName  = `natural-overview-${name.replace(/\.[^.]+$/, '')}-${timestamp}`;
   if (typeof XLSX !== 'undefined' && rows.length) {
     const wb  = XLSX.utils.book_new();
-    const aoa = [['רמה 1', 'רמה 2', 'רמה 3', 'רמה 4', 'תיאור'], ...rows];
+    const aoa = [['רמה 1', 'רמה 2', 'רמה 3', 'רמה 4', 'קוד טכני', 'תיאור'], ...rows];
     const ws  = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 60 }];
+    ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 60 }];
     XLSX.utils.book_append_sheet(wb, ws, 'מבט על');
+    // Extra sheet carrying the full tree JSON verbatim, so the mind-map viewer
+    // can losslessly reconstruct the tree from a re-uploaded Excel file — the
+    // flattened sheet above caps at 4 levels and is not a reliable round-trip source.
+    const dataWs = XLSX.utils.aoa_to_sheet([[JSON.stringify({ tree, meta: { fileName: name } })]]);
+    XLSX.utils.book_append_sheet(wb, dataWs, '_data');
     XLSX.writeFile(wb, `${baseName}.xlsx`);
   }
 
@@ -1030,8 +1130,15 @@ function buildOverviewPrompt(fileName, codeBlock, contextLine, existingTree, cal
 המשימה: להפיק מפת מחשבה (עץ) של הקוד — בעברית — שמתארת את הזרימה העסקית והטכנית בצורה היררכית: מהתמונה הכללית ועד לפרטים.
 
 הפלט הנדרש: אובייקט JSON יחיד בלבד (ללא טקסט נלווה, ללא code fence), במבנה:
-{"name": "שם התוכנית/התהליך", "desc": "תיאור קצר (1-2 משפטים)", "children": [ { "name": "...", "desc": "...", "children": [...] }, ... ]}
-כל node חייב "name" ו-"desc". "children" הוא מערך (יכול להיות ריק).
+{"name": "תווית עסקית קצרה וברורה בעברית", "code": "השם/הזיהוי הטכני המקורי מהקוד (אם רלוונטי, אחרת מחרוזת ריקה)", "desc": "תיאור קצר (1-2 משפטים)", "children": [ { "name": "...", "code": "...", "desc": "...", "children": [...] }, ... ]}
+כל node חייב "name", "code" (יכול להיות ריק) ו-"desc". "children" הוא מערך (יכול להיות ריק).
+
+**חשוב — "name" הוא תמיד תווית עסקית קריאה** (למשל "בדיקת הגבלת רישוי" ולא "RC0851N3"). את השם/הקוד הטכני הגולמי (שם שדה, שם תת-שגרה, קוד תוכנית) שים תמיד ב-"code", לעולם לא בתוך "name".
+
+**חשוב — עומק מאוזן, לא פירוק טכני עיוור:**
+- תן עדיפות לעומק ולפירוט בענפי הלוגיקה העסקית: שלבי תהליך, כללים עסקיים, טיפול בשגיאות, אינטגרציות (CALLNAT/FETCH), היסטוריית תחזוקה.
+- לעומת זאת, למבנה הנתונים (DEFINE DATA, GROUP, REDEFINE) — אל תפרק כל שדה/REDEFINE כצומת נפרד. סכם מבנה חוזר או ארוך (כמו שרשרת REDEFINE מקוננת, או רשימת שדות ארוכה) כצומת אחד או שניים עם תיאור מסכם ("מבנה נתונים X — כ-N שדות, כולל Y ו-Z"), לא כעץ שדות מלא.
+- אם אתה נאלץ לבחור להעמיק — העדף תמיד ענף עסקי/לוגי על פני פירוק טכני נוסף של מבנה נתונים.
 
 \`\`\`natural
 ${codeBlock}
@@ -1048,7 +1155,7 @@ ${codeBlock}
 הנה העץ שנבנה עד כה (מקריאות קודמות):
 ${JSON.stringify(existingTree)}
 
-זוהי קריאה ${callIdx + 1} מתוך ${totalCalls}. **החזר את העץ המלא והמעודכן** — הוסף עוד רמות עומק, עוד ילדים לכל node קיים שרלוונטי, ופרטים נוספים (edge cases, כללי ולידציה, גישות נתונים ספציפיות, אינטגרציות). אל תמחק מידע קיים — רק הרחב והעמק. השב אך ורק ב-JSON של העץ המלא.`;
+זוהי קריאה ${callIdx + 1} מתוך ${totalCalls}. **החזר את העץ המלא והמעודכן** — הוסף עוד רמות עומק, עוד ילדים לכל node קיים שרלוונטי, ופרטים נוספים (edge cases, כללי ולידציה, גישות נתונים ספציפיות, אינטגרציות), **בענפים העסקיים/הלוגיים בעיקר** — לא בהרחבת מבנה הנתונים הגולמי. אל תמחק מידע קיים — רק הרחב והעמק. השב אך ורק ב-JSON של העץ המלא.`;
 }
 
 function parseOverviewTree(text) {
@@ -1072,6 +1179,7 @@ function parseOverviewTree(text) {
 function normalizeTreeNode(node) {
   return {
     name:     String(node.name || '').trim() || 'ללא שם',
+    code:     String(node.code || '').trim(),
     desc:     String(node.desc || '').trim(),
     children: Array.isArray(node.children) ? node.children.map(normalizeTreeNode) : [],
   };
@@ -1082,7 +1190,7 @@ function flattenTree(node, path, rows, depth = 0) {
   const cols = ['', '', '', ''];
   for (let i = 0; i < Math.min(newPath.length, 4); i++) cols[i] = newPath[i];
   if (!node.children || node.children.length === 0 || depth > 0) {
-    rows.push([...cols, node.desc || '']);
+    rows.push([...cols, node.code || '', node.desc || '']);
   }
   (node.children || []).forEach(c => flattenTree(c, newPath, rows, depth + 1));
 }

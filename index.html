@@ -168,19 +168,22 @@
   </div>
 
   <!-- Chat panel -->
-  <div id="home-chat-panel" class="home-chat-panel" hidden>
-    <div class="home-chat-header">
-      <span class="home-chat-title">💬 שאל את הסוכן</span>
-      <button class="home-chat-close" onclick="closeHomeChat()" title="סגור">✕</button>
-    </div>
-    <div id="home-chat-api-row" class="home-chat-api-row">
-      <input type="password" id="home-chat-api-input" class="home-chat-api-input" placeholder="מפתח Gemini API — AIza..." dir="ltr" autocomplete="off" />
-      <button class="home-chat-api-btn" onclick="setHomeChatApiKey()">אישור</button>
-    </div>
-    <div id="home-chat-messages" class="home-chat-messages"></div>
-    <div class="home-chat-input-row">
-      <input type="text" id="home-chat-input" class="home-chat-input" placeholder="שאל שאלה על הסוכנים, SDLC, ..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHomeChatMessage();}" />
-      <button id="home-chat-send" class="home-chat-send" onclick="sendHomeChatMessage()">שלח</button>
+  <div id="home-chat-panel" class="home-chat-panel" hidden role="dialog" aria-modal="true" aria-labelledby="home-chat-title">
+    <div class="home-chat-backdrop" onclick="closeHomeChat()"></div>
+    <div class="home-chat-dialog">
+      <div class="home-chat-header">
+        <span class="home-chat-title" id="home-chat-title">💬 אגם הסוכנים — שאל אותי הכל</span>
+        <button class="home-chat-close" onclick="closeHomeChat()" title="סגור">✕</button>
+      </div>
+      <div id="home-chat-api-row" class="home-chat-api-row">
+        <input type="password" id="home-chat-api-input" class="home-chat-api-input" placeholder="מפתח Gemini API — AIza..." dir="ltr" autocomplete="off" />
+        <button class="home-chat-api-btn" onclick="setHomeChatApiKey()">אישור</button>
+      </div>
+      <div id="home-chat-messages" class="home-chat-messages"></div>
+      <div class="home-chat-input-row">
+        <input type="text" id="home-chat-input" class="home-chat-input" placeholder="שאל שאלה על הסוכנים, SDLC, ..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHomeChatMessage();}" />
+        <button id="home-chat-send" class="home-chat-send" onclick="sendHomeChatMessage()">שלח</button>
+      </div>
     </div>
   </div>
 
@@ -203,24 +206,44 @@
     var _chatHistory = [];
     var _chatOpen = false;
 
-    var CHAT_SYSTEM = 'אתה עוזר חכם של מערכת "אגם הסוכנים" — מערכת סוכני AI לניהול מחזור חיי פיתוח תוכנה (SDLC). ' +
-      'הסוכנים: ארזסטרטור (אסטרטגיה), רכזת הפרויקטים (PMO), לעשות או לקנות (Make-or-Buy), מלך האפיונים (FSD), ' +
-      'מנתח המוח (Design), מלכת העיצובים (UX/UI), אלוף הפיתוחים (פיתוח), פלטפורמר (Platform), ' +
-      'הבודק (QA), המאבטח (Security), הפורס (Deployment), הצופה (Monitoring), המתעד (Documentation), מפעיל הספקים (ספקים). ' +
-      'ענה בעברית, בצורה ברורה וממוקדת.';
+    var CHAT_SYSTEM = 'אתה עוזר חכם של "אגם הסוכנים" — פלטפורמת סוכני AI הפועלת כולה בצד הלקוח (בדפדפן), ' +
+      'ללא שרת וללא צורך בהתקנה, מיועדת לניהול מחזור החיים של תוכנה (SDLC): מאיסוף דרישות, ' +
+      'דרך כתיבת מסמכי אפיון (FSD), עיצוב ארכיטקטורה וממשק, ועד בדיקות, אבטחה וכתיבת מכרזים. ' +
+      'כל שיחה עם סוכן פונה ישירות ל-Gemini API באמצעות מפתח ה-API של המשתמש, ללא שמירת מידע בשום שרת חיצוני. ' +
+      'הפלטפורמה כוללת 24 סוכנים ייעודיים: מלך האפיונים (מסמך אפיון מלא), מציג האפיונים (הצגת אפיון קיים), ' +
+      'שרגא (ניתוח מסמכים מרובים לעומק), בריפר (בריף לתיחור מכרז), אוסף הדרישות (ראיונות ו-SRS), ' +
+      'מנהל הפרויקט (ספרינטים וסטטוס), רכזת הפרויקטים (RACI ותלויות), ארכיטקט התוכנה (HLD/LLD ו-ADR), ' +
+      'ארכיטקט הפלטפורמות (תשתיות ואינטגרציות), מלכת העיצובים (Design System ו-UX), אלוף הפיתוחים (Code Review), ' +
+      'מספר הסיפורים (User Stories ו-Backlog), הבודק (תרחישי בדיקה ו-UAT), המאבטח (RBAC ו-Compliance), ' +
+      'כותב המכרזים (RFP ו-SLA), NATURAL (ניתוח קוד Natural ישן), המסכם (סיכום מסמך לטבלת Excel), ' +
+      'חוקר ממשק המשתמש, הטכנולוג (JSON למערכת Mayuvgam), סוכן דינמי (בונה פרומפט לפי צורך), ' +
+      'Salesforce Killer, OutSystems Expert, ומפת המחשבה של ה-SDLC. ' +
+      'ענה בעברית, בצורה ברורה וממוקדת, והפנה למשתמש לסוכן הרלוונטי כשמתאים.';
+
+    var HOME_CHAT_WELCOME = 'אגם הסוכנים היא פלטפורמת סוכני AI הפועלת כולה בצד הלקוח (בדפדפן), ללא שרת וללא צורך בהתקנה — ' +
+      'מיועדת לניהול מחזור החיים של תוכנה (SDLC): מאיסוף דרישות, דרך כתיבת מסמכי אפיון (FSD), עיצוב ארכיטקטורה וממשק, ' +
+      'ועד בדיקות, אבטחה וכתיבת מכרזים.\n\n' +
+      'הפלטפורמה כוללת 24 סוכנים ייעודיים, כל אחד מתמחה בתחום משלו — לדוגמה מלך האפיונים שמייצר מסמך אפיון מלא, ' +
+      'שרגא שמנתח מסמכים קיימים, NATURAL לניתוח קוד קיים, ועוד. כל שיחה עם סוכן פונה ישירות ל-Gemini API ' +
+      'באמצעות מפתח ה-API שלך, ללא שמירת מידע בשום שרת חיצוני — כל הנתונים נשמרים מקומית בדפדפן בלבד.\n\n' +
+      'שאל אותי כל דבר על הסוכנים או על אופן העבודה עם המערכת 🙂';
 
     function openHomeChat() {
       var panel = document.getElementById('home-chat-panel');
       panel.hidden = false;
       _chatOpen = true;
       var msgs = document.getElementById('home-chat-messages');
-      if (msgs.children.length === 0 && _chatHistory.length > 0) {
-        _chatHistory.forEach(function(m) {
-          var div = document.createElement('div');
-          div.className = 'home-chat-msg home-chat-msg-' + (m.role === 'user' ? 'user' : 'assistant');
-          div.textContent = m.parts[0].text;
-          msgs.appendChild(div);
-        });
+      if (msgs.children.length === 0) {
+        if (_chatHistory.length > 0) {
+          _chatHistory.forEach(function(m) {
+            var div = document.createElement('div');
+            div.className = 'home-chat-msg home-chat-msg-' + (m.role === 'user' ? 'user' : 'assistant');
+            div.textContent = m.parts[0].text;
+            msgs.appendChild(div);
+          });
+        } else {
+          appendChatMessage('assistant', HOME_CHAT_WELCOME);
+        }
         msgs.scrollTop = msgs.scrollHeight;
       }
       if (_chatApiKey) {
@@ -232,6 +255,9 @@
       document.getElementById('home-chat-panel').hidden = true;
       _chatOpen = false;
     }
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && _chatOpen) closeHomeChat();
+    });
     function setHomeChatApiKey() {
       var val = document.getElementById('home-chat-api-input').value.trim();
       if (!val) return;

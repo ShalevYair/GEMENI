@@ -73,11 +73,11 @@ function showPhasePick() {
   setBody(`
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:1rem 1.1rem;">
       <div style="font-size:.85rem;font-weight:600;color:#1e293b;margin-bottom:.3rem;">📄 בחר מסמך לסיכום</div>
-      <div style="font-size:.8rem;color:#64748b;">סוגים נתמכים: TXT, MD, PDF, DOCX. יופק קובץ Excel עם 4 עמודות: נושא ראשי, נושא משני, תת נושא, תיאור.</div>
+      <div style="font-size:.8rem;color:#64748b;">סוגים נתמכים: TXT, MD, PDF, DOCX, XLS, XLSX. יופק קובץ Excel עם 4 עמודות: נושא ראשי, נושא משני, תת נושא, תיאור.</div>
     </div>
 
     <label id="sum-drop" style="display:block;border:2px dashed #c8d0e0;border-radius:10px;padding:1.1rem;text-align:center;cursor:pointer;background:#fff;transition:.15s;">
-      <input type="file" id="sum-file-input" accept=".txt,.md,.pdf,.docx" hidden />
+      <input type="file" id="sum-file-input" accept=".txt,.md,.pdf,.docx,.xls,.xlsx" hidden />
       <div id="sum-drop-label" style="font-size:.88rem;color:#475569;">
         <span style="font-size:1.6rem;display:block;margin-bottom:.25rem;">📎</span>
         לחץ לבחירת קובץ או גרור לכאן
@@ -88,8 +88,8 @@ function showPhasePick() {
       <div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:.15rem;">רמת עיבוד</div>
       ${[
         { v: 'basic',  checked: true,  label: 'בסיסי',  calls: '1 קריאה',  tip: 'סיכום מהיר. ברירת מחדל.' },
-        { v: 'normal', checked: false, label: 'רגיל',   calls: '2 קריאות', tip: 'סיכום מורחב, כיסוי טוב יותר.' },
-        { v: 'high',   checked: false, label: 'גבוה',   calls: '3 קריאות', tip: 'סיכום מעמיק עם מקסימום פירוט (כ-350 שורות).' },
+        { v: 'normal', checked: false, label: 'רגיל',   calls: '3 קריאות', tip: 'סיכום מורחב, כיסוי טוב יותר.' },
+        { v: 'high',   checked: false, label: 'גבוה',   calls: '6 קריאות', tip: 'סיכום מעמיק עם מקסימום פירוט.' },
       ].map(o => `
         <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-size:.85rem;padding:.15rem 0;">
           <input type="radio" name="sum-level" value="${o.v}" ${o.checked ? 'checked' : ''} style="accent-color:#0891b2;">
@@ -125,12 +125,12 @@ function showPhasePick() {
 
 async function onPickFile(file) {
   const ext = (file.name.split('.').pop() || '').toLowerCase();
-  if (!['txt','md','pdf','docx'].includes(ext)) {
-    showInlineError(`סוג קובץ לא נתמך: .${ext}. נסה TXT, MD, PDF או DOCX.`);
+  if (!['txt','md','pdf','docx','xls','xlsx'].includes(ext)) {
+    showInlineError(`סוג קובץ לא נתמך: .${ext}. נסה TXT, MD, PDF, DOCX, XLS או XLSX.`);
     return;
   }
   try {
-    pickedFile = await deps.readFile(file);
+    pickedFile = await readSummarizerFile(file);
     const label = document.getElementById('sum-drop-label');
     if (label) {
       label.innerHTML = `
@@ -143,6 +143,24 @@ async function onPickFile(file) {
   } catch (e) {
     showInlineError('שגיאה בקריאת הקובץ: ' + (e.message || e));
   }
+}
+
+async function readSummarizerFile(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (['xls', 'xlsx'].includes(ext)) {
+    if (typeof XLSX === 'undefined') throw new Error('ספריית XLSX לא נטענה');
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const lines = [];
+    for (const sheetName of wb.SheetNames) {
+      const ws = wb.Sheets[sheetName];
+      const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+      if (csv.trim()) lines.push(`--- גיליון: ${sheetName} ---\n${csv}`);
+    }
+    const text = lines.join('\n\n');
+    return { name: file.name, mimeType: 'text/plain', isInline: false, text };
+  }
+  return deps.readFile(file);
 }
 
 function showInlineError(msg) {
@@ -161,7 +179,7 @@ function showInlineError(msg) {
 window.runSummarizer = async function () {
   if (!pickedFile) return;
   const level = document.querySelector('input[name="sum-level"]:checked')?.value || 'basic';
-  const numCalls = { basic: 1, normal: 2, high: 3 }[level] || 1;
+  const numCalls = { basic: 1, normal: 3, high: 6 }[level] || 1;
 
   phase = 'running';
   showLoading(`מעבד את הקובץ — קריאה 1 מתוך ${numCalls}…`);
@@ -221,46 +239,40 @@ ${fileBlock}
 ענה אך ורק במערך JSON.`;
   }
 
-  if (totalCalls === 2) {
-    if (callIdx === 0) {
-      return baseInstruction + `
+  const partNum = callIdx + 1;
+  const isFirst = callIdx === 0;
+  const isLast  = callIdx === totalCalls - 1;
+  const hint    = partSizeHint(callIdx, totalCalls);
 
-זהו חלק ראשון מתוך שניים. כסה את הנושאים הראשיים והמשניים העיקריים במסמך עם תתי-נושאים שלהם — כ-100–175 רשומות.
-ענה אך ורק במערך JSON.`;
-    }
-    const sample = sampleExistingForPrompt(existingRows);
+  if (isFirst) {
     return baseInstruction + `
 
-זהו חלק שני ומשלים. הוסף רשומות חדשות שלא כוסו בחלק הראשון — תתי-נושאים נוספים, פרטים שנשארו, נקודות שוליות אך חשובות.
-דוגמה של רשומות שכבר נאספו (אל תחזור עליהן):
-${sample}
-
-הוסף כ-100–175 רשומות חדשות. ענה אך ורק במערך JSON.`;
-  }
-
-  // 3 calls
-  if (callIdx === 0) {
-    return baseInstruction + `
-
-זהו חלק 1 מתוך 3 — שלד עליון. הפק את הנושאים הראשיים והמשניים החשובים ביותר עם תתי-נושאים מרכזיים, כ-80–120 רשומות.
+זהו חלק ${partNum} מתוך ${totalCalls} — שלד עליון. הפק את הנושאים הראשיים והמשניים החשובים ביותר עם תתי-נושאים מרכזיים, כ-${hint} רשומות.
 ענה אך ורק במערך JSON.`;
   }
-  if (callIdx === 1) {
-    const sample = sampleExistingForPrompt(existingRows);
+
+  const sample = sampleExistingForPrompt(existingRows);
+  if (isLast) {
     return baseInstruction + `
 
-זהו חלק 2 מתוך 3 — הרחבה. הוסף תתי-נושאים נוספים ונושאים משניים שלא כוסו, כ-100–150 רשומות חדשות.
+זהו חלק ${partNum} מתוך ${totalCalls} — עומק וסיום. הוסף פרטים, דקויות, מקרי קצה ונקודות שוליות שעדיין לא כוסו, כ-${hint} רשומות חדשות, כדי להשלים סיכום מקיף.
 דוגמה ממה שכבר נאסף (אל תחזור עליו):
 ${sample}
 ענה אך ורק במערך JSON.`;
   }
-  const sample = sampleExistingForPrompt(existingRows);
+
   return baseInstruction + `
 
-זהו חלק 3 מתוך 3 — עומק וסיום. הוסף פרטים, דקויות, מקרי קצה ונקודות שוליות שעדיין לא כוסו, כ-80–120 רשומות חדשות, כדי להגיע יחד לכ-300–350 רשומות.
+זהו חלק ${partNum} מתוך ${totalCalls} — הרחבה. הוסף תתי-נושאים נוספים ונושאים משניים שלא כוסו, כ-${hint} רשומות חדשות.
 דוגמה ממה שכבר נאסף (אל תחזור עליו):
 ${sample}
 ענה אך ורק במערך JSON.`;
+}
+
+function partSizeHint(callIdx, totalCalls) {
+  if (callIdx === 0) return '80–120';
+  if (callIdx === totalCalls - 1) return '70–120';
+  return '60–100';
 }
 
 function sampleExistingForPrompt(rows) {
@@ -350,7 +362,7 @@ function downloadXlsx(rows) {
 // ── Phase 3: done / error ─────────────────────────────────────────────────
 
 function showDone(count, level) {
-  const labels = { basic: 'בסיסי (1 קריאה)', normal: 'רגיל (2 קריאות)', high: 'גבוה (3 קריאות)' };
+  const labels = { basic: 'בסיסי (1 קריאה)', normal: 'רגיל (3 קריאות)', high: 'גבוה (6 קריאות)' };
   setBody(`
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:1rem 1.1rem;">
       <div style="font-size:.95rem;font-weight:700;color:#166534;margin-bottom:.3rem;">✅ הסיכום הופק והורד</div>

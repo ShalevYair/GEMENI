@@ -81,9 +81,48 @@ function buildSiteHeader() {
         <button class="site-header-btn" onclick="changeSiteFontSize(1)" title="הגדל טקסט">+</button>
         <button class="site-header-btn" onclick="changeSiteFontSize(-1)" title="הקטן טקסט">−</button>
         <button class="site-header-btn" id="site-dark-btn" onclick="toggleSiteDarkMode()" title="מצב בהיר/כהה">☾</button>
+        <button class="site-header-btn" onclick="toggleHelpModal()" title="עזרה">?</button>
       </div>
     </header>`;
 }
+
+function buildHelpModal() {
+  return `
+    <div class="modal" id="help-modal" hidden role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+      <div class="modal-backdrop" onclick="toggleHelpModal(false)"></div>
+      <div class="modal-dialog modal-dialog-large">
+        <h3 id="help-modal-title">👋 מה זה אגם הסוכנים?</h3>
+        <p>
+          <strong>אגם הסוכנים</strong> היא פלטפורמת סוכני AI הפועלת כולה בצד הלקוח (בדפדפן),
+          ללא שרת וללא צורך בהתקנה — מיועדת לניהול מחזור החיים של תוכנה (SDLC):
+          מאיסוף דרישות, דרך כתיבת מסמכי אפיון (FSD), עיצוב ארכיטקטורה וממשק,
+          ועד בדיקות, אבטחה וכתיבת מכרזים.
+        </p>
+        <p>
+          הפלטפורמה כוללת <strong>24 סוכנים</strong> ייעודיים, כל אחד מתמחה בתחום משלו —
+          לדוגמה <strong>מלך האפיונים</strong> שמייצר מסמך אפיון מלא, <strong>שרגא</strong>
+          שמנתח מסמכים קיימים, <strong>NATURAL</strong> לניתוח קוד קיים, ועוד.
+          כל שיחה עם סוכן פונה ישירות ל-Gemini API באמצעות מפתח ה-API שלך,
+          ללא שמירת מידע בשום שרת חיצוני — כל הנתונים נשמרים מקומית בדפדפן בלבד.
+        </p>
+        <p class="modal-hint">💡 טיפ: לחצו על שם סוכן בתפריט הצד כדי לפתוח איתו שיחה.</p>
+        <div class="modal-actions">
+          <button class="btn btn-primary" onclick="toggleHelpModal(false)" type="button">הבנתי, סגור</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+window.toggleHelpModal = function (force) {
+  const modal = document.getElementById('help-modal');
+  if (!modal) return;
+  const show = typeof force === 'boolean' ? force : modal.hidden;
+  modal.hidden = !show;
+};
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') window.toggleHelpModal(false);
+});
 
 function applyStoredPreferences() {
   const mode = localStorage.getItem('sdlc-dark-mode');
@@ -122,6 +161,7 @@ function injectSidebar() {
       </div>
     </div>
     <button class="sidebar-toggle" id="sidebar-toggle" aria-label="פתח/סגור תפריט" aria-expanded="false">☰</button>
+    ${buildHelpModal()}
   `;
   applyStoredPreferences();
   const toggle  = document.getElementById('sidebar-toggle');

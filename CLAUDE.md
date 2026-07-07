@@ -23,6 +23,7 @@ All pages are standalone HTML files that import JS via `<script type="module">`.
 | `spec-viewer.html` | Spec viewer — 4-tab layout (Markdown, Excel, Mermaid, Screens) |
 | `sf-agent.html` | Salesforce Killer — separate chat page |
 | `SDLCMindMap.html` | Interactive SDLC mind-map |
+| `summarizer-mindmap.html` | Standalone mind-map viewer for המסכם's output (ECharts tree + embedded chat); no sidebar (not wrapped by `nav.js`) |
 | `natural-mindmap.html` | NATURAL "מבט על" — standalone horizontal (top-down) mind-map of an analyzed code file, with embedded chat; no sidebar (not wrapped by `nav.js`) |
 | `nav.js` | Injects sidebar + header into every page at runtime |
 | `styles.css` | Global dark-mode-first CSS (CSS variables, sidebar, agent cards) |
@@ -141,6 +142,7 @@ Each chapter exports `CH{N}_LABEL`, `CH{N}_SECTIONS`, and `CH{N}_ITEMS` — used
 |-----|------|---------|
 | `gemini_api_key` | String | Gemini API key — shared across all agents |
 | `spec-viewer-data` | JSON | Full spec output: `{ meta, markdown, tables, mermaidDiagrams, screens }` |
+| `summarizer-mindmap-data` | JSON | Summarizer rows for the mind-map viewer: `{ rows: [{main,sub,subsub,desc}], meta }` |
 | `sdlc-dark-mode` | `'light'` \| `'dark'` | Theme preference |
 | `sdlc-font-size` | Number (default 16) | Global font size in px |
 
@@ -215,7 +217,7 @@ For generators (modals), fallback is handled inside `callWithFallback()` in each
 |-------|--------|
 | מלך האפיונים | `.md` + `.xlsx` + `.html` (Mermaid) + `.html` (wireframes) |
 | שרגא | `.doc` (Word-compatible HTML, RTL) |
-| המסכם | `.xlsx` (hierarchical summary) |
+| המסכם | `.xlsx` (hierarchical summary) + auto-opened mind-map page (`summarizer-mindmap.html`) with embedded chat |
 | אוסף הדרישות | `.md` or `.doc` |
 | NATURAL — ניתוח מלא/מיגרציה/כתיבה מחדש/שינוי קוד | `.md` + `.xlsx` + optional `.drawio` (spec-viewer) |
 | NATURAL — פירוט שורה-שורה | `.doc` (Word-compatible HTML, RTL) |

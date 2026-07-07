@@ -119,7 +119,37 @@ function buildTree(rows, rootName) {
     }
 
     stripHelperMaps(root);
+    rollupDesc(root);
     return root;
+}
+
+// Rows always carry `desc` on the deepest level present in that row (almost
+// always the subsub leaf, since the model fills all 3 levels), so main/sub
+// nodes end up with no desc of their own and show an empty panel on click.
+// Give every level something meaningful: if a node has no desc of its own,
+// summarize its children (bounded, so this stays cheap and short even near
+// the root — it never concatenates a child's full rolled-up text, only a
+// truncated first line of it).
+const ROLLUP_MAX_CHILDREN = 8;
+const ROLLUP_LINE_LEN = 90;
+
+function rollupDesc(node) {
+    if (!node.children || !node.children.length) return;
+    node.children.forEach(rollupDesc);
+    if (node.desc) return;
+    const shown = node.children.slice(0, ROLLUP_MAX_CHILDREN);
+    const lines = shown.map(c => {
+        const firstLine = (c.desc || '').split('\n')[0];
+        return firstLine ? `• ${c.name} — ${truncateText(firstLine, ROLLUP_LINE_LEN)}` : `• ${c.name}`;
+    });
+    if (node.children.length > shown.length) {
+        lines.push(`ועוד ${node.children.length - shown.length} נושאים...`);
+    }
+    node.desc = lines.join('\n');
+}
+
+function truncateText(s, n) {
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
 function stripHelperMaps(node) {

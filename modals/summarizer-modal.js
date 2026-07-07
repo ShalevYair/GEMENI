@@ -1,8 +1,12 @@
 import { deps } from './deps.js';
 
 // ── State ─────────────────────────────────────────────────────────────────
+const SUM_CHUNK   = 50000;                          // chars per chunk for large text inputs
+const LEVEL_CALLS = { basic: 1, normal: 3, high: 6 };
+
 let phase = 'pick';     // 'pick' | 'running' | 'done' | 'error'
 let pickedFile = null;  // { name, mimeType, isInline, text?, base64? }
+let chunks = [];        // text chunks of the picked file (single entry for small files, [] for inline)
 let lastRows = [];      // last produced rows (for re-download)
 
 // ── Init ──────────────────────────────────────────────────────────────────
@@ -57,6 +61,7 @@ window.openSummarizerModal = function () {
   }
   phase = 'pick';
   pickedFile = null;
+  chunks = [];
   document.getElementById('summarizer-modal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   showPhasePick();
@@ -131,6 +136,7 @@ async function onPickFile(file) {
   }
   try {
     pickedFile = await readSummarizerFile(file);
+    chunks = (!pickedFile.isInline && pickedFile.text) ? splitToChunks(pickedFile.text) : [];
     const label = document.getElementById('sum-drop-label');
     if (label) {
       label.innerHTML = `
@@ -138,10 +144,51 @@ async function onPickFile(file) {
         <strong style="color:#0f766e;">${deps.escHtml(file.name)}</strong>
         <div style="font-size:.75rem;color:#64748b;margin-top:.2rem;">לחץ לבחירת קובץ אחר</div>`;
     }
+    updateChunkNote();
     const btn = document.getElementById('sum-run-btn');
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
   } catch (e) {
     showInlineError('שגיאה בקריאת הקובץ: ' + (e.message || e));
+  }
+}
+
+// Split large text into roughly equal chunks, breaking on line boundaries
+// so CSV rows are never cut mid-line.
+function splitToChunks(text) {
+  if (text.length <= SUM_CHUNK) return [text];
+  const numChunks = Math.ceil(text.length / SUM_CHUNK);
+  const target = Math.ceil(text.length / numChunks);
+  const out = [];
+  let pos = 0;
+  while (pos < text.length) {
+    let end = Math.min(pos + target, text.length);
+    if (end < text.length) {
+      const nl = text.lastIndexOf('\n', end);
+      if (nl > pos) end = nl + 1;
+    }
+    out.push(text.slice(pos, end));
+    pos = end;
+  }
+  return out;
+}
+
+function updateChunkNote() {
+  const drop = document.getElementById('sum-drop');
+  if (!drop) return;
+  let note = document.getElementById('sum-chunk-note');
+  if (!note) {
+    note = document.createElement('div');
+    note.id = 'sum-chunk-note';
+    note.style.cssText = 'background:#eff6ff;border:1px solid #bfdbfe;border-radius:9px;padding:.55rem .85rem;color:#1e40af;font-size:.8rem;';
+    drop.insertAdjacentElement('afterend', note);
+  }
+  const numChunks = Math.max(1, chunks.length || 1);
+  if (numChunks > 1) {
+    const est = l => Math.max(LEVEL_CALLS[l], numChunks);
+    note.textContent = `📦 הקובץ גדול ויפוצל ל-${numChunks} חלקים · קריאות בפועל: בסיסי ${est('basic')} · רגיל ${est('normal')} · גבוה ${est('high')}`;
+    note.style.display = '';
+  } else {
+    note.style.display = 'none';
   }
 }
 
@@ -179,22 +226,34 @@ function showInlineError(msg) {
 window.runSummarizer = async function () {
   if (!pickedFile) return;
   const level = document.querySelector('input[name="sum-level"]:checked')?.value || 'basic';
-  const numCalls = { basic: 1, normal: 3, high: 6 }[level] || 1;
+  const levelCalls = LEVEL_CALLS[level] || 1;
+  const numChunks = Math.max(1, chunks.length || 1);
+  const plan = buildCallPlan(numChunks, levelCalls);
+  const totalCalls = plan.length;
 
   phase = 'running';
-  showLoading(`מעבד את הקובץ — קריאה 1 מתוך ${numCalls}…`);
+  showLoading(`מעבד את הקובץ — קריאה 1 מתוך ${totalCalls}…`);
 
   let mIdx = deps.getModelIdx();
   const allRows = [];
   const seen = new Set();
+  let contributingCalls = 0;
   try {
-    for (let i = 0; i < numCalls; i++) {
-      updateLoading(`מעבד את הקובץ — קריאה ${i + 1} מתוך ${numCalls}…`);
-      const prompt = buildPrompt(i, numCalls, allRows);
+    for (let i = 0; i < totalCalls; i++) {
+      const item = plan[i];
+      updateLoading(numChunks > 1
+        ? `מעבד — קריאה ${i + 1} מתוך ${totalCalls} (חלק ${item.chunkIdx + 1}/${numChunks})…`
+        : `מעבד את הקובץ — קריאה ${i + 1} מתוך ${totalCalls}…`);
+      const prompt = buildPrompt(item, numChunks, totalCalls, allRows);
       const text = await callWithFallback(prompt, pickedFile.isInline ? pickedFile : null, mIdx);
       mIdx = deps.getModelIdx();
 
       const rows = parseRows(text);
+      if (rows.length === 0) {
+        appendRunWarning(`⚠️ קריאה ${i + 1} לא החזירה רשומות תקינות — ממשיכים.`);
+      } else {
+        contributingCalls++;
+      }
       for (const r of rows) {
         const k = (r.main || '') + '||' + (r.sub || '') + '||' + (r.subsub || '');
         if (!seen.has(k)) { seen.add(k); allRows.push(r); }
@@ -215,22 +274,41 @@ window.runSummarizer = async function () {
   lastRows = allRows;
   phase = 'done';
   downloadXlsx(allRows);
-  showDone(allRows.length, level);
+  showDone(allRows.length, level, { totalCalls, contributingCalls, numChunks });
 };
 
-function buildPrompt(callIdx, totalCalls, existingRows) {
-  const fileBlock = pickedFile.isInline
-    ? `הקובץ המצורף ("${pickedFile.name}") מועבר כקובץ inline למודל. נתח אותו במלואו.`
-    : `תוכן הקובץ "${pickedFile.name}":\n\n${pickedFile.text || ''}\n\n--- סוף הקובץ ---`;
+// One 'first' (skeleton) pass per chunk; remaining calls of the chosen level
+// are distributed round-robin over the chunks as expansion/depth passes.
+function buildCallPlan(numChunks, levelCalls) {
+  const total = Math.max(levelCalls, numChunks);
+  const plan = [];
+  for (let c = 0; c < numChunks; c++) plan.push({ chunkIdx: c, passType: 'first' });
+  const passCount = new Array(numChunks).fill(1);
+  for (let i = 0; i < total - numChunks; i++) {
+    const c = i % numChunks;
+    passCount[c]++;
+    plan.push({ chunkIdx: c, passType: passCount[c] === 2 ? 'expand' : 'deep' });
+  }
+  return plan;
+}
 
-  const baseInstruction = `נתח את המסמך הבא והפק סיכום היררכי בעברית בפורמט JSON בלבד.
+function buildPrompt(item, numChunks, totalCalls, existingRows) {
+  let fileBlock;
+  if (pickedFile.isInline) {
+    fileBlock = `הקובץ המצורף ("${pickedFile.name}") מועבר כקובץ inline למודל. נתח אותו במלואו.`;
+  } else if (numChunks > 1) {
+    fileBlock = `תוכן הקובץ "${pickedFile.name}" — חלק ${item.chunkIdx + 1} מתוך ${numChunks}:\n\n${chunks[item.chunkIdx]}\n\n--- סוף החלק ---`;
+  } else {
+    fileBlock = `תוכן הקובץ "${pickedFile.name}":\n\n${pickedFile.text || ''}\n\n--- סוף הקובץ ---`;
+  }
+
+  const baseInstruction = `נתח את התוכן הבא והפק סיכום היררכי בעברית בפורמט JSON בלבד.
 
 ${fileBlock}
 
 הפלט הנדרש: מערך JSON של אובייקטים, ללא טקסט נלווה לפני או אחרי, ללא בלוקי קוד.
 כל אובייקט: { "main": "נושא ראשי", "sub": "נושא משני", "subsub": "תת נושא", "desc": "תיאור 1–2 משפטים" }
-
-יעד כמותי כולל לאחר כל הקריאות: סדר גודל של 5³ עד 7³ (כ-125 עד 350) רשומות.`;
+שמור על עקביות: אם נושא ראשי כבר הופיע ברשומות קודמות — השתמש בדיוק באותו שם.`;
 
   if (totalCalls === 1) {
     return baseInstruction + `
@@ -239,40 +317,29 @@ ${fileBlock}
 ענה אך ורק במערך JSON.`;
   }
 
-  const partNum = callIdx + 1;
-  const isFirst = callIdx === 0;
-  const isLast  = callIdx === totalCalls - 1;
-  const hint    = partSizeHint(callIdx, totalCalls);
+  const sampleBlock = existingRows.length
+    ? `\nרשומות שכבר נאספו בקריאות קודמות (שמור על עקביות שמות ואל תשכפל אותן):\n${sampleExistingForPrompt(existingRows)}\n`
+    : '';
 
-  if (isFirst) {
+  if (item.passType === 'first') {
     return baseInstruction + `
-
-זהו חלק ${partNum} מתוך ${totalCalls} — שלד עליון. הפק את הנושאים הראשיים והמשניים החשובים ביותר עם תתי-נושאים מרכזיים, כ-${hint} רשומות.
+${sampleBlock}
+מקד את הניתוח בתוכן שסופק לעיל: הפק את הנושאים הראשיים והמשניים עם תתי-הנושאים המרכזיים שלהם, כ-60–120 רשומות.
 ענה אך ורק במערך JSON.`;
   }
 
-  const sample = sampleExistingForPrompt(existingRows);
-  if (isLast) {
+  if (item.passType === 'expand') {
     return baseInstruction + `
-
-זהו חלק ${partNum} מתוך ${totalCalls} — עומק וסיום. הוסף פרטים, דקויות, מקרי קצה ונקודות שוליות שעדיין לא כוסו, כ-${hint} רשומות חדשות, כדי להשלים סיכום מקיף.
-דוגמה ממה שכבר נאסף (אל תחזור עליו):
-${sample}
+${sampleBlock}
+זהו סבב הרחבה על תוכן זה. הוסף תתי-נושאים נוספים ונושאים משניים שטרם כוסו, כ-50–100 רשומות חדשות.
 ענה אך ורק במערך JSON.`;
   }
 
+  // 'deep'
   return baseInstruction + `
-
-זהו חלק ${partNum} מתוך ${totalCalls} — הרחבה. הוסף תתי-נושאים נוספים ונושאים משניים שלא כוסו, כ-${hint} רשומות חדשות.
-דוגמה ממה שכבר נאסף (אל תחזור עליו):
-${sample}
+${sampleBlock}
+זהו סבב עומק על תוכן זה. הוסף פרטים, דקויות, מקרי קצה ונקודות שוליות שעדיין לא כוסו, כ-50–100 רשומות חדשות.
 ענה אך ורק במערך JSON.`;
-}
-
-function partSizeHint(callIdx, totalCalls) {
-  if (callIdx === 0) return '80–120';
-  if (callIdx === totalCalls - 1) return '70–120';
-  return '60–100';
 }
 
 function sampleExistingForPrompt(rows) {
@@ -303,7 +370,35 @@ function parseRows(text) {
       return normalizeArray(v);
     } catch { /* ignore */ }
   }
-  return [];
+  // salvage: extract every complete top-level {...} object from truncated
+  // or concatenated output, so a broken array still contributes its rows
+  return salvageRows(s);
+}
+
+function salvageRows(s) {
+  const objs = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (esc) { esc = false; continue; }
+    if (inStr) {
+      if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}') {
+      if (depth > 0) depth--;
+      if (depth === 0 && start !== -1) {
+        try { objs.push(JSON.parse(s.slice(start, i + 1))); } catch { /* skip malformed */ }
+        start = -1;
+      }
+    }
+  }
+  return normalizeArray(objs);
 }
 
 function normalizeArray(v) {
@@ -322,7 +417,10 @@ async function callWithFallback(prompt, inlineFile, startIdx) {
   let mIdx = startIdx;
   while (true) {
     try {
-      return await deps.callGeminiForSpec(prompt, mIdx, inlineFile);
+      return await deps.callGeminiForSpec(prompt, mIdx, inlineFile, {
+        genCfg: { responseMimeType: 'application/json' },
+        maxContinuations: 0,
+      });
     } catch (err) {
       const msg = err.message || '';
       const quota = deps.isQuotaExceeded(msg);
@@ -361,15 +459,28 @@ function downloadXlsx(rows) {
 
 // ── Phase 3: done / error ─────────────────────────────────────────────────
 
-function showDone(count, level) {
-  const labels = { basic: 'בסיסי (1 קריאה)', normal: 'רגיל (3 קריאות)', high: 'גבוה (6 קריאות)' };
+function showDone(count, level, stats = {}) {
+  const labels = { basic: 'בסיסי', normal: 'רגיל', high: 'גבוה' };
+  const { totalCalls = 0, contributingCalls = 0, numChunks = 1 } = stats;
+  const partsLine = numChunks > 1
+    ? `<div style="font-size:.83rem;color:#15803d;">הקובץ עובד ב-<strong>${numChunks}</strong> חלקים</div>`
+    : '';
+  const callsLine = totalCalls
+    ? `<div style="font-size:.83rem;color:#15803d;">קריאות שתרמו רשומות: <strong>${contributingCalls} מתוך ${totalCalls}</strong></div>`
+    : '';
+  const failWarn = (totalCalls && contributingCalls < totalCalls)
+    ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.6rem .85rem;color:#92400e;font-size:.8rem;">⚠️ ${totalCalls - contributingCalls} קריאות לא החזירו רשומות תקינות — ייתכן שחלק מהתוכן חסר בסיכום.</div>`
+    : '';
   setBody(`
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:1rem 1.1rem;">
       <div style="font-size:.95rem;font-weight:700;color:#166534;margin-bottom:.3rem;">✅ הסיכום הופק והורד</div>
       <div style="font-size:.83rem;color:#15803d;">קובץ: <strong>${deps.escHtml(pickedFile?.name || '')}</strong></div>
       <div style="font-size:.83rem;color:#15803d;">רמת עיבוד: <strong>${labels[level] || level}</strong></div>
+      ${partsLine}
+      ${callsLine}
       <div style="font-size:.83rem;color:#15803d;">סה״כ רשומות: <strong>${count}</strong></div>
     </div>
+    ${failWarn}
     <div style="font-size:.82rem;color:#475569;">אם הדפדפן חסם את ההורדה — לחץ על הכפתור למטה כדי לנסות שוב.</div>`);
   setFooter(`
     <div style="display:flex;gap:.7rem;justify-content:space-between;align-items:center;">
@@ -394,8 +505,18 @@ function showLoading(msg) {
   setBody(`<div id="sum-loading" style="display:flex;align-items:center;gap:.7rem;color:#64748b;font-size:.88rem;padding:.5rem 0;">
     <div class="sum-spinner" style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#0891b2;border-radius:50%;flex-shrink:0;"></div>
     <span id="sum-loading-text">${msg || 'טוען…'}</span>
-  </div>`);
+  </div>
+  <div id="sum-run-log" style="display:flex;flex-direction:column;gap:.35rem;"></div>`);
   setFooter('');
+}
+
+function appendRunWarning(msg) {
+  const log = document.getElementById('sum-run-log');
+  if (!log) return;
+  const el = document.createElement('div');
+  el.style.cssText = 'background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.45rem .7rem;color:#92400e;font-size:.78rem;';
+  el.textContent = msg;
+  log.appendChild(el);
 }
 
 function updateLoading(msg) {

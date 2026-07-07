@@ -772,8 +772,10 @@ function escHtml(str) {
 // ── Gemini helpers used by modal files (via deps) ─────────────────────────
 
 
-async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null) {
+async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null, opts = {}) {
   const makeUrl = (idx) => `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[idx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const genConfig = { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2, ...(opts.genCfg || {}) };
+  const maxCont   = opts.maxContinuations ?? 3;
   const userParts = [{ text: promptText }];
   if (inlineFile) userParts.push({ inlineData: { mimeType: inlineFile.mimeType, data: inlineFile.base64 } });
 
@@ -782,7 +784,7 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: userParts }],
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+      generationConfig: genConfig,
     }),
   });
   if (!res.ok) {
@@ -793,14 +795,13 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null) {
   const candidate = data.candidates[0];
   let text = candidate.content.parts.map(p => p.text).join('');
 
-  // Auto-continuation: if truncated, resume up to 3 times via multi-turn conversation
-  if (candidate.finishReason === 'MAX_TOKENS') {
-    const MAX_CONT = 3;
+  // Auto-continuation: if truncated, resume via multi-turn conversation
+  if (candidate.finishReason === 'MAX_TOKENS' && maxCont > 0) {
     let truncated = true;
     let contNum = 0;
-    while (truncated && contNum < MAX_CONT) {
+    while (truncated && contNum < maxCont) {
       contNum++;
-      appendMessage('error', `⚠️ חלק נחתך — ממשיך אוטומטית (${contNum}/${MAX_CONT})…`);
+      appendMessage('error', `⚠️ חלק נחתך — ממשיך אוטומטית (${contNum}/${maxCont})…`);
       const contRes = await fetch(makeUrl(mIdx), {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -810,7 +811,7 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null) {
             { role: 'model', parts: [{ text }] },
             { role: 'user',  parts: [{ text: 'המשך ישירות מהיכן שנעצרת — ללא חזרה על מה שכבר נכתב.' }] },
           ],
-          generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+          generationConfig: genConfig,
         }),
       });
       if (!contRes.ok) break;

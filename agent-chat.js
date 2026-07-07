@@ -208,6 +208,9 @@ function renderEmptyState() {
       ${agentId === 'summarizer'
         ? `<button class="chip chip--generate" onclick="window.openSummarizerModal()">📝 סכם מסמך ל-Excel</button>`
         : ''}
+      ${agentId === 'summarizer'
+        ? `<button class="chip" onclick="window.openSummarizerMindMap()">🗺 הצג מפת חשיבה</button>`
+        : ''}
       ${agentId === 'ui-explorer'
         ? `<button class="chip chip--generate" onclick="window.openUiExplorerModal()">🔬 חקור ממשק HTML</button>`
         : ''}

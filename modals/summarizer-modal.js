@@ -7,7 +7,8 @@ const LEVEL_CALLS = { basic: 1, normal: 3, high: 6 };
 let phase = 'pick';     // 'pick' | 'running' | 'done' | 'error'
 let pickedFile = null;  // { name, mimeType, isInline, text?, base64? }
 let chunks = [];        // text chunks of the picked file (single entry for small files, [] for inline)
-let lastRows = [];      // last produced rows (for re-download)
+let lastRows = [];      // last produced rows (for re-download / mind map)
+let lastMeta = null;    // meta of the last produced rows (for mind map header)
 
 // ── Init ──────────────────────────────────────────────────────────────────
 export function initSummarizerModal() {
@@ -272,8 +273,10 @@ window.runSummarizer = async function () {
   }
 
   lastRows = allRows;
+  lastMeta = { fileName: pickedFile?.name || 'summary', level, generatedAt: new Date().toISOString() };
   phase = 'done';
   downloadXlsx(allRows);
+  openMindMapWithRows(allRows, lastMeta);
   showDone(allRows.length, level, { totalCalls, contributingCalls, numChunks });
 };
 
@@ -457,6 +460,67 @@ function downloadXlsx(rows) {
   XLSX.writeFile(wb, `${base}_summary_${ts}.xlsx`);
 }
 
+// ── Mind map handoff ─────────────────────────────────────────────────────
+// Same localStorage + BroadcastChannel + window.open pattern used by
+// natural-modal.js to hand data off to natural-mindmap.html.
+
+function openMindMapWithRows(rows, meta) {
+  try {
+    localStorage.setItem('summarizer-mindmap-data', JSON.stringify({ rows, meta }));
+    try { new BroadcastChannel('summarizer-mindmap').postMessage('update'); } catch { /* unavailable */ }
+    window.open('summarizer-mindmap.html', 'summarizer-mindmap');
+  } catch { /* localStorage unavailable */ }
+}
+
+// Parses a previously-downloaded summarizer Excel (the plain visible sheet
+// from downloadXlsx) back into { main, sub, subsub, desc } rows.
+async function parseSummaryXlsx(file) {
+  if (typeof XLSX === 'undefined') throw new Error('ספריית XLSX לא נטענה');
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1 });
+  if (!aoa.length) return [];
+  const header = aoa[0].map(h => String(h || '').trim());
+  const iMain = header.indexOf('נושא ראשי');
+  const iSub = header.indexOf('נושא משני');
+  const iSubsub = header.indexOf('תת נושא');
+  const iDesc = header.indexOf('תיאור');
+  return aoa.slice(1)
+    .filter(row => row && row.some(c => c != null && String(c).trim()))
+    .map(row => ({
+      main:   String((iMain   !== -1 ? row[iMain]   : '') ?? '').trim(),
+      sub:    String((iSub    !== -1 ? row[iSub]    : '') ?? '').trim(),
+      subsub: String((iSubsub !== -1 ? row[iSubsub] : '') ?? '').trim(),
+      desc:   String((iDesc   !== -1 ? row[iDesc]   : '') ?? '').trim(),
+    }))
+    .filter(r => r.main || r.sub || r.subsub || r.desc);
+}
+
+// Chip button trigger: reuse the current session's rows if we have any,
+// otherwise let the user pick a previously-downloaded summary Excel.
+window.openSummarizerMindMap = function () {
+  if (lastRows.length) {
+    openMindMapWithRows(lastRows, lastMeta);
+    return;
+  }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls';
+  input.onchange = async () => {
+    const f = input.files[0];
+    if (!f) return;
+    try {
+      const rows = await parseSummaryXlsx(f);
+      if (!rows.length) { alert('לא נמצאו רשומות בקובץ.'); return; }
+      openMindMapWithRows(rows, { fileName: f.name });
+    } catch (e) {
+      alert('שגיאה בקריאת קובץ האקסל: ' + (e.message || e));
+    }
+  };
+  input.click();
+};
+
 // ── Phase 3: done / error ─────────────────────────────────────────────────
 
 function showDone(count, level, stats = {}) {
@@ -485,12 +549,19 @@ function showDone(count, level, stats = {}) {
   setFooter(`
     <div style="display:flex;gap:.7rem;justify-content:space-between;align-items:center;">
       <button onclick="window.closeSummarizerModal()" style="padding:.48rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.87rem;font-family:Heebo,sans-serif;color:#374151;">סגור</button>
-      <button onclick="window.redownloadSummarizer()" style="padding:.5rem 1.2rem;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;">⬇ הורד שוב</button>
+      <div style="display:flex;gap:.5rem;">
+        <button onclick="window.reopenSummarizerMindMap()" style="padding:.5rem 1rem;border:1px solid #0891b2;background:#fff;color:#0891b2;border-radius:8px;cursor:pointer;font-size:.87rem;font-weight:700;font-family:Heebo,sans-serif;">🗺 פתח מפת חשיבה שוב</button>
+        <button onclick="window.redownloadSummarizer()" style="padding:.5rem 1.2rem;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;">⬇ הורד שוב</button>
+      </div>
     </div>`);
 }
 
 window.redownloadSummarizer = function () {
   if (lastRows.length) downloadXlsx(lastRows);
+};
+
+window.reopenSummarizerMindMap = function () {
+  if (lastRows.length) openMindMapWithRows(lastRows, lastMeta);
 };
 
 function showError(msg) {

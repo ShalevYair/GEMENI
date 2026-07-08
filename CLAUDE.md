@@ -4,7 +4,7 @@
 
 **אגם הסוכנים** — a Hebrew-language, fully client-side AI agent platform for software specification and SDLC management. No server, no build step. All processing runs in the browser against the Gemini API directly.
 
-There are **24 agents** total, accessible via `agent.html?id=<agent-id>` (or dedicated pages for Salesforce Killer and the SDLC mind-map).
+There are **25 agents** total, accessible via `agent.html?id=<agent-id>` (or dedicated pages for Salesforce Killer and the SDLC mind-map).
 
 ---
 
@@ -28,16 +28,17 @@ All pages are standalone HTML files that import JS via `<script type="module">`.
 | `nav.js` | Injects sidebar + header into every page at runtime |
 | `styles.css` | Global dark-mode-first CSS (CSS variables, sidebar, agent cards) |
 | `agent-chat.js` | Chat logic: file reading, chunking, auto-download, model fallback, modal init |
-| `agents-config.js` | System prompts, icons, descriptions, suggestions for all 24 agents |
+| `agents-config.js` | System prompts, icons, descriptions, suggestions for all 25 agents |
 
 ---
 
-## All Agents (24)
+## All Agents (25)
 
 | ID | Icon | Name | Has Modal | Modal File |
 |----|------|------|-----------|-----------|
 | `spec-king` | 👑 | מלך האפיונים | ✅ | `spec-king-modal.js` |
 | `spec-viewer` | 📋 | מציג האפיונים | — | standalone page |
+| `maturity-checker` | 🩺 | בודק הבשלות | ✅ | `maturity-checker-modal.js` |
 | `shraga` | 🧠 | שרגא | ✅ | `shraga-modal.js` |
 | `briefer` | 📋 | בריפר | ✅ | `briefer-modal.js` |
 | `requirements` | 📋 | אוסף הדרישות | ✅ | `requirements-modal.js` |
@@ -95,6 +96,22 @@ Adding a new modal: create the file, export `initXxxModal`, import it in `agent-
 
 ---
 
+## Data Flow: בודק הבשלות (Business Clarification Workbook)
+
+Positioned as the gate *before* מלך האפיונים — verifies the business need is understood before solutioning begins. Deliberately forbidden from asking technical questions or assuming any technical solution (no Salesforce/OutSystems bias), unlike Spec King's flavor-aware chapters.
+
+1. User uploads one or several business spec documents (DOCX/DOC/TXT/MD/PDF/XLS/XLSX, up to 20) and optionally writes context
+2. **Call 1 — Calibration:** reads all documents, returns JSON `{ understanding, preliminaryQuestions: [{question, why}] }` (up to 10 meta-questions about the analysis itself — objective, audience, depth, domains to focus, etc. — never business or technical questions)
+3. User answers the preliminary questions (all optional; skips straight to generation if the model returns none)
+4. **Call 2 — Overview:** executive overview + per-document extraction + cross-document contradiction/gap comparison
+5. **Call 3 — Workbook:** the full business clarification question list, grouped by domain, funnel-ordered (objective → actors → process → status → rules → validation → data → exceptions → outputs → ownership), each tied to a source reference
+6. **Call 4 — Extras:** missing business elements, assumptions to validate, and a short priority list for the first stakeholder meeting
+7. All four calls' results are assembled into a multi-tab `.xlsx` workbook and downloaded; questions split into "שאלות קריטיות" / "שאלות נוספות" tabs if the workbook exceeds 30 rows
+
+Spec King's own single-shot "שאלות הבהרה" mode (`spec-king/clarification.js`) was removed from the UI in favor of this agent, to avoid two divergent clarification-question implementations (the old mode also mixed in Salesforce/OutSystems flavor rules, which בודק הבשלות explicitly must never do). The file is kept but no longer wired into `spec-king-modal.js`.
+
+---
+
 ## Spec King Folder (`spec-king/`)
 
 | File | Purpose |
@@ -109,7 +126,7 @@ Adding a new modal: create the file, export `initXxxModal`, import it in `agent-
 | `ch6-testing.js` | Chapter 6: test plan, scenarios, UAT |
 | `flavor-salesforce.js` | Salesforce-specific additions (objects, Apex, Lightning) |
 | `flavor-outsystems.js` | OutSystems-specific additions (O11 vs ODC, module structure) |
-| `clarification.js` | Pre-spec clarification questions generator |
+| `clarification.js` | Pre-spec clarification questions generator — **unused** by the modal since the dedicated בודק הבשלות agent superseded it (kept in place per the "never delete JS files" rule below) |
 
 Each chapter exports `CH{N}_LABEL`, `CH{N}_SECTIONS`, and `CH{N}_ITEMS` — used by the modal's chapter/section selector UI.
 
@@ -131,6 +148,8 @@ Each chapter exports `CH{N}_LABEL`, `CH{N}_SECTIONS`, and `CH{N}_ITEMS` — used
 |-----------|--------|
 | `.xls`, `.xlsx` | XLSX.read() → CSV text |
 | `.doc` | binary read → printable ASCII (partial, lossy) |
+
+`modals/maturity-checker-modal.js: readMaturityFile(file)` duplicates the same `.xls`/`.xlsx`/`.doc` handling (each modal owns its own file reader — there is no shared file-utils module).
 
 **Large file strategy:** plain text files > 50,000 chars are split into 50K chunks via `sendChunked()`. Each chunk is processed independently via `callGeminiOnceWithFallback()`, results joined with `---`.
 
@@ -216,6 +235,7 @@ For generators (modals), fallback is handled inside `callWithFallback()` in each
 | Agent | Output |
 |-------|--------|
 | מלך האפיונים | `.md` + `.xlsx` + `.html` (Mermaid) + `.html` (wireframes) |
+| בודק הבשלות | `.xlsx` (multi-tab business clarification workbook — overview, per-document extraction, cross-document comparison, question workbook, missing elements, assumptions, priority meeting list) |
 | שרגא | `.doc` (Word-compatible HTML, RTL) |
 | המסכם | `.xlsx` (hierarchical summary) + auto-opened mind-map page (`summarizer-mindmap.html`) with embedded chat |
 | אוסף הדרישות | `.md` or `.doc` |

@@ -3,7 +3,6 @@ import {
   CHAPTERS,
   ALL_CHECKLIST_ITEMS,
   buildChunkPrompt,
-  buildClarificationPrompt,
   buildAutoDepthPrompt,
   getChunkLabel,
   getChunkMapForCount,
@@ -83,7 +82,7 @@ function injectSpecKingModal() {
       <!-- ── Body: two columns ── -->
       <div style="display:flex;flex:1;overflow:hidden;">
 
-        <!-- Left column: upload / flavor / mode -->
+        <!-- Left column: upload / flavor / depth -->
         <div style="flex:0 0 360px;padding:1.1rem 1.4rem;overflow-y:auto;border-left:1px solid #f1f5f9;">
 
           <!-- Multi-file upload -->
@@ -148,17 +147,10 @@ function injectSpecKingModal() {
             </div>
           </div>
 
-          <!-- Mode -->
+          <!-- Depth -->
           <div>
-            <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.4rem;">מה תרצה לקבל?</div>
-            <label style="display:flex;align-items:flex-start;gap:.45rem;margin-bottom:.35rem;cursor:pointer;">
-              <input type="radio" name="sk2-mode" value="spec" checked style="margin-top:.15rem;" onchange="window.sk2ModeChanged()">
-              <span style="font-size:.84rem;color:#1e293b;"><strong>אפיון מלא</strong></span>
-            </label>
-
-            <!-- Depth selector — shown only when "אפיון מלא" is selected -->
-            <div id="sk2-depth-section" style="margin-bottom:.35rem;margin-right:1.3rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:.55rem .7rem;">
-              <div style="font-size:.78rem;font-weight:600;color:#374151;margin-bottom:.35rem;">רמת עומק:</div>
+            <div style="font-weight:600;font-size:.87rem;color:#1e293b;margin-bottom:.4rem;">רמת עומק:</div>
+            <div id="sk2-depth-section" style="margin-bottom:.35rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:.55rem .7rem;">
               <label style="display:flex;align-items:center;gap:.35rem;margin-bottom:.25rem;cursor:pointer;font-size:.82rem;">
                 <input type="radio" name="sk2-depth" value="auto" style="accent-color:#7c3aed;">
                 <span style="color:#1e293b;"><strong>✨ חכמה</strong></span>
@@ -181,10 +173,9 @@ function injectSpecKingModal() {
               </label>
             </div>
 
-            <label style="display:flex;align-items:flex-start;gap:.45rem;cursor:pointer;">
-              <input type="radio" name="sk2-mode" value="questions" style="margin-top:.15rem;" onchange="window.sk2ModeChanged()">
-              <span style="font-size:.84rem;color:#1e293b;"><strong>שאלות הבהרה</strong> <span style="color:#64748b;font-size:.78rem;">— קריאה אחת</span></span>
-            </label>
+            <div style="font-size:.76rem;color:#64748b;background:#f0fdfa;border:1px solid #99f6e4;border-radius:7px;padding:.5rem .65rem;line-height:1.5;">
+              💡 מחפש לוודא שהחומר בשל מספיק לפני שמתחילים אפיון? השתמש ב-<a href="agent.html?id=maturity-checker" style="color:#0f766e;font-weight:700;">🩺 בודק הבשלות</a> — מפיק שאלות הבהרה עסקיות בלבד, לפני שלב הפתרון.
+            </div>
           </div>
         </div>
 
@@ -252,14 +243,6 @@ window.sk2FlavorChanged = function () {
   // Show/hide OutSystems version picker
   const osVer = document.getElementById('sk2-os-version');
   if (osVer) osVer.style.display = flavor === 'outsystems' ? '' : 'none';
-};
-
-window.sk2ModeChanged = function () {
-  const mode  = document.querySelector('input[name="sk2-mode"]:checked')?.value;
-  const sec   = document.getElementById('sk2-checklist-section');
-  const depth = document.getElementById('sk2-depth-section');
-  if (sec)   sec.style.display   = mode === 'spec' ? '' : 'none';
-  if (depth) depth.style.display = mode === 'spec' ? '' : 'none';
 };
 
 window.sk2SelectAll = function () {
@@ -332,11 +315,10 @@ window.generateSpecKing = async function () {
     return;
   }
 
-  const mode     = document.querySelector('input[name="sk2-mode"]:checked')?.value || 'spec';
   const flavor   = document.querySelector('input[name="sk2-flavor"]:checked')?.value || 'general';
   const osVer    = document.querySelector('input[name="sk2-os-ver"]:checked')?.value || 'o11';
   const depth    = document.querySelector('input[name="sk2-depth"]:checked')?.value || 'normal';
-  const checkedIds = mode === 'spec' ? skGetCheckedIds() : [];
+  const checkedIds = skGetCheckedIds();
   skSaveChecked(checkedIds);
 
   let chunkMap = depth === 'high' ? CHUNK_MAP_HIGH
@@ -374,50 +356,44 @@ window.generateSpecKing = async function () {
   const flavorLabel = flavor === 'salesforce' ? 'Salesforce'
     : flavor === 'outsystems' ? `OutSystems ${osVer.toUpperCase()}`
     : 'כללי';
-  const baseMeta = { flavor: flavorLabel, fileNames, mode, timestamp: new Date().toISOString() };
+  const baseMeta = { flavor: flavorLabel, fileNames, timestamp: new Date().toISOString() };
 
   const results = [];
   let skModelIdx = deps.getModelIdx();
 
   let autoDepthReason = '';
   try {
-    if (mode === 'questions') {
-      deps.updateTyping(progressId, 'מנתח חומרים ומייצר שאלות הבהרה…');
-      const prompt = buildClarificationPrompt(combinedText, flavor, osVer);
-      results.push(await callWithFallback(prompt, skModelIdx));
-    } else {
-      // auto-depth: analysis call to decide chunk count
-      if (depth === 'auto') {
-        deps.updateTyping(progressId, '✨ מנתח את מורכבות המסמך…');
-        const analysisPrompt = buildAutoDepthPrompt(combinedText);
-        let analysisText = '';
-        try {
-          analysisText = await callWithFallback(analysisPrompt, skModelIdx);
-          const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
-            chunkMap = getChunkMapForCount(n);
-            autoDepthReason = parsed.reason || '';
-            deps.appendMessage('assistant',
-              `✨ **ניתוח מסמך:** ${autoDepthReason}\n→ נבחרו **${n} קריאות API**`);
-          } else {
-            chunkMap = CHUNK_MAP_NORMAL;
-          }
-        } catch {
+    // auto-depth: analysis call to decide chunk count
+    if (depth === 'auto') {
+      deps.updateTyping(progressId, '✨ מנתח את מורכבות המסמך…');
+      const analysisPrompt = buildAutoDepthPrompt(combinedText);
+      let analysisText = '';
+      try {
+        analysisText = await callWithFallback(analysisPrompt, skModelIdx);
+        const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          const n = Math.max(1, Math.min(6, parseInt(parsed.chunks) || 3));
+          chunkMap = getChunkMapForCount(n);
+          autoDepthReason = parsed.reason || '';
+          deps.appendMessage('assistant',
+            `✨ **ניתוח מסמך:** ${autoDepthReason}\n→ נבחרו **${n} קריאות API**`);
+        } else {
           chunkMap = CHUNK_MAP_NORMAL;
         }
+      } catch {
+        chunkMap = CHUNK_MAP_NORMAL;
       }
+    }
 
-      const resolvedTotal = Object.keys(chunkMap).length;
-      for (let chunkNum = 1; chunkNum <= resolvedTotal; chunkNum++) {
-        const label = getChunkLabel(chunkNum, chunkMap);
-        deps.updateTyping(progressId, `מייצר חלק ${chunkNum} מתוך ${resolvedTotal}… (${label})`);
-        const prompt = buildChunkPrompt(combinedText, chunkNum, checkedIds, flavor, osVer, chunkMap);
-        if (!prompt) continue;
-        results.push(await callWithFallback(prompt, skModelIdx));
-        sk2SavePartialToViewer(results, baseMeta);
-      }
+    const resolvedTotal = Object.keys(chunkMap).length;
+    for (let chunkNum = 1; chunkNum <= resolvedTotal; chunkNum++) {
+      const label = getChunkLabel(chunkNum, chunkMap);
+      deps.updateTyping(progressId, `מייצר חלק ${chunkNum} מתוך ${resolvedTotal}… (${label})`);
+      const prompt = buildChunkPrompt(combinedText, chunkNum, checkedIds, flavor, osVer, chunkMap);
+      if (!prompt) continue;
+      results.push(await callWithFallback(prompt, skModelIdx));
+      sk2SavePartialToViewer(results, baseMeta);
     }
   } catch (err) {
     deps.removeTyping(progressId);
@@ -435,10 +411,9 @@ window.generateSpecKing = async function () {
   }
 
   // Build output files
-  const timestamp   = new Date().toISOString().slice(0, 10);
-  const isQuestions = mode === 'questions';
-  const combined    = (isQuestions ? '# שאלות הבהרה\n\n' : '') + results.join('\n\n---\n\n');
-  const baseName    = `spec-king-${isQuestions ? 'questions' : 'spec'}-${flavor}-${timestamp}`;
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const combined  = results.join('\n\n---\n\n');
+  const baseName  = `spec-king-spec-${flavor}-${timestamp}`;
 
   const { finalMarkdown, viewerTables, viewerScreens, mermaidDiagrams } = sk2BuildViewerPayload(combined);
   const tableCount = viewerTables.length;
@@ -490,9 +465,7 @@ window.generateSpecKing = async function () {
   if (viewerScreens.length > 0)   downloadedFiles.push(`\`${baseName}-screens.html\` (${viewerScreens.length} מסכים)`);
 
   deps.appendMessage('assistant',
-    isQuestions
-      ? `✅ שאלות ההבהרה הורדו כ-\`${baseName}.md\`\n\n**טעם:** ${flavorLabel} · **מקורות:** ${fileNames}`
-      : `✅ מסמך האפיון הורד:\n${downloadedFiles.map(f => `- ${f}`).join('\n')}\n\n**טעם:** ${flavorLabel} · **מקורות:** ${fileNames}`
+    `✅ מסמך האפיון הורד:\n${downloadedFiles.map(f => `- ${f}`).join('\n')}\n\n**טעם:** ${flavorLabel} · **מקורות:** ${fileNames}`
   );
 };
 

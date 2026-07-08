@@ -14,6 +14,7 @@ import { initSummarizerModal }  from './modals/summarizer-modal.js';
 import { initUiExplorerModal } from './modals/ui-explorer-modal.js';
 import { initBrieferModal }    from './modals/briefer-modal.js';
 import { initShragaModal }     from './modals/shraga-modal.js';
+import { initMaturityCheckerModal } from './modals/maturity-checker-modal.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
 const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
@@ -78,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (agentId === 'ui-explorer')        initUiExplorerModal();
   if (agentId === 'briefer')            initBrieferModal();
   if (agentId === 'shraga')             initShragaModal();
+  if (agentId === 'maturity-checker')   initMaturityCheckerModal();
   if (apiKey) showChatReady();
   bindEvents();
 });
@@ -188,7 +190,7 @@ function renderEmptyState() {
         ? `<button class="chip chip--generate" onclick="window.openDesignQueenModal()">צור מסכי HTML מאפיון — קבל פרוטוטייפ אינטראקטיבי מלא</button>`
         : ''}
       ${agentId === 'spec-king'
-        ? `<button class="chip chip--generate" onclick="window.openSpecKingModal()">👑 צור אפיון / שאלות הבהרה מקבצי דרישות</button>`
+        ? `<button class="chip chip--generate" onclick="window.openSpecKingModal()">👑 צור אפיון מלא מקבצי דרישות</button>`
         : ''}
       ${agentId === 'requirements'
         ? `<button class="chip chip--generate" onclick="window.openRequirementsModal()">📋 צור מסמך דרישות / שאלות הבהרה מחומרים גולמיים</button>`
@@ -219,6 +221,9 @@ function renderEmptyState() {
         : ''}
       ${agentId === 'shraga'
         ? `<button class="chip chip--generate" onclick="window.openShragaModal()">🧠 העלה קבצים וקבל ניתוח מעמיק</button>`
+        : ''}
+      ${agentId === 'maturity-checker'
+        ? `<button class="chip chip--generate" onclick="window.openMaturityModal()">🩺 העלה מסמכי אפיון וקבל שאלות הבהרה עסקיות</button>`
         : ''}
     </div>`;
   msgs.appendChild(empty);

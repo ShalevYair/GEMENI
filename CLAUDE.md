@@ -51,7 +51,7 @@ All pages are standalone HTML files that import JS via `<script type="module">`.
 | `storyteller` | 📖 | מספר הסיפורים | ✅ | `storyteller-modal.js` |
 | `tester` | 🔍 | הבודק | — | — |
 | `security` | 🔒 | המאבטח | — | — |
-| `tender-writer` | 📝 | כותב המכרזים | — | — |
+| `tender-writer` | 📝 | כותב המכרזים | ✅ | `tender-writer-modal.js` |
 | `natural` | 🖥️ | NATURAL | ✅ | `natural-modal.js` |
 | `summarizer` | 📝 | המסכם | ✅ | `summarizer-modal.js` |
 | `ui-explorer` | 🔬 | חוקר ממשק המשתמש | ✅ | `ui-explorer-modal.js` |
@@ -109,6 +109,18 @@ Positioned as the gate *before* מלך האפיונים — verifies the busines
 7. All four calls' results are assembled into a multi-tab `.xlsx` workbook and downloaded; questions split into "שאלות קריטיות" / "שאלות נוספות" tabs if the workbook exceeds 30 rows
 
 Spec King's own single-shot "שאלות הבהרה" mode (`spec-king/clarification.js`) was removed from the UI in favor of this agent, to avoid two divergent clarification-question implementations (the old mode also mixed in Salesforce/OutSystems flavor rules, which בודק הבשלות explicitly must never do). The file is kept but no longer wired into `spec-king-modal.js`.
+
+---
+
+## Data Flow: כותב המכרזים (Tender / RFP Writer)
+
+Triggered by the "עבוד על מכרז" button on the tender-writer empty state (`modals/tender-writer-modal.js`).
+
+1. User uploads background files (DOCX/DOC/PDF/TXT/MD/XLS/XLSX/images, up to 20 — same reader as שרגא) and/or writes a free-text instruction; either one alone is enough to enable the run button
+2. User picks a **processing level**, which bounds the number of execution calls: נמוכה = exactly 1, רגילה = 2–3, גבוהה = 4–6, אוטומטית = model decides within 1–6
+3. **Call 1 — Calibration:** returns JSON `{ understanding, tenderTitle, internalPrompt, workPlan: [{section, prompt}], questions }`; the work plan is clamped client-side to the level bounds (overflow sections are merged, never dropped)
+4. **Calls 2…N — Execution:** one call per tender chapter (background & need, functional/technical requirements, threshold conditions, weighted evaluation criteria, SLA/KPIs, contractual terms — merged into fewer chapters at lower levels); missing facts are rendered as `[להשלמה: ___]` placeholders instead of being invented
+5. All chapters assembled into a Word-compatible RTL HTML document and downloaded as `.doc`; clarification questions for the ordering party shown in the done screen
 
 ---
 
@@ -237,6 +249,7 @@ For generators (modals), fallback is handled inside `callWithFallback()` in each
 | מלך האפיונים | `.md` + `.xlsx` + `.html` (Mermaid) + `.html` (wireframes) |
 | בודק הבשלות | `.xlsx` (multi-tab business clarification workbook — overview, per-document extraction, cross-document comparison, question workbook, missing elements, assumptions, priority meeting list) |
 | שרגא | `.doc` (Word-compatible HTML, RTL) |
+| כותב המכרזים | `.doc` (full tender/RFP document — Word-compatible HTML, RTL) |
 | המסכם | `.xlsx` (hierarchical summary) + auto-opened mind-map page (`summarizer-mindmap.html`) with embedded chat |
 | אוסף הדרישות | `.md` or `.doc` |
 | NATURAL — ניתוח מלא/מיגרציה/כתיבה מחדש/שינוי קוד | `.md` + `.xlsx` + optional `.drawio` (spec-viewer) |

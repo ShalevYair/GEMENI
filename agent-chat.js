@@ -15,6 +15,7 @@ import { initUiExplorerModal } from './modals/ui-explorer-modal.js';
 import { initBrieferModal }    from './modals/briefer-modal.js';
 import { initShragaModal }     from './modals/shraga-modal.js';
 import { initMaturityCheckerModal } from './modals/maturity-checker-modal.js';
+import { initTenderWriterModal } from './modals/tender-writer-modal.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
 const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
@@ -80,6 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (agentId === 'briefer')            initBrieferModal();
   if (agentId === 'shraga')             initShragaModal();
   if (agentId === 'maturity-checker')   initMaturityCheckerModal();
+  if (agentId === 'tender-writer')      initTenderWriterModal();
   if (apiKey) showChatReady();
   bindEvents();
 });
@@ -224,6 +226,9 @@ function renderEmptyState() {
         : ''}
       ${agentId === 'maturity-checker'
         ? `<button class="chip chip--generate" onclick="window.openMaturityModal()">🩺 העלה מסמכי אפיון וקבל שאלות הבהרה עסקיות</button>`
+        : ''}
+      ${agentId === 'tender-writer'
+        ? `<button class="chip chip--generate" onclick="window.openTenderModal()">📝 עבוד על מכרז — העלה חומרים וקבל מסמך מכרז מלא</button>`
         : ''}
     </div>`;
   msgs.appendChild(empty);

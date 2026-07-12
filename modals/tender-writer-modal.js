@@ -14,6 +14,7 @@ let callsDone = 0;     // API calls completed in the current run (for progress U
 let cacheState = null;   // active explicit context cache: { name, model }
 let cachePayload = null; // { sharedText, inlineParts } — what to (re)create the cache from
 let cacheEverUsed = false;
+let tenderImages = []; // base64 data URIs extracted from DOCX HTML, restored at assembly
 
 const MAX_FILES = 20;
 const WARN_CHARS = 80_000;
@@ -128,6 +129,7 @@ window.openTenderModal = function () {
   }
   phase = 'pick';
   pickedFiles = [];
+  tenderImages = [];
   calibration = null;
   outputSections = [];
   selectedLevel = 'auto';
@@ -360,6 +362,25 @@ function showModalError(msg, persist = false) {
   if (!persist) setTimeout(() => el.remove(), 4000);
 }
 
+// ── Inline-image extraction ────────────────────────────────────────────────
+// mammoth embeds every DOCX image as a base64 data URI inside the HTML — a
+// 45K-word tender with logos/scans can balloon to tens of millions of chars,
+// exploding the revise segmentation (hundreds of API calls) and flooding the
+// model with unreadable noise. Extract the URIs into tenderImages and leave a
+// short placeholder; the placeholders are swapped back at document assembly,
+// so the images survive end-to-end without ever passing through the model.
+function extractInlineImages(html) {
+  return html.replace(/"data:[^"]{200,}"/g, (m) => {
+    tenderImages.push(m.slice(1, -1));
+    return `"⟦IMG${tenderImages.length - 1}⟧"`;
+  });
+}
+
+function restoreInlineImages(html) {
+  if (!tenderImages.length) return html;
+  return html.replace(/⟦IMG(\d+)⟧/g, (m, i) => tenderImages[+i] ?? m);
+}
+
 // ── File reading ───────────────────────────────────────────────────────────
 async function readTenderFile(file) {
   const ext  = (file.name.split('.').pop() || '').toLowerCase();
@@ -372,7 +393,7 @@ async function readTenderFile(file) {
     // for revising an existing tender without destroying its structure
     try {
       const res = await window.mammoth.convertToHtml({ arrayBuffer: buf });
-      const html = (res.value || '').trim();
+      const html = extractInlineImages((res.value || '').trim());
       if (html) return { name, text: html, sizeChars: html.length, isInline: false, isHtml: true };
     } catch { /* fall back to raw text below */ }
     const res = await window.mammoth.extractRawText({ arrayBuffer: buf });
@@ -948,7 +969,8 @@ ${segText}
 2. ב-"text" החזר את תוכן הבלוק המלא לאחר השינוי, באותו פורמט (${fmt}) ובאותו סגנון — ללא שורת הסימון ⟦B⟧.
 3. שמור על מספור סעיפים, מבני טבלאות וכותרות כפי שהם במסמך המקורי.
 4. "id" חייב להיות מספר מתוך סימוני הבלוקים שבקטע זה בלבד.
-5. אם אף שינוי אינו נוגע לקטע זה — החזר [].`;
+5. מצייני ⟦IMG<מספר>⟧ מייצגים תמונות מוטמעות — אם בלוק עם מציין כזה משתנה, השאר את המציין במקומו כלשונו.
+6. אם אף שינוי אינו נוגע לקטע זה — החזר [].`;
 }
 
 // Shared context for write mode — instruction, calibration and the full raw
@@ -1105,16 +1127,18 @@ function wordShell(bodyHtml, title) {
 function downloadTenderDoc() {
   const title = calibration?.tenderTitle || 'מסמך מכרז';
   let html;
-  if (runMode === 'revise') {
-    // revised tender: reassemble the chunks as-is — no metadata header, the
-    // document keeps its own original title and structure
-    if (outputSections[0]?.isHtml) {
-      html = wordShell(outputSections.map(s => s.text).join('\n'), title);
-    } else {
-      html = markdownToWordHtml(outputSections.map(s => s.text).join('\n\n'), title);
-    }
+  if (runMode === 'revise' && outputSections[0]?.isHtml) {
+    // revised tender: reassemble the blocks as-is — no metadata header, the
+    // document keeps its own original title and structure — and put the
+    // extracted images back into their src attributes
+    html = restoreInlineImages(wordShell(outputSections.map(s => s.text).join('\n'), title));
   } else {
-    html = markdownToWordHtml(assembleTenderMarkdown(), title);
+    const md = runMode === 'revise'
+      ? outputSections.map(s => s.text).join('\n\n')
+      : assembleTenderMarkdown();
+    // in markdown output an image placeholder has no src attribute to return
+    // to — drop any that leaked in rather than paste raw base64 as text
+    html = markdownToWordHtml(md.replace(/⟦IMG\d+⟧/g, ''), title);
   }
   const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
   const blob = new Blob(['﻿', html], { type: 'application/msword' });

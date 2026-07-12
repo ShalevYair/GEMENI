@@ -1,7 +1,7 @@
 import { getSectionPrompt } from './prompt.js';
 import { CLAUDE_DESKTOP_PROMPT } from './claude-prompt.js';
 
-const MODEL_CHAIN     = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
+const MODEL_CHAIN     = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const MAX_OUTPUT_TOKENS = 65000;
 const TOTAL_CHUNKS    = 3;
 

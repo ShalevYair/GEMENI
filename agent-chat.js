@@ -18,7 +18,7 @@ import { initMaturityCheckerModal } from './modals/maturity-checker-modal.js';
 import { initTenderWriterModal } from './modals/tender-writer-modal.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
-const MODEL_CHAIN       = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.5-flash-lite'];
+const MODEL_CHAIN       = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const MAX_FILE_MB       = 10;
 const MAX_OUTPUT_TOKENS = 65000;
 const CHUNK_SIZE        = 50000;  // chars per input chunk for large text files
@@ -789,6 +789,9 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null, o
   const makeUrl = (idx) => `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[idx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const genConfig = { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2, ...(opts.genCfg || {}) };
   const maxCont   = opts.maxContinuations ?? 3;
+  // opts.cachedContent — name of an explicit context cache ("cachedContents/…")
+  // whose contents are prepended server-side; must match the model in the URL
+  const cacheRef  = opts.cachedContent ? { cachedContent: opts.cachedContent } : {};
   const userParts = [{ text: promptText }];
   if (inlineFile) userParts.push({ inlineData: { mimeType: inlineFile.mimeType, data: inlineFile.base64 } });
 
@@ -796,6 +799,7 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null, o
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      ...cacheRef,
       contents: [{ role: 'user', parts: userParts }],
       generationConfig: genConfig,
     }),
@@ -819,6 +823,7 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null, o
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          ...cacheRef,
           contents: [
             { role: 'user',  parts: userParts },
             { role: 'model', parts: [{ text }] },

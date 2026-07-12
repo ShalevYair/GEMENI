@@ -390,7 +390,7 @@ function _extractTextFromBinaryAttachment(att, mime) {
 }
 
 function callGemini(apiKey, prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
   const res = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',

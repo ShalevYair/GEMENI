@@ -9,6 +9,7 @@ let totalCallsPlanned = 0;
 let selectedLevel = 'auto'; // 'low' | 'normal' | 'high' | 'auto'
 let lastInstruction = '';
 let runMode = 'write'; // 'write' (new tender from plan) | 'revise' (chunked rewrite of an existing tender)
+let chunkStats = null; // revise mode: { total, preserved, retried }
 
 const MAX_FILES = 20;
 const WARN_CHARS = 80_000;
@@ -21,10 +22,10 @@ const TEXT_EXTS    = new Set(['txt','md','csv','json','html','htm','xml','yaml',
 // (updating an existing tender) they set the chunk size instead: a higher
 // level means smaller chunks, i.e. more calls and a more thorough pass.
 const LEVELS = {
-  low:    { label: 'נמוכה',    icon: '🪶', desc: 'קריאה אחת — מכרז תמציתי וממוקד',          min: 1, max: 1, chunkChars: 45000 },
-  normal: { label: 'רגילה',    icon: '📄', desc: '2–3 קריאות — מסמך מכרז מלא',              min: 2, max: 3, chunkChars: 30000 },
-  high:   { label: 'גבוהה',    icon: '🏛️', desc: '4–6 קריאות — מכרז מעמיק על כל פרקיו',     min: 4, max: 6, chunkChars: 18000 },
-  auto:   { label: 'אוטומטית', icon: '🤖', desc: 'הסוכן קובע לבד לפי היקף החומר (1–6)',      min: 1, max: 6, chunkChars: 30000 },
+  low:    { label: 'נמוכה',    icon: '🪶', desc: 'קריאה אחת — מכרז תמציתי וממוקד',          min: 1, max: 1, chunkChars: 30000 },
+  normal: { label: 'רגילה',    icon: '📄', desc: '2–3 קריאות — מסמך מכרז מלא',              min: 2, max: 3, chunkChars: 20000 },
+  high:   { label: 'גבוהה',    icon: '🏛️', desc: '4–6 קריאות — מכרז מעמיק על כל פרקיו',     min: 4, max: 6, chunkChars: 12000 },
+  auto:   { label: 'אוטומטית', icon: '🤖', desc: 'הסוכן קובע לבד לפי היקף החומר (1–6)',      min: 1, max: 6, chunkChars: 20000 },
 };
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -247,7 +248,9 @@ async function addFiles(rawFiles) {
         pickedFiles.push(parsed);
       }
     } catch (e) {
-      showModalError(`שגיאה בקריאת "${f.name}": ${e.message || e}`);
+      // a file that failed to read is NOT in the run — keep the warning
+      // visible so the user doesn't run without noticing
+      showModalError(`הקובץ "${f.name}" לא נקרא ולא ייכלל בעיבוד: ${e.message || e}`, true);
     }
   }
 
@@ -330,14 +333,14 @@ function renderWarnings() {
   ).join('');
 }
 
-function showModalError(msg) {
+function showModalError(msg, persist = false) {
   const container = document.getElementById('tender-warnings');
   if (!container) return;
   const el = document.createElement('div');
   el.className = 'tender-warn danger';
   el.textContent = '❌ ' + msg;
   container.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+  if (!persist) setTimeout(() => el.remove(), 4000);
 }
 
 // ── File reading ───────────────────────────────────────────────────────────
@@ -446,6 +449,7 @@ window.runTenderWriter = async function () {
   outputSections = [];
   totalCallsPlanned = 0;
   runMode = 'write';
+  chunkStats = null;
 
   showRunning('🔍 קריאה 1 — כותב המכרזים קורא את החומרים ובונה תוכנית עבודה…', 1, 2);
 
@@ -485,14 +489,34 @@ window.runTenderWriter = async function () {
     //    is lost — call count is driven by document size, not by level ────
     const chunks = splitIntoChunks(sourceFile.text, !!sourceFile.isHtml, lvl.chunkChars);
     totalCallsPlanned = 1 + chunks.length;
+    chunkStats = { total: chunks.length, preserved: 0, retried: 0 };
     for (let i = 0; i < chunks.length; i++) {
       const callNum = i + 2;
       updateRunning(`⚙️ קריאה ${callNum} מתוך ${totalCallsPlanned} — עדכון קטע ${i + 1} מתוך ${chunks.length}…`, callNum, totalCallsPlanned);
       try {
-        const prompt = buildReviseChunkPrompt(instruction, calibration, sourceFile, chunks[i], i, chunks.length);
-        const result = await callWithFallback(prompt, mIdx);
+        const chunk = chunks[i];
+        const prompt = buildReviseChunkPrompt(instruction, calibration, sourceFile, chunk, i, chunks.length);
+        let result = cleanModelOutput(await callWithFallback(prompt, mIdx));
         mIdx = deps.getModelIdx();
-        outputSections.push({ title: `קטע ${i + 1}`, text: cleanModelOutput(result), isHtml: !!sourceFile.isHtml });
+
+        // Safety net: models tend to summarize instead of echoing long text.
+        // A revised chunk can never legitimately shrink to under half its
+        // source — retry once with a sterner reminder, then fall back to the
+        // original chunk so content is never lost.
+        if (result.length < chunk.length * 0.5) {
+          chunkStats.retried++;
+          updateRunning(`🔁 קריאה ${callNum} מתוך ${totalCallsPlanned} — הפלט קצר מדי (${result.length.toLocaleString()} מתוך ${chunk.length.toLocaleString()} תווים), מנסה שוב…`, callNum, totalCallsPlanned);
+          const sternPrompt = prompt + `\n\nתזכורת קריטית: בניסיון הקודם החזרת רק ${result.length} תווים מתוך קטע של ${chunk.length} תווים — זה אומר שסיכמת או השמטת תוכן. החזר את הקטע בשלמותו, מילה במילה, כולל כל הסעיפים והטבלאות. אורך הפלט חייב להיות דומה לאורך הקטע המקורי.`;
+          const retry = cleanModelOutput(await callWithFallback(sternPrompt, mIdx));
+          mIdx = deps.getModelIdx();
+          if (retry.length > result.length) result = retry;
+        }
+        if (result.length < chunk.length * 0.5) {
+          // still too short — keep the original chunk untouched
+          chunkStats.preserved++;
+          result = chunk;
+        }
+        outputSections.push({ title: `קטע ${i + 1}`, text: result, isHtml: !!sourceFile.isHtml });
       } catch (err) {
         phase = 'error';
         showError(err.message || String(err)); return;
@@ -845,6 +869,11 @@ function updateRunning(msg, current, total) {
 
 function showDone() {
   const lvl = LEVELS[selectedLevel] || LEVELS.auto;
+  const outChars = outputSections.reduce((s, x) => s + (x.text || '').length, 0);
+  const srcChars = pickedFiles.reduce((s, f) => s + (f.isInline ? 0 : (f.text || '').length), 0);
+  const statsLine = runMode === 'revise' && chunkStats
+    ? `<div style="margin-top:.25rem;font-size:.8rem;color:#6b7280;">היקף המקור: <strong>${Math.round(srcChars / 1000)}K תווים</strong> | היקף הפלט: <strong>${Math.round(outChars / 1000)}K תווים</strong> | קטעים: <strong>${chunkStats.total}</strong>${chunkStats.preserved ? ` (מתוכם ${chunkStats.preserved} נשמרו במקור לאחר שהמודל החזיר פלט חסר)` : ''}</div>`
+    : `<div style="margin-top:.25rem;font-size:.8rem;color:#6b7280;">היקף הפלט: <strong>${Math.round(outChars / 1000)}K תווים</strong></div>`;
   setBody(`
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:1rem 1.1rem;">
       <div style="font-size:1rem;font-weight:700;color:#166534;margin-bottom:.6rem;">✅ המכרז נכתב — הקובץ הורד</div>
@@ -857,6 +886,7 @@ function showDone() {
         </button>
       </div>
       <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280;">מצב: <strong>${runMode === 'revise' ? 'עדכון מכרז קיים' : 'כתיבת מכרז חדש'}</strong> | רמת עיבוד: <strong>${lvl.label}</strong> | קבצי רקע: <strong>${pickedFiles.length}</strong> | קריאות API: <strong>${totalCallsPlanned}</strong></div>
+      ${statsLine}
     </div>
     <div style="font-size:.82rem;color:#475569;line-height:1.5;">
       אם ההורדה נחסמה על ידי הדפדפן — לחץ "הורד שוב".

@@ -20,6 +20,11 @@ const WARN_CHARS = 80_000;
 const HEAVY_CHARS = 200_000;
 
 const BLOCK_TARGET_CHARS = 1200; // granularity of the ID-tagged blocks in revise mode
+// Hebrew tokenizes at roughly 1.5–2 chars/token, so the 1,048,576-token input
+// window is ~1.6M chars at best. Total-material caps per call, in chars:
+const CAP_CALIBRATION = 400_000; // calibration sees every file truncated
+const CAP_MATERIALS   = 700_000; // write mode: raw materials per chapter call
+const CAP_CHANGE_DOCS = 250_000; // revise mode: change-instruction files
 // Explicit context caching pays off only when the same big context is re-sent
 // across 2+ calls and is above the cacheable minimum (~4K tokens on Gemini 3.x)
 const CACHE_MIN_CHARS = 20_000;
@@ -33,10 +38,10 @@ const TEXT_EXTS    = new Set(['txt','md','csv','json','html','htm','xml','yaml',
 // a higher level means smaller segments, i.e. more calls and a more thorough
 // pass. chunkChars is used only by the legacy full-rewrite fallback path.
 const LEVELS = {
-  low:    { label: 'נמוכה',    icon: '🪶', desc: 'קריאה אחת — מכרז תמציתי וממוקד',          min: 1, max: 1, segmentChars: 400000, chunkChars: 30000 },
-  normal: { label: 'רגילה',    icon: '📄', desc: '2–3 קריאות — מסמך מכרז מלא',              min: 2, max: 3, segmentChars: 300000, chunkChars: 20000 },
-  high:   { label: 'גבוהה',    icon: '🏛️', desc: '4–6 קריאות — מכרז מעמיק על כל פרקיו',     min: 4, max: 6, segmentChars: 150000, chunkChars: 12000 },
-  auto:   { label: 'אוטומטית', icon: '🤖', desc: 'הסוכן קובע לבד לפי היקף החומר (1–6)',      min: 1, max: 6, segmentChars: 300000, chunkChars: 20000 },
+  low:    { label: 'נמוכה',    icon: '🪶', desc: 'קריאה אחת — מכרז תמציתי וממוקד',          min: 1, max: 1, segmentChars: 350000, chunkChars: 30000 },
+  normal: { label: 'רגילה',    icon: '📄', desc: '2–3 קריאות — מסמך מכרז מלא',              min: 2, max: 3, segmentChars: 250000, chunkChars: 20000 },
+  high:   { label: 'גבוהה',    icon: '🏛️', desc: '4–6 קריאות — מכרז מעמיק על כל פרקיו',     min: 4, max: 6, segmentChars: 120000, chunkChars: 12000 },
+  auto:   { label: 'אוטומטית', icon: '🤖', desc: 'הסוכן קובע לבד לפי היקף החומר (1–6)',      min: 1, max: 6, segmentChars: 250000, chunkChars: 20000 },
 };
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -474,8 +479,7 @@ window.runTenderWriter = async function () {
   // ── Call 1: calibration (single call — caching never pays off here) ────
   let calibJson;
   try {
-    const calibPrompt = buildCalibrationPrompt(instruction, lvl);
-    const calibRaw = await callWithFallback(() => ({ prompt: calibPrompt }), mIdx);
+    const calibRaw = await callWithFallback((useCache, shrink) => ({ prompt: buildCalibrationPrompt(instruction, lvl, shrink) }), mIdx);
     callsDone = 1;
     calibJson = parseCalibration(calibRaw);
   } catch (err) {
@@ -541,15 +545,24 @@ async function runReviseFlow(instruction, lvl, sourceFile) {
     cachePayload = { sharedText, inlineParts: [] };
   }
 
-  let mIdx = deps.getModelIdx();
   for (let s = 0; s < segments.length; s++) {
-    const seg = segments[s];
-    const segText = annotated.slice(seg.start, seg.end).join('\n\n');
-    updateRunning(`⚙️ קריאה ${callsDone + 1} מתוך ${totalCallsPlanned} — איתור וכתיבת השינויים בקטע ${s + 1} מתוך ${segments.length}…`, callsDone + 1, totalCallsPlanned);
+    await patchOneSegment(instruction, lvl, sourceFile, blocks, annotated, segments[s], `${s + 1}/${segments.length}`);
+  }
+}
 
-    let edits = null;
-    const raw = await callWithFallback(useCache => ({
-      prompt: buildRevisePatchPrompt(instruction, sourceFile, segText, s, segments.length, useCache, sharedText),
+// Run the patch protocol on one segment; on a token-window overflow that even
+// the material-shrinking retries couldn't cure, bisect the segment and patch
+// each half — every level of recursion halves the input until it fits.
+async function patchOneSegment(instruction, lvl, sourceFile, blocks, annotated, seg, segLabel) {
+  const isHtml = !!sourceFile.isHtml;
+  const segText = annotated.slice(seg.start, seg.end).join('\n\n');
+  updateRunning(`⚙️ קריאה ${callsDone + 1} מתוך ${totalCallsPlanned} — איתור וכתיבת השינויים בקטע ${segLabel}…`, callsDone + 1, totalCallsPlanned);
+
+  let mIdx = deps.getModelIdx();
+  let edits = null;
+  try {
+    const raw = await callWithFallback((useCache, shrink) => ({
+      prompt: buildRevisePatchPrompt(instruction, sourceFile, segText, segLabel, useCache, shrink),
       inlineFile: null,
     }), mIdx);
     mIdx = deps.getModelIdx(); callsDone++;
@@ -560,22 +573,31 @@ async function runReviseFlow(instruction, lvl, sourceFile) {
       patchStats.retried++;
       totalCallsPlanned++;
       updateRunning(`🔁 קריאה ${callsDone + 1} מתוך ${totalCallsPlanned} — הפלט לא היה JSON תקין, מנסה שוב…`, callsDone + 1, totalCallsPlanned);
-      const raw2 = await callWithFallback(useCache => ({
-        prompt: buildRevisePatchPrompt(instruction, sourceFile, segText, s, segments.length, useCache, sharedText) +
+      const raw2 = await callWithFallback((useCache, shrink) => ({
+        prompt: buildRevisePatchPrompt(instruction, sourceFile, segText, segLabel, useCache, shrink) +
           '\n\nתזכורת קריטית: בניסיון הקודם הפלט לא היה JSON תקין. החזר אך ורק מערך JSON של פעולות עריכה, ללא גושי קוד וללא שום טקסט נוסף.',
         inlineFile: null,
       }), mIdx);
       mIdx = deps.getModelIdx(); callsDone++;
       edits = parseEdits(raw2, seg);
     }
-
-    if (edits) {
-      outputSections.push({ title: `קטע ${s + 1}`, text: applyEditsToSegment(blocks, seg, edits, isHtml), isHtml });
-    } else {
-      // JSON failed twice — legacy fallback: full rewrite of this segment only
-      const out = await legacyReviseSegment(instruction, sourceFile, blocks.slice(seg.start, seg.end).join(''), lvl);
-      outputSections.push({ title: `קטע ${s + 1}`, text: out, isHtml });
+  } catch (err) {
+    if (isTokenLimitError(err.message) && seg.end - seg.start > 1) {
+      const mid = seg.start + Math.ceil((seg.end - seg.start) / 2);
+      totalCallsPlanned++;
+      await patchOneSegment(instruction, lvl, sourceFile, blocks, annotated, { start: seg.start, end: mid }, `${segLabel}·א`);
+      await patchOneSegment(instruction, lvl, sourceFile, blocks, annotated, { start: mid, end: seg.end }, `${segLabel}·ב`);
+      return;
     }
+    throw err;
+  }
+
+  if (edits) {
+    outputSections.push({ title: `קטע ${segLabel}`, text: applyEditsToSegment(blocks, seg, edits, isHtml), isHtml });
+  } else {
+    // JSON failed twice — legacy fallback: full rewrite of this segment only
+    const out = await legacyReviseSegment(instruction, sourceFile, blocks.slice(seg.start, seg.end).join(''), lvl);
+    outputSections.push({ title: `קטע ${segLabel}`, text: out, isHtml });
   }
 }
 
@@ -591,8 +613,10 @@ async function legacyReviseSegment(instruction, sourceFile, segSource, lvl) {
   for (let i = 0; i < chunks.length; i++) {
     updateRunning(`⚙️ קריאה ${callsDone + 1} מתוך ${totalCallsPlanned} — שכתוב מלא של תת-קטע ${i + 1} מתוך ${chunks.length} (מסלול גיבוי)…`, callsDone + 1, totalCallsPlanned);
     const chunk = chunks[i];
-    const prompt = buildReviseChunkPrompt(instruction, calibration, sourceFile, chunk, i, chunks.length);
-    let result = cleanModelOutput(await callWithFallback(() => ({ prompt, inlineFile: null, noCache: true }), mIdx));
+    let result = cleanModelOutput(await callWithFallback((useCache, shrink) => ({
+      prompt: buildReviseChunkPrompt(instruction, calibration, sourceFile, chunk, i, chunks.length, shrink),
+      inlineFile: null, noCache: true,
+    }), mIdx));
     mIdx = deps.getModelIdx(); callsDone++;
 
     // Safety net: models tend to summarize instead of echoing long text.
@@ -603,8 +627,11 @@ async function legacyReviseSegment(instruction, sourceFile, segSource, lvl) {
       patchStats.retried++;
       totalCallsPlanned++;
       updateRunning(`🔁 קריאה ${callsDone + 1} מתוך ${totalCallsPlanned} — הפלט קצר מדי (${result.length.toLocaleString()} מתוך ${chunk.length.toLocaleString()} תווים), מנסה שוב…`, callsDone + 1, totalCallsPlanned);
-      const sternPrompt = prompt + `\n\nתזכורת קריטית: בניסיון הקודם החזרת רק ${result.length} תווים מתוך קטע של ${chunk.length} תווים — זה אומר שסיכמת או השמטת תוכן. החזר את הקטע בשלמותו, מילה במילה, כולל כל הסעיפים והטבלאות. אורך הפלט חייב להיות דומה לאורך הקטע המקורי.`;
-      const retry = cleanModelOutput(await callWithFallback(() => ({ prompt: sternPrompt, inlineFile: null, noCache: true }), mIdx));
+      const sternNote = `\n\nתזכורת קריטית: בניסיון הקודם החזרת רק ${result.length} תווים מתוך קטע של ${chunk.length} תווים — זה אומר שסיכמת או השמטת תוכן. החזר את הקטע בשלמותו, מילה במילה, כולל כל הסעיפים והטבלאות. אורך הפלט חייב להיות דומה לאורך הקטע המקורי.`;
+      const retry = cleanModelOutput(await callWithFallback((useCache, shrink) => ({
+        prompt: buildReviseChunkPrompt(instruction, calibration, sourceFile, chunk, i, chunks.length, shrink) + sternNote,
+        inlineFile: null, noCache: true,
+      }), mIdx));
       mIdx = deps.getModelIdx(); callsDone++;
       if (retry.length > result.length) result = retry;
     }
@@ -638,10 +665,10 @@ async function runWriteFlow(instruction, lvl) {
   for (let i = 0; i < plan.length; i++) {
     const section = plan[i];
     updateRunning(`⚙️ קריאה ${callsDone + 1} מתוך ${totalCallsPlanned} — ${section.section || 'כתיבת פרק'}…`, callsDone + 1, totalCallsPlanned);
-    const result = await callWithFallback(useCache => ({
+    const result = await callWithFallback((useCache, shrink) => ({
       prompt: useCache
         ? buildExecutionTaskPrompt(section, i, plan.length)
-        : buildExecutionPrompt(instruction, calibration, section, i, plan.length),
+        : buildExecutionPrompt(instruction, calibration, section, i, plan.length, shrink),
       // when the cache is active the materials (including inline files) are
       // already in it — don't re-attach them
       inlineFile: useCache ? null : (pickedFiles.find(f => f.isInline) || null),
@@ -660,13 +687,13 @@ function splitIntoBlocks(text, isHtml) {
     const parts = text.split(/(<\/(?:p|h[1-6]|table|ul|ol|blockquote)>)/gi);
     for (let i = 0; i < parts.length; i += 2) {
       const piece = parts[i] + (parts[i + 1] || '');
-      if (piece) raw.push(piece);
+      if (piece) raw.push(...hardSplit(piece, isHtml));
     }
   } else {
     const parts = text.split(/(\n\s*\n)/);
     for (let i = 0; i < parts.length; i += 2) {
       const piece = parts[i] + (parts[i + 1] || '');
-      if (piece) raw.push(piece);
+      if (piece) raw.push(...hardSplit(piece, isHtml));
     }
   }
   // group adjacent pieces up to the target size so block IDs stay manageable
@@ -678,6 +705,27 @@ function splitIntoBlocks(text, isHtml) {
   }
   if (cur) blocks.push(cur);
   return blocks.length ? blocks : [text];
+}
+
+// A single natural piece can be enormous — e.g. a DOCX whose whole body is one
+// giant <table> yields no closing-tag boundaries and would ride into one API
+// call whole, blowing the input-token window. Slice such pieces at the best
+// soft boundary available (between tags / at a newline), or at a fixed offset
+// as a last resort. Consecutive slices concatenate back losslessly.
+function hardSplit(piece, isHtml) {
+  const hardMax = BLOCK_TARGET_CHARS * 4;
+  if (piece.length <= hardMax) return [piece];
+  const out = [];
+  let rest = piece;
+  while (rest.length > hardMax) {
+    const window = rest.slice(0, hardMax);
+    let cut = isHtml ? window.lastIndexOf('><') + 1 : window.lastIndexOf('\n') + 1;
+    if (cut <= hardMax / 2) cut = hardMax;
+    out.push(rest.slice(0, cut));
+    rest = rest.slice(cut);
+  }
+  if (rest) out.push(rest);
+  return out;
 }
 
 // Group annotated blocks into segments of up to `target` chars — each segment
@@ -807,18 +855,28 @@ function clampWorkPlan(plan, lvl) {
 }
 
 // ── Prompt builders ────────────────────────────────────────────────────────
-function fileBlocksFor(limit, files = pickedFiles) {
+// limit — max chars per file; totalCap — max chars for all files combined
+// (the per-file limit is reduced so the sum stays inside the model's input
+// window); shrink — halves the caps per step, driven by the token-limit
+// retry in callWithFallback.
+function fileBlocksFor(limit, files = pickedFiles, totalCap = 0, shrink = 0) {
+  const div = 2 ** shrink;
+  let eff = Math.floor(limit / div);
+  const textFileCount = files.filter(f => !f.isInline).length;
+  if (totalCap && textFileCount) {
+    eff = Math.min(eff, Math.max(8000, Math.floor(totalCap / div / textFileCount)));
+  }
   return files.map(f => {
     if (f.isInline) return `[קובץ: "${f.name}" — מצורף inline]`;
     const t = f.text || '';
-    const truncNote = t.length > limit
+    const truncNote = t.length > eff
       ? `\n[... הקובץ נחתך כאן — אורכו המלא ${t.length.toLocaleString()} תווים ...]`
       : '';
-    return `=== קובץ: "${f.name}"${f.isHtml ? ' (HTML שחולץ מ-DOCX — המבנה המקורי נשמר)' : ''} ===\n${t.slice(0, limit)}${truncNote}\n=== סוף קובץ ===`;
+    return `=== קובץ: "${f.name}"${f.isHtml ? ' (HTML שחולץ מ-DOCX — המבנה המקורי נשמר)' : ''} ===\n${t.slice(0, eff)}${truncNote}\n=== סוף קובץ ===`;
   }).join('\n\n');
 }
 
-function buildCalibrationPrompt(instruction, lvl) {
+function buildCalibrationPrompt(instruction, lvl, shrink = 0) {
   const inlineFiles = pickedFiles.filter(f => f.isInline);
   const rangeText = lvl.min === lvl.max
     ? `בדיוק ${lvl.max} קריאת ביצוע אחת — החזר סעיף workPlan אחד בלבד`
@@ -826,7 +884,7 @@ function buildCalibrationPrompt(instruction, lvl) {
 
   return `אתה "כותב המכרזים" — מומחה לניסוח מסמכי מכרז (RFP) ורכש לפרויקטי תוכנה ממשלתיים ועסקיים. עכשיו בשלב הכיול.
 
-${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}${pickedFiles.length ? `חומרים שהועלו:\n${fileBlocksFor(25000)}\n` : 'לא הועלו קבצים — עבוד לפי ההנחיה בלבד.\n'}${inlineFiles.length ? `\n[${inlineFiles.length} קבצים מצורפים כ-inline לקריאה ישירה]\n` : ''}
+${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}${pickedFiles.length ? `חומרים שהועלו:\n${fileBlocksFor(25000, pickedFiles, CAP_CALIBRATION, shrink)}\n` : 'לא הועלו קבצים — עבוד לפי ההנחיה בלבד.\n'}${inlineFiles.length ? `\n[${inlineFiles.length} קבצים מצורפים כ-inline לקריאה ישירה]\n` : ''}
 ---
 
 רמת העיבוד שנבחרה: "${lvl.label}" — ${rangeText}.
@@ -858,21 +916,21 @@ ${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}${picked
 // Shared context for revise mode — everything that repeats across all patch
 // calls (the change instructions and change files). Sent once when cached,
 // or prepended to every patch prompt when not.
-function buildReviseSharedContext(instruction, calib, sourceFile) {
+function buildReviseSharedContext(instruction, calib, sourceFile, shrink = 0) {
   const changeFiles = pickedFiles.filter(f => f !== sourceFile && !f.isInline && (f.text || '').trim());
   return `אתה "כותב המכרזים" — מומחה לניסוח מסמכי מכרז (RFP) ורכש. אתה מעדכן מכרז קיים לפי הנחיות שינוי. המסמך חולק לבלוקים ממוספרים; בכל קריאה תקבל קטע מהמסמך ותחזיר רשימת עריכות JSON — רק לבלוקים שהשינויים חלים עליהם.
 
 ${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}השינויים המבוקשים כפי שסיכמת בשלב הכיול:
 ${calib.internalPrompt || ''}
 
-${changeFiles.length ? `קבצי הנחיות השינוי (במלואם):\n${fileBlocksFor(60000, changeFiles)}\n` : ''}`;
+${changeFiles.length ? `קבצי הנחיות השינוי (במלואם):\n${fileBlocksFor(60000, changeFiles, CAP_CHANGE_DOCS, shrink)}\n` : ''}`;
 }
 
-function buildRevisePatchPrompt(instruction, sourceFile, segText, segIdx, totalSegs, useCache, sharedText) {
+function buildRevisePatchPrompt(instruction, sourceFile, segText, segLabel, useCache, shrink = 0) {
   const fmt = sourceFile.isHtml ? 'HTML' : 'Markdown/טקסט';
-  return `${useCache ? 'ההקשר המשותף (הנחיות השינוי וקבצי השינוי) כבר נמסר לך למעלה.' : sharedText}
+  return `${useCache ? 'ההקשר המשותף (הנחיות השינוי וקבצי השינוי) כבר נמסר לך למעלה.' : buildReviseSharedContext(instruction, calibration, sourceFile, shrink)}
 
-לפניך קטע ${segIdx + 1} מתוך ${totalSegs} מהמכרז המקורי (פורמט ${fmt}). כל בלוק פותח בשורת סימון ⟦B<מספר>⟧ — הסימון אינו חלק מתוכן המסמך:
+לפניך קטע ${segLabel} מהמכרז המקורי (פורמט ${fmt}). כל בלוק פותח בשורת סימון ⟦B<מספר>⟧ — הסימון אינו חלק מתוכן המסמך:
 
 <<<תחילת הקטע>>>
 ${segText}
@@ -903,7 +961,7 @@ ${calib.internalPrompt || ''}
 
 הבנתך את הצורך: ${calib.understanding || ''}
 
-${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000)}\n` : ''}`;
+${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFiles, CAP_MATERIALS)}\n` : ''}`;
 }
 
 // Chapter task sent when the shared context is already in the server-side
@@ -924,7 +982,7 @@ const WRITING_PRINCIPLES = `עקרונות כתיבה מחייבים:
 - כתוב בעברית בלבד, מלבד מונחים טכניים.
 כתוב את הפרק במלואו. אל תכתוב פתיח או סיכום מחוץ לפרק.`;
 
-function buildReviseChunkPrompt(instruction, calib, sourceFile, chunk, chunkIdx, totalChunks) {
+function buildReviseChunkPrompt(instruction, calib, sourceFile, chunk, chunkIdx, totalChunks, shrink = 0) {
   const changeFiles = pickedFiles.filter(f => f !== sourceFile && !f.isInline && (f.text || '').trim());
   const fmt = sourceFile.isHtml ? 'HTML' : 'Markdown/טקסט';
 
@@ -933,7 +991,7 @@ function buildReviseChunkPrompt(instruction, calib, sourceFile, chunk, chunkIdx,
 ${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}השינויים המבוקשים כפי שסיכמת בשלב הכיול:
 ${calib.internalPrompt || ''}
 
-${changeFiles.length ? `קבצי הנחיות השינוי (במלואם):\n${fileBlocksFor(60000, changeFiles)}\n\n` : ''}לפניך קטע ${chunkIdx + 1} מתוך ${totalChunks} מהמכרז המקורי (פורמט ${fmt}):
+${changeFiles.length ? `קבצי הנחיות השינוי (במלואם):\n${fileBlocksFor(60000, changeFiles, CAP_CHANGE_DOCS, shrink)}\n\n` : ''}לפניך קטע ${chunkIdx + 1} מתוך ${totalChunks} מהמכרז המקורי (פורמט ${fmt}):
 
 <<<תחילת הקטע>>>
 ${chunk}
@@ -946,7 +1004,7 @@ ${chunk}
 4. אל תוסיף הקדמות, הערות, הסברים או סיכומים — החזר אך ורק את תוכן הקטע המעודכן, ללא גושי קוד.`;
 }
 
-function buildExecutionPrompt(instruction, calib, section, sectionIdx, totalSections) {
+function buildExecutionPrompt(instruction, calib, section, sectionIdx, totalSections, shrink = 0) {
   return `אתה "כותב המכרזים" — מומחה לניסוח מסמכי מכרז (RFP) ורכש. עכשיו בשלב הכתיבה (פרק ${sectionIdx + 1} מתוך ${totalSections}).
 
 ${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}הנחיות כלליות שקבעת לעצמך בשלב הכיול:
@@ -957,7 +1015,7 @@ ${calib.internalPrompt || ''}
 הפרק שעליך לכתוב עכשיו (${section.section}):
 ${section.prompt}
 
-${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000)}\n` : ''}
+${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFiles, CAP_MATERIALS, shrink)}\n` : ''}
 ---
 ${WRITING_PRINCIPLES}`;
 }
@@ -1118,22 +1176,38 @@ function dropTenderCache() {
 }
 
 // ── API call with fallback ─────────────────────────────────────────────────
-// buildRequest(useCache) → { prompt, inlineFile?, noCache? }. It's a factory
-// (not a fixed prompt) because the prompt depends on whether the shared
-// context rides in the server-side cache or must be inlined — and that can
-// change mid-run when a quota fallback switches models.
+// buildRequest(useCache, shrink) → { prompt, inlineFile?, noCache? }. It's a
+// factory (not a fixed prompt) because the prompt depends on runtime state:
+// whether the shared context rides in the server-side cache or must be
+// inlined (a quota fallback switches models mid-run and invalidates the
+// cache), and how much material fits (shrink grows when the model rejects
+// the input as exceeding its token window — each step halves the file caps).
+function isTokenLimitError(msg) {
+  return /token count exceeds|exceeds the maximum number of (?:input )?tokens/i.test(msg || '');
+}
+
 async function callWithFallback(buildRequest, startIdx) {
   let mIdx = startIdx;
+  let shrink = 0;
   while (true) {
-    const probe = buildRequest(false);
-    const cacheActive = probe.noCache ? false : await ensureCacheFor(mIdx);
-    const req = cacheActive ? buildRequest(true) : probe;
+    const probe = buildRequest(false, shrink);
+    // once we're shrinking, the oversized shared context must not ride along
+    // via the cache either — build fully inline with the reduced caps
+    const cacheActive = (probe.noCache || shrink > 0) ? false : await ensureCacheFor(mIdx);
+    const req = cacheActive ? buildRequest(true, shrink) : probe;
     const inlineFile = 'inlineFile' in req ? req.inlineFile : (pickedFiles.find(f => f.isInline) || null);
     const opts = cacheActive ? { cachedContent: cacheState.name } : {};
     try {
       return await deps.callGeminiForSpec(req.prompt, mIdx, inlineFile, opts);
     } catch (err) {
       const msg = err.message || '';
+      // input too large — retry with progressively less material per file
+      if (isTokenLimitError(msg) && shrink < 3) {
+        shrink++;
+        if (cacheState) { dropTenderCache(); cachePayload = null; }
+        updateRunning(`⚠️ ההקשר גדול מדי למודל — מצמצם את היקף החומר ומנסה שוב (${shrink}/3)…`);
+        continue;
+      }
       // an expired/invalid cache is recoverable — retry without it
       if (cacheActive && /cach/i.test(msg)) {
         dropTenderCache();
@@ -1142,7 +1216,7 @@ async function callWithFallback(buildRequest, startIdx) {
       }
       const quota = /quota|exceeded|free_tier/i.test(msg);
       const busy  = /503|high demand|overload|429/i.test(msg);
-      if ((quota || busy) && mIdx < deps.MODEL_CHAIN.length - 1) {
+      if ((quota || busy) && !isTokenLimitError(msg) && mIdx < deps.MODEL_CHAIN.length - 1) {
         mIdx++;
         deps.setModelIdx(mIdx);
         updateRunning(`עובר למודל ${deps.MODEL_CHAIN[mIdx]} ומנסה שוב…`);

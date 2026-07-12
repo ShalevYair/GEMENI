@@ -3,11 +3,12 @@ import { deps } from './deps.js';
 // ── State ──────────────────────────────────────────────────────────────────
 let phase = 'pick'; // 'pick' | 'calibrating' | 'running' | 'done' | 'error'
 let pickedFiles = []; // [{ name, text, sizeChars, isInline, mimeType, base64? }]
-let calibration = null; // { understanding, tenderTitle, internalPrompt, workPlan:[{section,prompt}], questions:[] }
+let calibration = null; // { understanding, tenderTitle, internalPrompt, mode, sourceFileName, workPlan:[{section,prompt}], questions:[] }
 let outputSections = []; // accumulated text from execution calls
 let totalCallsPlanned = 0;
 let selectedLevel = 'auto'; // 'low' | 'normal' | 'high' | 'auto'
 let lastInstruction = '';
+let runMode = 'write'; // 'write' (new tender from plan) | 'revise' (chunked rewrite of an existing tender)
 
 const MAX_FILES = 20;
 const WARN_CHARS = 80_000;
@@ -16,12 +17,14 @@ const HEAVY_CHARS = 200_000;
 const BLOCKED_EXTS = new Set(['exe', 'com', 'bat', 'cmd', 'msi', 'scr', 'pif']);
 const TEXT_EXTS    = new Set(['txt','md','csv','json','html','htm','xml','yaml','yml','toml','ini','cfg','log','sh','bash','ps1','py','js','ts','jsx','tsx','java','c','cpp','cs','go','rb','php','sql','r','swift','kt','rs','dart','vue','scss','css','less','gitignore','env','conf','properties']);
 
-// Processing levels — control how many execution calls the tender gets
+// Processing levels — bound the execution calls in write mode; in revise mode
+// (updating an existing tender) they set the chunk size instead: a higher
+// level means smaller chunks, i.e. more calls and a more thorough pass.
 const LEVELS = {
-  low:    { label: 'נמוכה',    icon: '🪶', desc: 'קריאה אחת — מכרז תמציתי וממוקד',          min: 1, max: 1 },
-  normal: { label: 'רגילה',    icon: '📄', desc: '2–3 קריאות — מסמך מכרז מלא',              min: 2, max: 3 },
-  high:   { label: 'גבוהה',    icon: '🏛️', desc: '4–6 קריאות — מכרז מעמיק על כל פרקיו',     min: 4, max: 6 },
-  auto:   { label: 'אוטומטית', icon: '🤖', desc: 'הסוכן קובע לבד לפי היקף החומר (1–6)',      min: 1, max: 6 },
+  low:    { label: 'נמוכה',    icon: '🪶', desc: 'קריאה אחת — מכרז תמציתי וממוקד',          min: 1, max: 1, chunkChars: 45000 },
+  normal: { label: 'רגילה',    icon: '📄', desc: '2–3 קריאות — מסמך מכרז מלא',              min: 2, max: 3, chunkChars: 30000 },
+  high:   { label: 'גבוהה',    icon: '🏛️', desc: '4–6 קריאות — מכרז מעמיק על כל פרקיו',     min: 4, max: 6, chunkChars: 18000 },
+  auto:   { label: 'אוטומטית', icon: '🤖', desc: 'הסוכן קובע לבד לפי היקף החומר (1–6)',      min: 1, max: 6, chunkChars: 30000 },
 };
 
 // ── Init ───────────────────────────────────────────────────────────────────
@@ -169,9 +172,10 @@ function showPhasePick() {
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:9px;padding:.75rem 1rem;font-size:.79rem;color:#475569;line-height:1.55;">
       <strong style="color:#334155;">איך זה עובד:</strong><br>
       📥 <strong>קבלה:</strong> עד ${MAX_FILES} קבצים — אפיונים, דרישות, פרוטוקולים, מכרזים לדוגמה.<br>
-      🔍 <strong>קריאה 1 — כיול:</strong> הסוכן קורא את החומרים ובונה תוכנית פרקים למכרז לפי רמת העיבוד.<br>
-      ⚙️ <strong>קריאות ביצוע:</strong> כתיבת פרקי המכרז — דרישות, קריטריוני הערכה, SLA, תנאים חוזיים.<br>
-      📤 <strong>פלט:</strong> מסמך Word (.doc) בעברית, ערוך ומוכן לעבודה.
+      🔍 <strong>קריאה 1 — כיול:</strong> הסוכן קורא את החומרים ומזהה: כתיבת מכרז חדש או עדכון מכרז קיים.<br>
+      ⚙️ <strong>מכרז חדש:</strong> כתיבת פרקים לפי רמת העיבוד — דרישות, קריטריוני הערכה, SLA, תנאים חוזיים.<br>
+      🔁 <strong>עדכון מכרז קיים:</strong> המסמך מעובד קטע-אחר-קטע בשלמותו — שום תוכן לא הולך לאיבוד; מספר הקריאות נקבע לפי גודל המסמך (רמת עיבוד גבוהה = קטעים קטנים ויסודיים יותר).<br>
+      📤 <strong>פלט:</strong> מסמך Word (.doc) בעברית, במבנה ובפורמט המקוריים.
     </div>`);
 
   setFooter(`
@@ -344,6 +348,13 @@ async function readTenderFile(file) {
   if (ext === 'docx') {
     if (!window.mammoth) throw new Error('mammoth לא נטען');
     const buf = await file.arrayBuffer();
+    // HTML conversion keeps headings, numbering, lists and tables — critical
+    // for revising an existing tender without destroying its structure
+    try {
+      const res = await window.mammoth.convertToHtml({ arrayBuffer: buf });
+      const html = (res.value || '').trim();
+      if (html) return { name, text: html, sizeChars: html.length, isInline: false, isHtml: true };
+    } catch { /* fall back to raw text below */ }
     const res = await window.mammoth.extractRawText({ arrayBuffer: buf });
     return { name, text: res.value, sizeChars: res.value.length, isInline: false };
   }
@@ -434,8 +445,9 @@ window.runTenderWriter = async function () {
   phase = 'calibrating';
   outputSections = [];
   totalCallsPlanned = 0;
+  runMode = 'write';
 
-  showRunning('🔍 קריאה 1 — כותב המכרזים קורא את החומרים ובונה תוכנית פרקים…', 1, 2);
+  showRunning('🔍 קריאה 1 — כותב המכרזים קורא את החומרים ובונה תוכנית עבודה…', 1, 2);
 
   let mIdx = deps.getModelIdx();
 
@@ -452,24 +464,58 @@ window.runTenderWriter = async function () {
   }
 
   calibration = calibJson;
-  const plan = clampWorkPlan(calibration.workPlan || [], lvl);
-  calibration.workPlan = plan;
-  totalCallsPlanned = 1 + plan.length;
 
-  // ── Calls 2…N: execution ──────────────────────────────────────────────
+  // ── Mode selection: revise an existing tender vs. write a new one ─────
+  let sourceFile = null;
+  if (calibration.mode === 'revise') {
+    sourceFile = pickedFiles.find(f => f.name === calibration.sourceFileName && !f.isInline && (f.text || '').trim());
+    if (!sourceFile) {
+      // fallback: the largest text file is almost certainly the tender
+      sourceFile = pickedFiles
+        .filter(f => !f.isInline && (f.text || '').trim())
+        .sort((a, b) => (b.text || '').length - (a.text || '').length)[0] || null;
+    }
+    if (sourceFile) runMode = 'revise';
+  }
+
   phase = 'running';
-  for (let i = 0; i < plan.length; i++) {
-    const callNum = i + 2;
-    const section = plan[i];
-    updateRunning(`⚙️ קריאה ${callNum} מתוך ${totalCallsPlanned} — ${section.section || 'כתיבת פרק'}…`, callNum, totalCallsPlanned);
-    try {
-      const execPrompt = buildExecutionPrompt(instruction, calibration, section, i, plan.length);
-      const result = await callWithFallback(execPrompt, mIdx);
-      mIdx = deps.getModelIdx();
-      outputSections.push({ title: section.section || `פרק ${i + 1}`, text: result });
-    } catch (err) {
-      phase = 'error';
-      showError(err.message || String(err)); return;
+
+  if (runMode === 'revise') {
+    // ── Revise mode: rewrite the source tender chunk-by-chunk so nothing
+    //    is lost — call count is driven by document size, not by level ────
+    const chunks = splitIntoChunks(sourceFile.text, !!sourceFile.isHtml, lvl.chunkChars);
+    totalCallsPlanned = 1 + chunks.length;
+    for (let i = 0; i < chunks.length; i++) {
+      const callNum = i + 2;
+      updateRunning(`⚙️ קריאה ${callNum} מתוך ${totalCallsPlanned} — עדכון קטע ${i + 1} מתוך ${chunks.length}…`, callNum, totalCallsPlanned);
+      try {
+        const prompt = buildReviseChunkPrompt(instruction, calibration, sourceFile, chunks[i], i, chunks.length);
+        const result = await callWithFallback(prompt, mIdx);
+        mIdx = deps.getModelIdx();
+        outputSections.push({ title: `קטע ${i + 1}`, text: cleanModelOutput(result), isHtml: !!sourceFile.isHtml });
+      } catch (err) {
+        phase = 'error';
+        showError(err.message || String(err)); return;
+      }
+    }
+  } else {
+    // ── Write mode: one call per planned tender chapter ──────────────────
+    const plan = clampWorkPlan(calibration.workPlan || [], lvl);
+    calibration.workPlan = plan;
+    totalCallsPlanned = 1 + plan.length;
+    for (let i = 0; i < plan.length; i++) {
+      const callNum = i + 2;
+      const section = plan[i];
+      updateRunning(`⚙️ קריאה ${callNum} מתוך ${totalCallsPlanned} — ${section.section || 'כתיבת פרק'}…`, callNum, totalCallsPlanned);
+      try {
+        const execPrompt = buildExecutionPrompt(instruction, calibration, section, i, plan.length);
+        const result = await callWithFallback(execPrompt, mIdx);
+        mIdx = deps.getModelIdx();
+        outputSections.push({ title: section.section || `פרק ${i + 1}`, text: result });
+      } catch (err) {
+        phase = 'error';
+        showError(err.message || String(err)); return;
+      }
     }
   }
 
@@ -477,6 +523,39 @@ window.runTenderWriter = async function () {
   downloadTenderDoc();
   showDone();
 };
+
+// Split a large document into chunks at block boundaries, so no paragraph,
+// heading or table is cut in the middle.
+function splitIntoChunks(text, isHtml, target) {
+  const chunks = [];
+  let cur = '';
+  if (isHtml) {
+    // split after closing block tags, then re-accumulate up to the target size
+    const parts = text.split(/(<\/(?:p|h[1-6]|table|ul|ol|blockquote)>)/gi);
+    const blocks = [];
+    for (let i = 0; i < parts.length; i += 2) {
+      blocks.push(parts[i] + (parts[i + 1] || ''));
+    }
+    for (const b of blocks) {
+      if (cur && cur.length + b.length > target) { chunks.push(cur); cur = ''; }
+      cur += b;
+    }
+  } else {
+    for (const p of text.split(/\n\s*\n/)) {
+      if (cur && cur.length + p.length > target) { chunks.push(cur); cur = ''; }
+      cur += (cur ? '\n\n' : '') + p;
+    }
+  }
+  if (cur.trim()) chunks.push(cur);
+  return chunks.length ? chunks : [text];
+}
+
+function cleanModelOutput(s) {
+  return (s || '').trim()
+    .replace(/^```(?:html|markdown|md)?\s*\n?/i, '')
+    .replace(/\n?```\s*$/, '')
+    .trim();
+}
 
 // Clamp the calibration work plan to the level bounds: slice extra sections,
 // or merge everything into one section when the level allows a single call.
@@ -504,10 +583,14 @@ function clampWorkPlan(plan, lvl) {
 }
 
 // ── Prompt builders ────────────────────────────────────────────────────────
-function fileBlocksFor(limit) {
-  return pickedFiles.map(f => {
+function fileBlocksFor(limit, files = pickedFiles) {
+  return files.map(f => {
     if (f.isInline) return `[קובץ: "${f.name}" — מצורף inline]`;
-    return `=== קובץ: "${f.name}" ===\n${(f.text || '').slice(0, limit)}\n=== סוף קובץ ===`;
+    const t = f.text || '';
+    const truncNote = t.length > limit
+      ? `\n[... הקובץ נחתך כאן — אורכו המלא ${t.length.toLocaleString()} תווים ...]`
+      : '';
+    return `=== קובץ: "${f.name}"${f.isHtml ? ' (HTML שחולץ מ-DOCX — המבנה המקורי נשמר)' : ''} ===\n${t.slice(0, limit)}${truncNote}\n=== סוף קובץ ===`;
   }).join('\n\n');
 }
 
@@ -519,27 +602,55 @@ function buildCalibrationPrompt(instruction, lvl) {
 
   return `אתה "כותב המכרזים" — מומחה לניסוח מסמכי מכרז (RFP) ורכש לפרויקטי תוכנה ממשלתיים ועסקיים. עכשיו בשלב הכיול.
 
-${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}${pickedFiles.length ? `חומרים שהועלו:\n${fileBlocksFor(30000)}\n` : 'לא הועלו קבצים — עבוד לפי ההנחיה בלבד.\n'}${inlineFiles.length ? `\n[${inlineFiles.length} קבצים מצורפים כ-inline לקריאה ישירה]\n` : ''}
+${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}${pickedFiles.length ? `חומרים שהועלו:\n${fileBlocksFor(25000)}\n` : 'לא הועלו קבצים — עבוד לפי ההנחיה בלבד.\n'}${inlineFiles.length ? `\n[${inlineFiles.length} קבצים מצורפים כ-inline לקריאה ישירה]\n` : ''}
 ---
 
 רמת העיבוד שנבחרה: "${lvl.label}" — ${rangeText}.
 
+תחילה קבע את מצב העבודה (mode):
+- "revise" — אם אחד הקבצים הוא מסמך מכרז קיים והמשימה היא לעדכן/לשנות/לשפר אותו (לפי הנחיית המפעיל או קובץ הנחיות שינוי). במצב זה המסמך יעובד קטע-אחר-קטע בשלמותו — אל תבנה workPlan של פרקים, והשאר אותו ריק. ציין ב-sourceFileName את שם הקובץ המדויק של המכרז הקיים.
+- "write" — אם המשימה היא לכתוב מכרז חדש מתוך חומרי רקע.
+
 משימתך בקריאה זו:
-1. הבן את הצורך העסקי, היקף הפרויקט וסוג המכרז הנדרש מתוך החומרים וההנחיה.
-2. קבע כותרת למכרז ותוכנית פרקים: לכל קריאת ביצוע — שם הפרק ופרומט מפורט מה לכתוב בו.
-3. פרקי מכרז אופייניים לחלוקה: רקע ותיאור הצורך | דרישות פונקציונליות וטכניות | דרישות סף ותנאי השתתפות | קריטריוני הערכה משוקללים | SLA ו-KPIs | תנאים חוזיים, תשלומים ולוחות זמנים. ברמת עיבוד נמוכה — כל אלה בפרק אחד תמציתי; ברמה גבוהה — פרק לכל נושא.
+1. הבן את הצורך העסקי, היקף הפרויקט וסוג המשימה מתוך החומרים וההנחיה.
+2. במצב write — קבע כותרת למכרז ותוכנית פרקים: לכל קריאת ביצוע שם פרק ופרומט מפורט. פרקי מכרז אופייניים: רקע ותיאור הצורך | דרישות פונקציונליות וטכניות | דרישות סף ותנאי השתתפות | קריטריוני הערכה משוקללים | SLA ו-KPIs | תנאים חוזיים, תשלומים ולוחות זמנים. ברמת עיבוד נמוכה — כל אלה בפרק אחד תמציתי; ברמה גבוהה — פרק לכל נושא.
+3. במצב revise — ב-internalPrompt סכם במדויק את כל השינויים המבוקשים (מההנחיה ומקבצי הנחיות השינוי), כדי שיוחלו בעקביות על כל קטעי המסמך.
 4. רשום שאלות הבהרה שכדאי לברר מול הגורם המזמין, אם יש.
 
 ענה **אך ורק** ב-JSON תקני (ללא גושי קוד, ללא טקסט נלווה):
 {
-  "understanding": "תיאור קצר של הצורך והמכרז הנדרש",
+  "understanding": "תיאור קצר של הצורך והמשימה",
+  "mode": "write" או "revise",
+  "sourceFileName": "במצב revise — שם הקובץ המדויק של המכרז הקיים; אחרת מחרוזת ריקה",
   "tenderTitle": "כותרת מסמך המכרז",
-  "internalPrompt": "הנחיות כלליות לכתיבת המכרז — סגנון, לשון, דגשים מהחומרים",
+  "internalPrompt": "הנחיות כלליות — סגנון ודגשים; במצב revise: רשימה ממוספרת ומדויקת של כל השינויים המבוקשים",
   "workPlan": [
     { "section": "שם הפרק", "prompt": "מה לכתוב בפרק זה — פירוט מלא" }
   ],
   "questions": ["שאלה 1", "שאלה 2"]
 }`;
+}
+
+function buildReviseChunkPrompt(instruction, calib, sourceFile, chunk, chunkIdx, totalChunks) {
+  const changeFiles = pickedFiles.filter(f => f !== sourceFile && !f.isInline && (f.text || '').trim());
+  const fmt = sourceFile.isHtml ? 'HTML' : 'Markdown/טקסט';
+
+  return `אתה "כותב המכרזים" — מומחה לניסוח מסמכי מכרז (RFP) ורכש. אתה מעדכן מכרז קיים לפי הנחיות שינוי — קטע ${chunkIdx + 1} מתוך ${totalChunks}.
+
+${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}השינויים המבוקשים כפי שסיכמת בשלב הכיול:
+${calib.internalPrompt || ''}
+
+${changeFiles.length ? `קבצי הנחיות השינוי (במלואם):\n${fileBlocksFor(60000, changeFiles)}\n\n` : ''}לפניך קטע ${chunkIdx + 1} מתוך ${totalChunks} מהמכרז המקורי (פורמט ${fmt}):
+
+<<<תחילת הקטע>>>
+${chunk}
+<<<סוף הקטע>>>
+
+החזר את הקטע הזה במלואו לאחר החלת השינויים. כללים מחייבים:
+1. החל רק את השינויים הרלוונטיים לקטע זה. אם אף שינוי לא נוגע לקטע — החזר אותו כלשונו.
+2. כל תוכן שאינו מושפע מהשינויים — החזר מילה במילה, ללא קיצור, סיכום או ניסוח מחדש. אסור להשמיט סעיפים, טבלאות או פרטים.
+3. שמור בדיוק על הפורמט המקורי (${fmt}): אותן תגיות/כותרות, אותו מספור סעיפים, אותם מבני טבלאות.
+4. אל תוסיף הקדמות, הערות, הסברים או סיכומים — החזר אך ורק את תוכן הקטע המעודכן, ללא גושי קוד.`;
 }
 
 function buildExecutionPrompt(instruction, calib, section, sectionIdx, totalSections) {
@@ -553,7 +664,7 @@ ${calib.internalPrompt || ''}
 הפרק שעליך לכתוב עכשיו (${section.section}):
 ${section.prompt}
 
-${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(40000)}\n` : ''}
+${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000)}\n` : ''}
 ---
 עקרונות כתיבה מחייבים:
 - לשון מכרז רשמית, ברורה ומדויקת — ללא עמימות. כל דרישה ניתנת לבדיקה.
@@ -576,6 +687,8 @@ function parseCalibration(raw) {
   }
   return {
     understanding: 'לא הצלחתי לפרסר את הכיול — עובר לכתיבה ישירה',
+    mode: 'write',
+    sourceFileName: '',
     tenderTitle: 'מסמך מכרז',
     internalPrompt: raw || '',
     workPlan: [{ section: 'מסמך המכרז', prompt: 'כתוב את מסמך המכרז המלא לפי ההנחיה והחומרים.' }],
@@ -614,6 +727,10 @@ function markdownToWordHtml(markdownText, title) {
   } else {
     bodyHtml = deps.escHtml(markdownText).replace(/\n/g, '<br>');
   }
+  return wordShell(bodyHtml, title);
+}
+
+function wordShell(bodyHtml, title) {
   return `<html xmlns:o='urn:schemas-microsoft-com:office:office'
     xmlns:w='urn:schemas-microsoft-com:office:word'
     xmlns='http://www.w3.org/TR/REC-html40'>
@@ -642,9 +759,19 @@ function markdownToWordHtml(markdownText, title) {
 }
 
 function downloadTenderDoc() {
-  const md = assembleTenderMarkdown();
   const title = calibration?.tenderTitle || 'מסמך מכרז';
-  const html = markdownToWordHtml(md, title);
+  let html;
+  if (runMode === 'revise') {
+    // revised tender: reassemble the chunks as-is — no metadata header, the
+    // document keeps its own original title and structure
+    if (outputSections[0]?.isHtml) {
+      html = wordShell(outputSections.map(s => s.text).join('\n'), title);
+    } else {
+      html = markdownToWordHtml(outputSections.map(s => s.text).join('\n\n'), title);
+    }
+  } else {
+    html = markdownToWordHtml(assembleTenderMarkdown(), title);
+  }
   const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
   const blob = new Blob(['﻿', html], { type: 'application/msword' });
   const url  = URL.createObjectURL(blob);
@@ -729,7 +856,7 @@ function showDone() {
           ⬇ הורד שוב
         </button>
       </div>
-      <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280;">רמת עיבוד: <strong>${lvl.label}</strong> | קבצי רקע: <strong>${pickedFiles.length}</strong> | קריאות API: <strong>${totalCallsPlanned}</strong></div>
+      <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280;">מצב: <strong>${runMode === 'revise' ? 'עדכון מכרז קיים' : 'כתיבת מכרז חדש'}</strong> | רמת עיבוד: <strong>${lvl.label}</strong> | קבצי רקע: <strong>${pickedFiles.length}</strong> | קריאות API: <strong>${totalCallsPlanned}</strong></div>
     </div>
     <div style="font-size:.82rem;color:#475569;line-height:1.5;">
       אם ההורדה נחסמה על ידי הדפדפן — לחץ "הורד שוב".

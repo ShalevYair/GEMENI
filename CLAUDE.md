@@ -116,11 +116,12 @@ Spec King's own single-shot "שאלות הבהרה" mode (`spec-king/clarificati
 
 Triggered by the "עבוד על מכרז" button on the tender-writer empty state (`modals/tender-writer-modal.js`).
 
-1. User uploads background files (DOCX/DOC/PDF/TXT/MD/XLS/XLSX/images, up to 20 — same reader as שרגא) and/or writes a free-text instruction; either one alone is enough to enable the run button
-2. User picks a **processing level**, which bounds the number of execution calls: נמוכה = exactly 1, רגילה = 2–3, גבוהה = 4–6, אוטומטית = model decides within 1–6
-3. **Call 1 — Calibration:** returns JSON `{ understanding, tenderTitle, internalPrompt, workPlan: [{section, prompt}], questions }`; the work plan is clamped client-side to the level bounds (overflow sections are merged, never dropped)
-4. **Calls 2…N — Execution:** one call per tender chapter (background & need, functional/technical requirements, threshold conditions, weighted evaluation criteria, SLA/KPIs, contractual terms — merged into fewer chapters at lower levels); missing facts are rendered as `[להשלמה: ___]` placeholders instead of being invented
-5. All chapters assembled into a Word-compatible RTL HTML document and downloaded as `.doc`; clarification questions for the ordering party shown in the done screen
+1. User uploads background files (DOCX/DOC/PDF/TXT/MD/XLS/XLSX/images, up to 20) and/or writes a free-text instruction; either one alone is enough to enable the run button. DOCX is read via `mammoth.convertToHtml` (structure-preserving — headings, numbering, tables), falling back to raw text
+2. User picks a **processing level**: in write mode it bounds the number of execution calls (נמוכה = exactly 1, רגילה = 2–3, גבוהה = 4–6, אוטומטית = model decides within 1–6); in revise mode it sets the chunk size instead (45K/30K/18K/30K chars — higher level = smaller chunks = more calls)
+3. **Call 1 — Calibration:** returns JSON `{ understanding, mode: 'write'|'revise', sourceFileName, tenderTitle, internalPrompt, workPlan, questions }`. The model picks `revise` when the materials contain an existing tender to update per change instructions; in that case `internalPrompt` is a precise numbered list of the requested changes
+4. **Write mode (calls 2…N):** one call per tender chapter (background & need, functional/technical requirements, threshold conditions, weighted evaluation criteria, SLA/KPIs, contractual terms); the work plan is clamped client-side to the level bounds (overflow sections merged, never dropped); missing facts rendered as `[להשלמה: ___]` placeholders. Execution calls see up to 120K chars per file
+5. **Revise mode (calls 2…N):** the source tender is split into chunks at block boundaries (closing HTML block tags / blank lines — never mid-paragraph or mid-table) and rewritten chunk-by-chunk with a hard instruction to return unaffected content verbatim; call count is driven by document size, not by the level bounds. Requires the source tender as extractable text (DOCX/TXT/MD — not PDF, which is sent inline and can't be chunked; falls back to write mode)
+6. Output assembled into a Word-compatible RTL HTML document and downloaded as `.doc` — in revise mode HTML chunks are reassembled as-is (no metadata header) to preserve the original structure; clarification questions for the ordering party shown in the done screen
 
 ---
 

@@ -228,6 +228,19 @@
             border-color: #bae6fd;
         }
 
+        /* תגיות מערכות קיימות */
+        .system-tag {
+            background: rgba(139, 92, 246, 0.12);
+            color: #c4b5fd;
+            border-color: rgba(139, 92, 246, 0.35);
+        }
+
+        body.light-mode .system-tag {
+            background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+            color: #6d28d9;
+            border-color: #ddd6fe;
+        }
+
         /* עיצוב מצב ריק (Empty State) */
         #empty-state {
             position: absolute;
@@ -362,6 +375,11 @@
                 <div class="info-section">
                     <div class="info-label">גורמים מעורבים</div>
                     <div id="info-actors" class="actors-list"></div>
+                </div>
+
+                <div id="systems-section" class="info-section" style="display: none;">
+                    <div class="info-label">מערכות קיימות</div>
+                    <div id="info-systems" class="actors-list"></div>
                 </div>
 
                 <div class="info-section">
@@ -510,7 +528,7 @@
         }
 
         // טוען את קובץ ה-CSV אוטומטית מהמאגר בגיט
-        const CSV_URL = 'https://raw.githubusercontent.com/shalevyair/Vehicle-Lifecycle-Mind-Map/main/Vehicle_Lifecycle.csv';
+        const CSV_URL = 'https://raw.githubusercontent.com/ShalevYair/GEMENI/main/Vehicle_Lifecycle.csv';
 
         function loadCSVFromGit() {
             fetch(CSV_URL)
@@ -562,6 +580,7 @@
                     name: row.Title || 'ללא שם',
                     content: row.Content || '',
                     actors: row.Actors || '',
+                    maarachot: row['מערכות'] || '',
                     tadof: row['תעדוף'] || '',
                     erech: row['ערך'] || '',
                     murkavut: row['מורכבות'] || '',
@@ -712,6 +731,16 @@
                 actorsDiv.innerHTML = actorsArray.map(a => `<span class="actor-tag">${a.trim()}</span>`).join('');
             } else {
                 actorsDiv.innerHTML = '<span style="color: var(--text-sub); font-size: 0.9rem;">לא צוינו גורמים מעורבים</span>';
+            }
+
+            // סקשן מערכות קיימות
+            const systemsSection = document.getElementById('systems-section');
+            if (d.maarachot) {
+                systemsSection.style.display = 'block';
+                const systemsArray = d.maarachot.split(';');
+                document.getElementById('info-systems').innerHTML = systemsArray.map(s => `<span class="actor-tag system-tag">${s.trim()}</span>`).join('');
+            } else {
+                systemsSection.style.display = 'none';
             }
 
             // סקשן ערבה

@@ -257,7 +257,7 @@ For generators (modals), fallback is handled inside `callWithFallback()` in each
 | כותב המכרזים | `.doc` (full tender/RFP document — Word-compatible HTML, RTL) |
 | המסכם | `.xlsx` (hierarchical summary) + auto-opened mind-map page (`summarizer-mindmap.html`) with embedded chat |
 | אוסף הדרישות | `.md` or `.doc` |
-| NATURAL — ניתוח מלא/מיגרציה/כתיבה מחדש/שינוי קוד | `.md` + `.xlsx` + optional `.drawio` (spec-viewer) |
-| NATURAL — פירוט שורה-שורה | `.doc` (Word-compatible HTML, RTL) |
+| NATURAL — ניתוח מלא/מיגרציה/כתיבה מחדש/שינוי קוד | `.md` + `.xlsx` + optional `.drawio` (spec-viewer). The metadata chunk also emits two one-line-description tables — "קבצים ותוכניות רלוונטיים" (referenced CALLNATs/DDMs/COPYCODEs) and "טבלאות DPT / פרמטרים" (parameter/config tables) |
+| NATURAL — פירוט שורה-שורה | `.doc` (Word-compatible HTML, RTL) — page 1 is a process spec (Part A: overview, files & DPT tables, business logic by stages, error-code table), page 2+ is the line-by-line documentation (Part B). File is loaded into the chat context afterwards for follow-up questions |
 | NATURAL — מבט על | `.xlsx` + live mind-map page (`natural-mindmap.html`) with embedded chat |
 | Most chat agents | inline (auto-download `.md` if > 8,000 chars) |

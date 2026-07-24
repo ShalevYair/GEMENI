@@ -43,6 +43,56 @@ Use flowchart TD, short Hebrew labels, rhombus for decisions, subprocess shape f
 <!DOCTYPE html><html>...</html>
 </html-screen>`;
 
+// ── Line-by-line base prompt (dev-team-derived) ────────────────────────────
+// Role + accuracy guidance used by the "פירוט שורה-שורה" flow. Editable by the
+// user in the modal (shown as the base prompt when the line-by-line purpose is
+// selected).
+
+const LINE_BY_LINE_SYSTEM = `אתה אנליסט מערכות בכיר ומומחה קוד Natural/Adabas, עם התמחות במערכות Mainframe ממשלתיות (בסגנון משרד התחבורה). המשימה: לעבור על קוד Natural ולהפיק תיעוד כפול — עסקי-תהליכי וטכני-מפורט שורה-אחר-שורה.
+
+**תרגום ישויות טכניות לעסקיות:** הפוך שמות טכניים למונחים עסקיים ושמור תמיד את השם המקורי בסוגריים. אם מזוהות ישויות מוכרות של עולם הרכב/רישוי — תרגם בהתאם (למשל RECHEV = קובץ רכב, BAAL = קובץ בעלים, HAGBALA = קובץ הגבלות). אל תמציא — אם שם טכני אינו ברור, ציין זאת במפורש.
+
+**קודי שגיאה:** לכל קוד שגיאה המופיע בקוד (למשל 7002, 8015, 9003) — הסבר את התנאי הלוגי שהוביל אליו ואת משמעותו לאזרח.
+
+**תת-תוכניות:** לכל CALLNAT — הסבר מה הוא מבצע (למשל חישוב ספרת ביקורת, בדיקת נפטרים), כולל כיוון הפרמטרים.
+
+**דגשי דיוק:**
+- טיפול ב-Y2K דרך הגדרות REDEFINE של שנים (שנת ייצור וכד').
+- לוגיקה קשיחה (Hardcoded) — כמו חסימת מספרי זהות/רכב ספציפיים — ציין במפורש את הערך ואת המשמעות המשוערת.
+- ציין מתי מתבצע END TRANSACTION / BACKOUT TRANSACTION לשמירת שלמות הנתונים.
+- פקודות Natural (DEFINE DATA, FIND, READ, REDEFINE, שימוש במעבדי zIIP) — הסבר טכני קצר + המשמעות הפונקציונלית בפועל.
+
+כתוב תמיד בעברית, RTL.`;
+
+// ── Relevant-files + DPT tables block (appended once to the analysis) ───────
+// Requested by the product team: surface, in the analysis output, the files the
+// code references and the DPT / parameter tables it uses — each with a one-line
+// description. Emitted as excel-tables so they reach both the Excel file and the
+// spec-viewer.
+
+const RELEVANT_FILES_DPT = `
+
+### קבצים ותוכניות רלוונטיים
+הפק טבלה של כל הקבצים / התוכניות / ה-DDMs / ה-COPYCODE שהקוד מפנה אליהם (CALLNAT, FETCH, PERFORM, INCLUDE, VIEW OF, READ/FIND על DDM). כל שורה — שם מקורי + תיאור עסקי בשורה אחת:
+<excel-table name="קבצים ותוכניות רלוונטיים">
+[{"שם": "", "סוג": "CALLNAT / FETCH / DDM / COPYCODE / ADABAS", "תיאור": "תיאור עסקי בשורה אחת"}]
+</excel-table>
+
+### טבלאות DPT / פרמטרים
+הפק טבלה של כל טבלאות הפרמטרים/הקונפיגורציה (DPT) וטבלאות הערכים הקשיחים שהקוד משתמש בהן. כל שורה — שם הטבלה/הפרמטר + תיאור בשורה אחת של מה היא קובעת:
+<excel-table name="טבלאות DPT / פרמטרים">
+[{"שם": "", "תיאור": "מה הטבלה/הפרמטר קובע — בשורה אחת"}]
+</excel-table>`;
+
+// ── Default base ("system") prompt per purpose ─────────────────────────────
+// This is what the user sees and edits in the modal. For most purposes it's the
+// generic NATURAL_SYSTEM; for line-by-line it's the dev-team-derived role above.
+
+function defaultBasePrompt(purpose) {
+  if (purpose === 'line-by-line') return LINE_BY_LINE_SYSTEM;
+  return NATURAL_SYSTEM;
+}
+
 // ── Prompt section blocks ─────────────────────────────────────────────────
 
 const OUTPUT_FORMATS_BASIC = `
@@ -381,6 +431,8 @@ const CC_STEPS_TESTS = `
 
 // ── Module state ──────────────────────────────────────────────────────────
 let natFiles = [];
+let natPromptDirty = false; // true once the user manually edits the base prompt
+const NAT_PRESETS_KEY = 'natural-prompt-presets';
 
 export function initNaturalModal() {
   injectNaturalModal();
@@ -507,6 +559,29 @@ function injectNaturalModal() {
             ℹ️ בפירוט שורה-שורה, רמת העומק קובעת את רמת הפירוט בהסבר — לא את מספר הקריאות (זה נקבע לפי אורך הקובץ).
           </div>
         </div>
+
+        <!-- Prompt editor -->
+        <div id="nat-prompt-section">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.4rem;">
+            <div style="font-weight:600;font-size:.87rem;color:#1e293b;">פרומט הסוכן (הנחיות בסיס — ניתן לעריכה):</div>
+            <button type="button" onclick="window.natTogglePrompt()" id="nat-prompt-toggle" style="padding:.28rem .7rem;border:1px solid #c8d0e0;background:#fff;border-radius:7px;cursor:pointer;font-size:.76rem;font-family:Heebo,sans-serif;color:#0891b2;font-weight:600;">✏️ הצג / ערוך</button>
+          </div>
+          <div id="nat-prompt-body" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.65rem .8rem;">
+            <p style="margin:0 0 .45rem;font-size:.75rem;color:#64748b;line-height:1.5;">
+              זהו הפרומט הבסיסי שנשלח למודל. ניתן לערוך אותו לפני ההרצה כדי לשפר את הסוכן. שינוי המטרה מעדכן אוטומטית את הפרומט (כל עוד לא ערכת ידנית). ניתן לשמור פרומט ולטעון אותו בהרצות הבאות.
+            </p>
+            <textarea id="nat-prompt-text" rows="10" oninput="window.natPromptEdited()" style="width:100%;padding:.55rem .7rem;border:1px solid #e2e8f0;border-radius:8px;font-family:'Courier New',monospace;font-size:.78rem;color:#1e293b;line-height:1.55;resize:vertical;direction:rtl;box-sizing:border-box;background:#fff;"></textarea>
+            <div style="display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-top:.5rem;">
+              <button type="button" onclick="window.natSavePrompt()" style="padding:.32rem .7rem;border:1px solid #bae6fd;background:#f0f9ff;border-radius:7px;cursor:pointer;font-size:.76rem;font-family:Heebo,sans-serif;color:#0369a1;font-weight:600;">💾 שמור פרומט</button>
+              <select id="nat-prompt-presets" onchange="window.natLoadPresetSelected()" style="padding:.32rem .5rem;border:1px solid #c8d0e0;border-radius:7px;font-size:.76rem;font-family:Heebo,sans-serif;color:#1e293b;background:#fff;direction:rtl;max-width:200px;">
+                <option value="">📂 טען פרומט שמור…</option>
+              </select>
+              <button type="button" onclick="window.natDeletePreset()" id="nat-prompt-delete" style="display:none;padding:.32rem .6rem;border:1px solid #fecaca;background:#fef2f2;border-radius:7px;cursor:pointer;font-size:.76rem;font-family:Heebo,sans-serif;color:#b91c1c;font-weight:600;">🗑️ מחק</button>
+              <button type="button" onclick="window.natResetPrompt()" style="padding:.32rem .7rem;border:1px solid #c8d0e0;background:#fff;border-radius:7px;cursor:pointer;font-size:.76rem;font-family:Heebo,sans-serif;color:#64748b;">↺ אפס לברירת מחדל</button>
+              <span id="nat-prompt-dirty" style="display:none;font-size:.72rem;color:#b45309;">● נערך ידנית</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Footer -->
@@ -531,6 +606,12 @@ window.openNaturalModal = function () {
   if (!modal) return;
   natFiles = [];
   renderNatFileDisplay();
+  // Reset the base prompt to the default for the currently-selected purpose.
+  const purpose = document.querySelector('input[name="nat-purpose"]:checked')?.value || 'general';
+  setNatPromptText(defaultBasePrompt(purpose));
+  natPromptDirty = false;
+  updatePromptDirtyIndicator();
+  refreshPresetOptions();
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 };
@@ -609,6 +690,137 @@ window.natPurposeChanged = function () {
   if (field) field.style.display = v === 'code-change' ? '' : 'none';
   const note = document.getElementById('nat-depth-note');
   if (note) note.style.display = v === 'line-by-line' ? '' : 'none';
+  // Update the base prompt to match the new purpose — but never clobber manual edits.
+  if (!natPromptDirty) {
+    setNatPromptText(defaultBasePrompt(v || 'general'));
+  } else {
+    showPromptPurposeMismatch(v || 'general');
+  }
+};
+
+// ── Prompt editor API ──────────────────────────────────────────────────────
+
+function setNatPromptText(text) {
+  const ta = document.getElementById('nat-prompt-text');
+  if (ta) ta.value = text;
+  const mismatch = document.getElementById('nat-prompt-mismatch');
+  if (mismatch) mismatch.remove();
+}
+
+function updatePromptDirtyIndicator() {
+  const el = document.getElementById('nat-prompt-dirty');
+  if (el) el.style.display = natPromptDirty ? '' : 'none';
+}
+
+function showPromptPurposeMismatch(purpose) {
+  // The user edited the prompt, then switched purpose — offer to regenerate
+  // rather than silently discarding their edits.
+  let el = document.getElementById('nat-prompt-mismatch');
+  if (!el) {
+    const body = document.getElementById('nat-prompt-body');
+    if (!body) return;
+    el = document.createElement('div');
+    el.id = 'nat-prompt-mismatch';
+    el.style.cssText = 'margin-top:.45rem;padding:.4rem .6rem;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;font-size:.74rem;color:#92400e;display:flex;align-items:center;gap:.5rem;justify-content:space-between;';
+    body.appendChild(el);
+  }
+  el.innerHTML = `<span>שינית את המטרה — הפרומט לא עודכן כי ערכת אותו ידנית.</span>
+    <button type="button" onclick="window.natApplyPurposeDefault('${purpose}')" style="padding:.2rem .55rem;border:1px solid #fbbf24;background:#fef3c7;border-radius:6px;cursor:pointer;font-size:.72rem;font-family:Heebo,sans-serif;color:#92400e;font-weight:600;white-space:nowrap;">↺ עדכן למטרה החדשה</button>`;
+}
+
+window.natApplyPurposeDefault = function (purpose) {
+  setNatPromptText(defaultBasePrompt(purpose));
+  natPromptDirty = false;
+  updatePromptDirtyIndicator();
+};
+
+window.natTogglePrompt = function () {
+  const body = document.getElementById('nat-prompt-body');
+  const btn  = document.getElementById('nat-prompt-toggle');
+  if (!body) return;
+  const open = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  if (btn) btn.textContent = open ? '▲ הסתר' : '✏️ הצג / ערוך';
+};
+
+window.natPromptEdited = function () {
+  natPromptDirty = true;
+  updatePromptDirtyIndicator();
+  const mismatch = document.getElementById('nat-prompt-mismatch');
+  if (mismatch) mismatch.remove();
+};
+
+window.natResetPrompt = function () {
+  const purpose = document.querySelector('input[name="nat-purpose"]:checked')?.value || 'general';
+  setNatPromptText(defaultBasePrompt(purpose));
+  natPromptDirty = false;
+  updatePromptDirtyIndicator();
+};
+
+function loadPresets() {
+  try { return JSON.parse(localStorage.getItem(NAT_PRESETS_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function savePresets(list) {
+  try { localStorage.setItem(NAT_PRESETS_KEY, JSON.stringify(list)); } catch {}
+}
+
+function refreshPresetOptions() {
+  const sel = document.getElementById('nat-prompt-presets');
+  if (!sel) return;
+  const presets = loadPresets();
+  sel.innerHTML = '<option value="">📂 טען פרומט שמור…</option>' +
+    presets.map((p, i) => `<option value="${i}">${deps.escHtml(p.name)}</option>`).join('');
+  const del = document.getElementById('nat-prompt-delete');
+  if (del) del.style.display = 'none';
+}
+
+window.natSavePrompt = function () {
+  const ta = document.getElementById('nat-prompt-text');
+  if (!ta || !ta.value.trim()) { alert('הפרומט ריק — אין מה לשמור.'); return; }
+  const name = (prompt('שם לפרומט השמור:', '') || '').trim();
+  if (!name) return;
+  const presets = loadPresets();
+  const existing = presets.findIndex(p => p.name === name);
+  const entry = { name, text: ta.value };
+  if (existing >= 0) {
+    if (!confirm(`כבר קיים פרומט בשם "${name}". להחליף?`)) return;
+    presets[existing] = entry;
+  } else {
+    presets.push(entry);
+  }
+  savePresets(presets);
+  refreshPresetOptions();
+  alert(`הפרומט "${name}" נשמר.`);
+};
+
+window.natLoadPresetSelected = function () {
+  const sel = document.getElementById('nat-prompt-presets');
+  const del = document.getElementById('nat-prompt-delete');
+  if (!sel) return;
+  const idx = sel.value;
+  if (idx === '') { if (del) del.style.display = 'none'; return; }
+  const presets = loadPresets();
+  const p = presets[parseInt(idx, 10)];
+  if (!p) return;
+  setNatPromptText(p.text);
+  natPromptDirty = true; // a loaded preset is a manual choice — don't auto-overwrite on purpose change
+  updatePromptDirtyIndicator();
+  if (del) del.style.display = '';
+};
+
+window.natDeletePreset = function () {
+  const sel = document.getElementById('nat-prompt-presets');
+  if (!sel || sel.value === '') return;
+  const idx = parseInt(sel.value, 10);
+  const presets = loadPresets();
+  const p = presets[idx];
+  if (!p) return;
+  if (!confirm(`למחוק את הפרומט השמור "${p.name}"?`)) return;
+  presets.splice(idx, 1);
+  savePresets(presets);
+  refreshPresetOptions();
 };
 
 window.natClearFile = function (idx) {
@@ -643,6 +855,7 @@ window.generateNatural = async function () {
   const depthChoice   = document.querySelector('input[name="nat-depth"]:checked')?.value || 'standard';
   const context       = (document.getElementById('nat-context')?.value || '').trim();
   const changeDesc    = (document.getElementById('nat-change-desc')?.value || '').trim();
+  const basePrompt    = (document.getElementById('nat-prompt-text')?.value || '').trim() || defaultBasePrompt(purpose);
   const isMultiFile   = natFiles.length > 1;
   const filesToProcess = [...natFiles];
   const fileNames     = filesToProcess.map(f => f.name);
@@ -672,11 +885,11 @@ window.generateNatural = async function () {
   }
 
   if (!isMultiFile && purpose === 'line-by-line') {
-    await runLineByLine(progressId, filesData[0], depthChoice, context);
+    await runLineByLine(progressId, filesData[0], depthChoice, context, basePrompt);
     return;
   }
   if (!isMultiFile && purpose === 'overview') {
-    await runOverview(progressId, filesData[0], depthChoice, context);
+    await runOverview(progressId, filesData[0], depthChoice, context, basePrompt);
     return;
   }
 
@@ -688,7 +901,11 @@ window.generateNatural = async function () {
 
   try {
     if (isMultiFile) {
-      chunks = buildMultiFileChunks(filesData, context);
+      // Multi-file mode ignores the purpose selector; if the base prompt is the
+      // unedited line-by-line role (from a stale purpose selection), fall back to
+      // the generic analysis prompt so the cross-file analysis stays coherent.
+      const multiBase = basePrompt === LINE_BY_LINE_SYSTEM ? NATURAL_SYSTEM : basePrompt;
+      chunks = buildMultiFileChunks(filesData, context, multiBase);
     } else {
       const { name, text } = filesData[0];
       let fileHeader = `שם הקובץ: ${name}\n`;
@@ -720,7 +937,7 @@ window.generateNatural = async function () {
         }
       }
 
-      chunks = buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc);
+      chunks = buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc, basePrompt);
     }
 
     for (let i = 0; i < chunks.length; i++) {
@@ -899,8 +1116,9 @@ const CONFIRM_CALLS_THRESHOLD = 8;
 
 const DETAIL_LABELS = { low: 'נמוכה', standard: 'רגילה', high: 'גבוהה' };
 
-async function runLineByLine(progressId, fileData, depthChoice, context) {
+async function runLineByLine(progressId, fileData, depthChoice, context, basePrompt = LINE_BY_LINE_SYSTEM) {
   const { name, text } = fileData;
+  const roleText = (basePrompt && basePrompt.trim()) || LINE_BY_LINE_SYSTEM;
   let mIdx = deps.getModelIdx();
   let detailLevel = depthChoice === 'auto' ? 'standard' : depthChoice;
 
@@ -963,10 +1181,10 @@ async function runLineByLine(progressId, fileData, depthChoice, context) {
   let results;
   let programSummary = '';
   try {
-    deps.updateTyping(progressId, '📝 מכין הסבר כללי על התוכנית…');
+    deps.updateTyping(progressId, '📝 מכין אפיון תהליכי (חלק א׳)…');
     checkCancelled();
     try {
-      programSummary = await natCallWithFallback(buildLineByLineSummaryPrompt(name, text, context), mIdx);
+      programSummary = await natCallWithFallback(buildLineByLineSummaryPrompt(name, text, context, roleText), mIdx);
       mIdx = deps.getModelIdx();
     } catch (summaryErr) {
       if (summaryErr instanceof NatCancelled) throw summaryErr;
@@ -974,8 +1192,12 @@ async function runLineByLine(progressId, fileData, depthChoice, context) {
     }
 
     results = await runPool(chunkTexts, CONCURRENCY_LIMIT, async (c) => {
-      const prompt = `אתה אנליסט מערכות בכיר המתמחה ב-Natural (Software AG). קיבלת קטע מתוך קובץ Natural בשם "${name}", החל משורה ${c.start} בקובץ המקורי.${contextLine}
-עבור על הקטע **שורה אחר שורה, לפי הסדר** והסבר בעברית מה כל שורה/פקודה עושה מבחינה טכנית ועסקית. אל תדלג על אף שורה משמעותית (ניתן לקבץ שורות ריקות/הערות טכניות זניחות).
+      const prompt = `${roleText}
+
+---
+
+קיבלת קטע מתוך קובץ Natural בשם "${name}", החל משורה ${c.start} בקובץ המקורי.${contextLine}
+המשימה (חלק ב׳ — תיעוד שורה-אחר-שורה): עבור על הקטע **שורה אחר שורה, לפי הסדר** והסבר בעברית מה כל שורה/פקודה עושה — גם טכנית וגם פונקציונלית-עסקית. אל תדלג על אף שורה משמעותית (ניתן לקבץ שורות ריקות/הערות טכניות זניחות). תרגם שמות טכניים לישויות עסקיות ושמור את המקור בסוגריים, הסבר קודי שגיאה ותנאיהם, ופרט כל CALLNAT.
 ${VERBOSITY}
 פורמט הפלט: לכל שורה או קבוצת שורות — ציין את מספרי השורות המקוריים בסוגריים, ואז את ההסבר. השתמש בכותרות Markdown (###) לחלוקה לוגית אם רלוונטי. כתוב בעברית, RTL, ללא הקדמות או סיכומים — רק את הפירוט עצמו.
 
@@ -1008,19 +1230,38 @@ ${c.code}
   a.href = url; a.download = `${baseName}.doc`; a.click();
   URL.revokeObjectURL(url);
 
+  // Load the file into the chat context so the user can discuss the result.
+  if (deps.setNatContext) deps.setNatContext([{ name, text }]);
+
   deps.appendMessage('assistant',
     `✅ פירוט שורה-שורה של \`${name}\` הסתיים\n\n` +
     `**רמת פירוט:** ${DETAIL_LABELS[detailLevel]} · **${chunkTexts.length + 1} קריאות API** (לפי אורך הקובץ)\n\n` +
-    `📄 קובץ Word הורד — עמוד ראשון: הסבר כללי על התוכנית, ואז ההסבר המלא לכל שורות הקוד.`);
+    `📄 קובץ Word הורד — עמוד ראשון: אפיון תהליכי (חלק א׳: סקירה, קבצים וטבלאות DPT, לוגיקה לפי שלבים, קודי שגיאה), ואחריו התיעוד המלא שורה-אחר-שורה.\n` +
+    `💬 הקובץ טעון בהקשר — ניתן לשאול שאלות על הקוד בצ'אט.`);
 }
 
-function buildLineByLineSummaryPrompt(fileName, text, context) {
+function buildLineByLineSummaryPrompt(fileName, text, context, roleText = LINE_BY_LINE_SYSTEM) {
   const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
-  return `אתה אנליסט מערכות בכיר המתמחה ב-Natural (Software AG). קיבלת קובץ Natural בשם "${fileName}".${contextLine}
+  return `${roleText}
 
-המשימה: כתוב הסבר כללי באורך של כעמוד אחד (כ-300–500 מילים) בעברית, ברור וזורם (פסקאות מופרדות בשורה ריקה, לא רשימה), שיתאר: מה התוכנית הזו עושה, למה היא קיימת (הקשר העסקי), מי מריץ אותה ומתי, מה הקלט והפלט העיקריים, ומה קורה בקווים כלליים מתחילת הריצה ועד סופה. זהו הסבר למי שלא מכיר את הקוד כלל — אל תרד לפירוט טכני של שורות ספציפיות (זה יגיע בהמשך בנפרד, בפירוט שורה-שורה).
+---
 
-השב בטקסט רגיל בלבד (לא Markdown, לא JSON, ללא כותרות מסומנות) — רק פסקאות ההסבר עצמן.
+קיבלת קובץ Natural בשם "${fileName}".${contextLine}
+המשימה (חלק א׳ — אפיון תהליכי): כתוב אפיון תהליכי-עסקי של התוכנית, בעברית, במבנה הבא (השתמש בכותרות Markdown ובטבלאות Markdown):
+
+## סקירה כללית
+2–4 פסקאות זורמות: מה התוכנית עושה, למה היא קיימת (הקשר עסקי), מי מריץ אותה ומתי, הערוצים שבהם היא פועלת (אם רלוונטי — דואר, אזור אישי), ומה הקלט והפלט העיקריים.
+
+## קבצים וטבלאות מעורבים
+טבלת Markdown של קבצי ה-ADABAS / DDMs וטבלאות ה-DPT (פרמטרים/קונפיגורציה) שהתוכנית משתמשת בהם — עמודות: שם | סוג (ADABAS/DDM/DPT) | תיאור בשורה אחת.
+
+## לוגיקה עסקית לפי שלבים
+תאר את שלבי התהליך המרכזיים ואת התנאים העסקיים בכל שלב (למשל בדיקת שעבודים, הגבלות, תעריפים מיוחדים). רשימה ממוספרת.
+
+## טבלת קודי שגיאה
+טבלת Markdown של קודי השגיאה שבקוד — עמודות: קוד | התנאי הלוגי | המשמעות לאזרח.
+
+אל תרד כאן לפירוט שורה-אחר-שורה (זה יופיע בנפרד בחלק ב׳). כתוב בעברית, RTL. השב ב-Markdown בלבד, ללא code fence עוטף.
 
 \`\`\`natural
 ${text}
@@ -1028,16 +1269,17 @@ ${text}
 }
 
 function lineByLineToWordHtml(fileName, markdownText, programSummary) {
-  let bodyHtml = '';
-  if (window.marked) {
-    try { bodyHtml = window.marked.parse(markdownText, { breaks: true, gfm: true }); }
-    catch { bodyHtml = deps.escHtml(markdownText).replace(/\n/g, '<br>'); }
-  } else {
-    bodyHtml = deps.escHtml(markdownText).replace(/\n/g, '<br>');
-  }
+  const mdToHtml = (md) => {
+    if (window.marked) {
+      try { return window.marked.parse(md, { breaks: true, gfm: true }); }
+      catch { /* fall through */ }
+    }
+    return deps.escHtml(md).replace(/\n/g, '<br>');
+  };
+  const bodyHtml = mdToHtml(markdownText);
   const summaryHtml = (programSummary || '').trim()
-    ? deps.escHtml(programSummary.trim()).split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n')
-    : '<p style="color:#94a3b8;">(לא הופק הסבר כללי עבור קובץ זה.)</p>';
+    ? mdToHtml(programSummary.trim())
+    : '<p style="color:#94a3b8;">(לא הופק אפיון תהליכי עבור קובץ זה.)</p>';
 
   return `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
@@ -1050,16 +1292,19 @@ function lineByLineToWordHtml(fileName, markdownText, programSummary) {
     code  { font-family: Consolas, monospace; background: #f7fafc; padding: 1pt 4pt; font-size: 10pt; }
     pre   { background: #f7fafc; padding: 8pt; border-radius: 4pt; direction: ltr; }
     p     { line-height: 1.6; margin: 0 0 10pt; }
+    table { border-collapse: collapse; width: 100%; margin: 8pt 0; }
+    th, td { border: 1px solid #cbd5e1; padding: 4pt 6pt; text-align: right; font-size: 10pt; vertical-align: top; }
+    th    { background: #f1f5f9; }
     .page-break { page-break-before: always; mso-break-type: page-break; }
   </style>
 </head>
 <body>
-  <h1>מה התוכנית עושה — ${deps.escHtml(fileName)}</h1>
+  <h1>חלק א׳ — אפיון תהליכי — ${deps.escHtml(fileName)}</h1>
   ${summaryHtml}
 
   <div class="page-break"></div>
 
-  <h1>פירוט שורה-שורה — ${deps.escHtml(fileName)}</h1>
+  <h1>חלק ב׳ — תיעוד שורה-אחר-שורה — ${deps.escHtml(fileName)}</h1>
   ${bodyHtml}
 </body>
 </html>`;
@@ -1067,7 +1312,11 @@ function lineByLineToWordHtml(fileName, markdownText, programSummary) {
 
 // ── Purpose: מבט על (mind map) ─────────────────────────────────────────────
 
-async function runOverview(progressId, fileData, depthChoice, context) {
+async function runOverview(progressId, fileData, depthChoice, context, basePrompt = NATURAL_SYSTEM) {
+  // basePrompt is accepted for API symmetry; the mind-map flow keeps its own
+  // rigid JSON-tree prompt (folding in the free-form base rules would risk
+  // breaking the JSON contract), so it isn't threaded into the tree prompt.
+  void basePrompt;
   const { name, text } = fileData;
   let mIdx = deps.getModelIdx();
   let numCalls;
@@ -1158,10 +1407,15 @@ async function runOverview(progressId, fileData, depthChoice, context) {
     window.open('natural-mindmap.html', 'natural-mindmap');
   } catch { /* localStorage unavailable */ }
 
+  // Also load the file into the main chat context, so the user can discuss the
+  // result here as well (in addition to the mind-map page's embedded chat).
+  if (deps.setNatContext) deps.setNatContext([{ name, text }]);
+
   deps.appendMessage('assistant',
     `✅ מבט על עבור \`${name}\` הופק\n\n` +
     `**${numCalls} קריאות API** · קובץ Excel הורד\n\n` +
-    `🗺️ מפת המחשבה נפתחה בדף חדש — לחץ על "שאל" בתוכה כדי לשאול שאלות על הקוד.`);
+    `🗺️ מפת המחשבה נפתחה בדף חדש — לחץ על "שאל" בתוכה כדי לשאול שאלות על הקוד.\n` +
+    `💬 הקובץ טעון גם בהקשר הצ'אט כאן — ניתן לשאול שאלות ישירות.`);
 }
 
 function buildOverviewPrompt(fileName, codeBlock, contextLine, existingTree, callIdx, totalCalls) {
@@ -1253,7 +1507,7 @@ async function readNaturalFile(file) {
 
 // ── Multi-file prompt builder ─────────────────────────────────────────────
 
-function buildMultiFileChunks(filesData, context) {
+function buildMultiFileChunks(filesData, context, system = NATURAL_SYSTEM) {
   const fileList = filesData.map((f, i) => `${i + 1}. \`${f.name}\``).join('\n');
   const contextLine = context ? `\nהקשר הרצה: ${context}\n` : '';
 
@@ -1261,7 +1515,7 @@ function buildMultiFileChunks(filesData, context) {
     `### קובץ ${i + 1}: \`${name}\`\n\`\`\`natural\n${text}\n\`\`\``
   ).join('\n\n');
 
-  const intro = `${NATURAL_SYSTEM}\n\n---\n\n## קבצים לניתוח (${filesData.length} קבצים):${contextLine}\n\n${fileList}\n\n---\n\n${fileBlocks}\n\n---\n\n`;
+  const intro = `${system}\n\n---\n\n## קבצים לניתוח (${filesData.length} קבצים):${contextLine}\n\n${fileList}\n\n---\n\n${fileBlocks}\n\n---\n\n`;
 
   const part1 = intro + `
 ## Output — חלק א': ניתוח כל קובץ בנפרד
@@ -1326,6 +1580,12 @@ flowchart TD
 [{"שם_DDM_COPYCODE": "", "קבצים_שמשתמשים": "", "תפקיד_עסקי": ""}]
 </excel-table>
 
+### 3ב. טבלאות DPT / פרמטרים
+טבלאות הפרמטרים/הקונפיגורציה (DPT) וערכי הקונפיגורציה הקשיחים שבשימוש הקבצים — שם + תיאור בשורה אחת:
+<excel-table name="טבלאות DPT / פרמטרים">
+[{"שם": "", "תיאור": "מה הטבלה/הפרמטר קובע — בשורה אחת", "קבצים_שמשתמשים": ""}]
+</excel-table>
+
 ### 4. תהליך עסקי משולב
 תאר את התהליך העסקי הכולל — כיצד הקבצים יחדיו מממשים פונקציה עסקית שלמה.
 מה הסדר הצפוי של הרצה? מי "המנהל" ומי "השירות"?
@@ -1346,8 +1606,8 @@ flowchart TD
 
 // ── Single-file prompt assembly ────────────────────────────────────────────
 
-function buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc) {
-  const intro = `${NATURAL_SYSTEM}\n\n---\n\n## הקובץ לניתוח:\n\n${fileHeader}${codeBlock}\n\n---\n\n`;
+function buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc, system = NATURAL_SYSTEM) {
+  const intro = `${system}\n\n---\n\n## הקובץ לניתוח:\n\n${fileHeader}${codeBlock}\n\n---\n\n`;
 
   const appendix = purpose === 'migration' ? SECTIONS_MIGRATION_APPENDIX
     : purpose === 'rewrite' ? SECTIONS_REWRITE_APPENDIX
@@ -1359,13 +1619,13 @@ function buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc) {
   if (purpose === 'code-change') {
     if (depthLevel === 'low') {
       return [
-        intro + CC_META_CHANGE(changeDesc) + CC_IMPACT + CC_RULES + CC_PSEUDOCODE + CC_RISK + CC_STEPS_TESTS +
+        intro + CC_META_CHANGE(changeDesc) + RELEVANT_FILES_DPT + CC_IMPACT + CC_RULES + CC_PSEUDOCODE + CC_RISK + CC_STEPS_TESTS +
         '\n\nפלט מלא — כל הסעיפים (1–8) בקריאה אחת.',
       ];
     }
     if (depthLevel === 'high') {
       return [
-        intro + CC_META_CHANGE(changeDesc) + '\n\nפלט **סעיפים 1–2 בלבד**.',
+        intro + CC_META_CHANGE(changeDesc) + RELEVANT_FILES_DPT + '\n\nפלט **סעיפים 1–2 בלבד** (כולל טבלאות קבצים רלוונטיים ו-DPT).',
         intro + CC_IMPACT + '\n\nפלט **סעיף 3 בלבד**.',
         intro + CC_RULES + '\n\nפלט **סעיף 4 בלבד**.',
         intro + CC_PSEUDOCODE + '\n\nפלט **סעיף 5 בלבד**.',
@@ -1375,7 +1635,7 @@ function buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc) {
     }
     // standard (3 calls) — default
     return [
-      intro + CC_META_CHANGE(changeDesc) + CC_IMPACT + CC_RULES + '\n\nפלט **סעיפים 1–4 בלבד** — ניתוח השפעה.',
+      intro + CC_META_CHANGE(changeDesc) + RELEVANT_FILES_DPT + CC_IMPACT + CC_RULES + '\n\nפלט **סעיפים 1–4 בלבד** — ניתוח השפעה.',
       intro + CC_PSEUDOCODE + '\n\nפלט **סעיף 5 בלבד** — פסאודו-קוד לפני/אחרי.',
       intro + CC_RISK + CC_STEPS_TESTS + '\n\nפלט **סעיפים 6–8 בלבד** — סיכונים ויישום.',
     ];
@@ -1384,14 +1644,14 @@ function buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc) {
   // general / migration / rewrite
   if (depthLevel === 'low') {
     return [
-      intro + SECTIONS_ALL + appendix + '\n\n' + OUTPUT_FORMATS_BASIC +
+      intro + SECTIONS_ALL + appendix + '\n\n' + OUTPUT_FORMATS_BASIC + RELEVANT_FILES_DPT +
       `\n\nפלט מלא — כל הסעיפים (1–9${appendix ? '+10' : ''}) בקריאה אחת.`,
     ];
   }
 
   if (depthLevel === 'high') {
     return [
-      intro + SECTIONS_HIGH_1 + '\n\nפלט **סעיפים 1–2 בלבד**.',
+      intro + SECTIONS_HIGH_1 + RELEVANT_FILES_DPT + '\n\nפלט **סעיפים 1–2 בלבד** (כולל טבלאות קבצים רלוונטיים ו-DPT).',
       intro + SECTION_3_ONLY + '\n\n' + FORMAT_3_ONLY + '\n\nפלט **סעיף 3 בלבד** + Mermaid + טבלת I/O.',
       intro + SECTION_4_ONLY + '\n\n' + FORMAT_4_ONLY + '\n\nפלט **סעיף 4 בלבד** + טבלת מספרי קסם.',
       intro + SECTION_56_ONLY + '\n\n' + FORMAT_56_ONLY + '\n\nפלט **סעיפים 5–6 בלבד** + טבלת גישות נתונים.',
@@ -1403,7 +1663,7 @@ function buildChunks(purpose, depthLevel, fileHeader, codeBlock, changeDesc) {
 
   // standard (3 calls) — default
   return [
-    intro + SECTIONS_HIGH_1 + '\n\nפלט **Part A בלבד** (סעיפים 1–2).',
+    intro + SECTIONS_HIGH_1 + RELEVANT_FILES_DPT + '\n\nפלט **Part A בלבד** (סעיפים 1–2 + טבלאות קבצים רלוונטיים ו-DPT).',
     intro + SECTIONS_HIGH_2 + '\n\n' + OUTPUT_FORMATS_HIGH_2 + '\n\nפלט **Part B בלבד** (סעיפים 3–4 + Mermaid + טבלת I/O).',
     intro + SECTIONS_HIGH_3 + '\n\n' + OUTPUT_FORMATS_HIGH_3 + appendix +
     `\n\nפלט **Part C בלבד** (סעיפים 5–9${appendixLabel} + טבלאות + פסאודו-קוד + draw.io XML).`,

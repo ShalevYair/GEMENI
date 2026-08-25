@@ -9,7 +9,8 @@ let totalCallsPlanned = 0;
 let selectedLevel = 'auto'; // 'low' | 'normal' | 'high' | 'auto'
 let lastInstruction = '';
 let runMode = 'write'; // 'write' (new tender from plan) | 'revise' (block-patch update of an existing tender)
-let patchStats = null; // revise mode: { blocksTotal, changed, inserted, deleted, segments, fallbackChunks, preserved, retried }
+let patchStats = null; // revise mode: { blocksTotal, changed, inserted, deleted, segments, fallbackChunks, preserved, retried, dropped, reclaimed, shrunk }
+let pendingEdits = []; // revise mode: valid edits naming blocks outside the segment that produced them
 let callsDone = 0;     // API calls completed in the current run (for progress UI)
 let cacheState = null;   // active explicit context cache: { name, model }
 let cachePayload = null; // { sharedText, inlineParts } — what to (re)create the cache from
@@ -717,7 +718,14 @@ async function runReviseFlow(instruction, lvl, sourceFile) {
   const segments = buildSegments(annotated, lvl.segmentChars);
 
   totalCallsPlanned = 1 + segments.length;
-  patchStats = { blocksTotal: blocks.length, changed: 0, inserted: 0, deleted: 0, segments: segments.length, fallbackChunks: 0, preserved: 0, retried: 0 };
+  patchStats = {
+    blocksTotal: blocks.length, changed: 0, inserted: 0, deleted: 0,
+    segments: segments.length, fallbackChunks: 0, preserved: 0, retried: 0,
+    dropped: 0,    // malformed edits discarded
+    reclaimed: 0,  // out-of-segment edits re-applied in the right segment
+    shrunk: 0,     // replaces rejected as summarization, original kept
+  };
+  pendingEdits = [];
 
   // The change instructions + change files are re-sent with every segment —
   // cache them once when there are several segments and they're big enough
@@ -774,6 +782,13 @@ async function patchOneSegment(instruction, lvl, sourceFile, blocks, annotated, 
   }
 
   if (edits) {
+    // Claim any edits an earlier segment produced for blocks this one owns.
+    const claimed = pendingEdits.filter(e => e.id >= seg.start && e.id < seg.end);
+    if (claimed.length) {
+      pendingEdits = pendingEdits.filter(e => !(e.id >= seg.start && e.id < seg.end));
+      patchStats.reclaimed += claimed.length;
+      edits = edits.concat(claimed);
+    }
     outputSections.push({ title: `קטע ${segLabel}`, text: applyEditsToSegment(blocks, seg, edits, isHtml), isHtml });
   } else {
     // JSON failed twice — legacy fallback: full rewrite of this segment only
@@ -991,10 +1006,27 @@ function parseEdits(raw, seg) {
     }
   }
   if (!Array.isArray(arr)) return null;
-  return arr
-    .map(e => e && typeof e === 'object' ? { ...e, id: Number(e.id) } : null)
-    .filter(e => e && Number.isInteger(e.id) && e.id >= seg.start && e.id < seg.end &&
-      (e.op === 'delete' || ((e.op === 'replace' || e.op === 'insert_after') && typeof e.text === 'string')));
+
+  const kept = [], deferred = [];
+  for (const raw of arr) {
+    if (!raw || typeof raw !== 'object') { patchStats.dropped++; continue; }
+    const e = { ...raw, id: Number(raw.id) };
+    const shapeOk = Number.isInteger(e.id) &&
+      (e.op === 'delete' || ((e.op === 'replace' || e.op === 'insert_after') && typeof e.text === 'string'));
+    if (!shapeOk) { patchStats.dropped++; continue; }
+
+    if (e.id >= seg.start && e.id < seg.end) {
+      kept.push(e);
+    } else {
+      // A valid edit that named a block outside this segment. Discarding it
+      // silently — the old behaviour — meant a change the user asked for
+      // simply never happened, in a document that looked fine. Hold it for
+      // the segment that owns the block instead.
+      deferred.push(e);
+    }
+  }
+  if (deferred.length) pendingEdits.push(...deferred);
+  return kept;
 }
 
 // Rebuild a segment: unmentioned blocks are copied verbatim from the source;
@@ -1011,8 +1043,19 @@ function applyEditsToSegment(blocks, seg, edits, isHtml) {
     if (del.has(i)) {
       patchStats.deleted++;
     } else if (repl.has(i)) {
-      patchStats.changed++;
-      out += withBlockTail(blocks[i], repl.get(i), isHtml);
+      const text = repl.get(i);
+      // The legacy rewrite path has an anti-summarization guard; the patch
+      // path had none, so a replace returning 20 chars for a 1,200-char block
+      // silently destroyed content — the exact failure this protocol exists
+      // to prevent. A replacement that collapses to under 40% of the source
+      // is treated as a summarization slip: keep the original, count it.
+      if (text.trim().length < blocks[i].trim().length * 0.4) {
+        patchStats.shrunk++;
+        out += blocks[i];
+      } else {
+        patchStats.changed++;
+        out += withBlockTail(blocks[i], text, isHtml);
+      }
     } else {
       out += blocks[i];
     }
@@ -1747,13 +1790,36 @@ function updateRunning(msg, current, total) {
   }
 }
 
+// Anything the patch protocol had to reject or move is a change the user
+// asked for that may not have landed as intended. Counting it in the stats
+// line is not enough — these need to be read before the .doc is trusted.
+function reviseWarnings() {
+  if (runMode !== 'revise' || !patchStats) return '';
+  const w = [];
+  if (patchStats.shrunk) {
+    w.push(`<strong>${patchStats.shrunk}</strong> ${patchStats.shrunk === 1 ? 'בלוק הוחזר' : 'בלוקים הוחזרו'} מקוצרים משמעותית מהמקור — נשמר התוכן המקורי במקומם כדי למנוע אובדן. ייתכן שהשינוי המבוקש שם לא בוצע.`);
+  }
+  if (patchStats.dropped) {
+    w.push(`<strong>${patchStats.dropped}</strong> ${patchStats.dropped === 1 ? 'פעולת עריכה נפסלה' : 'פעולות עריכה נפסלו'} בגלל מבנה לא תקין.`);
+  }
+  if (pendingEdits.length) {
+    w.push(`<strong>${pendingEdits.length}</strong> ${pendingEdits.length === 1 ? 'פעולת עריכה לא שויכה' : 'פעולות עריכה לא שויכו'} לאף בלוק במסמך ולא הוחלו.`);
+  }
+  if (!w.length) return '';
+  return `
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.75rem 1rem;font-size:.81rem;color:#92400e;line-height:1.6;">
+      ⚠️ <strong>כדאי לבדוק ידנית:</strong>
+      <ul style="margin:.35rem 0 0;padding-right:1.1rem;">${w.map(x => `<li>${x}</li>`).join('')}</ul>
+    </div>`;
+}
+
 function showDone() {
   const lvl = LEVELS[selectedLevel] || LEVELS.auto;
   const outChars = outputSections.reduce((s, x) => s + (x.text || '').length, 0);
   const srcChars = pickedFiles.reduce((s, f) => s + (f.isInline ? 0 : (f.text || '').length), 0);
   const cacheNote = cacheEverUsed ? ' | Context Caching: <strong>פעיל 💾</strong>' : '';
   const statsLine = runMode === 'revise' && patchStats
-    ? `<div style="margin-top:.25rem;font-size:.8rem;color:#6b7280;">היקף המקור: <strong>${Math.round(srcChars / 1000)}K תווים</strong> | היקף הפלט: <strong>${Math.round(outChars / 1000)}K תווים</strong> | בלוקים: <strong>${patchStats.changed} עודכנו${patchStats.inserted ? `, ${patchStats.inserted} נוספו` : ''}${patchStats.deleted ? `, ${patchStats.deleted} נמחקו` : ''} מתוך ${patchStats.blocksTotal}</strong> — השאר הועתקו מהמקור ללא עלות פלט${patchStats.fallbackChunks ? ` | מסלול גיבוי (שכתוב מלא): <strong>${patchStats.fallbackChunks} תת-קטעים</strong>${patchStats.preserved ? ` (${patchStats.preserved} נשמרו במקור לאחר פלט חסר)` : ''}` : ''}${cacheNote}</div>`
+    ? `<div style="margin-top:.25rem;font-size:.8rem;color:#6b7280;">היקף המקור: <strong>${Math.round(srcChars / 1000)}K תווים</strong> | היקף הפלט: <strong>${Math.round(outChars / 1000)}K תווים</strong> | בלוקים: <strong>${patchStats.changed} עודכנו${patchStats.inserted ? `, ${patchStats.inserted} נוספו` : ''}${patchStats.deleted ? `, ${patchStats.deleted} נמחקו` : ''} מתוך ${patchStats.blocksTotal}</strong> — השאר הועתקו מהמקור ללא עלות פלט${patchStats.reclaimed ? ` | <strong>${patchStats.reclaimed}</strong> עריכות שויכו מחדש לקטע הנכון` : ''}${patchStats.fallbackChunks ? ` | מסלול גיבוי (שכתוב מלא): <strong>${patchStats.fallbackChunks} תת-קטעים</strong>${patchStats.preserved ? ` (${patchStats.preserved} נשמרו במקור לאחר פלט חסר)` : ''}` : ''}${cacheNote}</div>`
     : `<div style="margin-top:.25rem;font-size:.8rem;color:#6b7280;">היקף הפלט: <strong>${Math.round(outChars / 1000)}K תווים</strong>${cacheNote}</div>`;
   setBody(`
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:1rem 1.1rem;">
@@ -1769,6 +1835,7 @@ function showDone() {
       <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280;">מצב: <strong>${runMode === 'revise' ? 'עדכון מכרז קיים' : 'כתיבת מכרז חדש'}</strong> | רמת עיבוד: <strong>${lvl.label}</strong> | קבצי רקע: <strong>${pickedFiles.length}</strong> | קריאות API: <strong>${totalCallsPlanned}</strong></div>
       ${statsLine}
     </div>
+    ${reviseWarnings()}
     ${calibration?._parseFailed ? `
     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.75rem 1rem;font-size:.82rem;color:#92400e;line-height:1.55;">
       ⚠️ <strong>שלב הכיול נכשל בריצה הזו</strong> — המכרז נכתב במסלול גנרי מצומצם,

@@ -501,6 +501,7 @@ window.runTenderWriter = async function () {
   cacheState = null;
   cachePayload = null;
   cacheEverUsed = false;
+  chapterDigests = [];
 
   showRunning('🔍 קריאה 1 — כותב המכרזים קורא את החומרים ובונה תוכנית עבודה…', 1, 2);
 
@@ -667,6 +668,10 @@ window.tenderResume = async function () {
 
   phase = 'running';
   totalCallsPlanned = 1 + plan.length;
+  // Rebuild continuity from what survived the failure, so resumed chapters
+  // still see the numbering and terminology of the ones before them.
+  chapterDigests = [];
+  outputSections.forEach((s, i) => recordChapterDigest(plan[i] || { section: s.title }, s.text));
   showRunning(`⚙️ ממשיך מפרק ${doneCount + 1} מתוך ${plan.length}…`, callsDone, totalCallsPlanned);
 
   try {
@@ -679,9 +684,11 @@ window.tenderResume = async function () {
           ? buildExecutionTaskPrompt(section, i, plan.length)
           : buildExecutionPrompt(lastInstruction, calibration, section, i, plan.length, shrink),
         inlineFile: useCache ? null : (pickedFiles.find(f => f.isInline) || null),
+        genCfg: { temperature: 0.55 },
       }), mIdx);
       mIdx = deps.getModelIdx(); callsDone++;
       outputSections.push({ title: section.section || `פרק ${i + 1}`, text: result });
+      recordChapterDigest(section, result);
     }
   } catch (err) {
     dropTenderCache();
@@ -848,10 +855,63 @@ async function runWriteFlow(instruction, lvl) {
       // when the cache is active the materials (including inline files) are
       // already in it — don't re-attach them
       inlineFile: useCache ? null : (pickedFiles.find(f => f.isInline) || null),
+      // Prose, not JSON: the default 0.2 produces flat, repetitive tender
+      // language, and Google advises against low temperature on Gemini 3.
+      genCfg: { temperature: 0.55 },
     }), mIdx);
     mIdx = deps.getModelIdx(); callsDone++;
     outputSections.push({ title: section.section || `פרק ${i + 1}`, text: result });
+    recordChapterDigest(section, result);
   }
+}
+
+// ── Cross-chapter continuity ──────────────────────────────────────────────
+// Each chapter used to be written with no sight of the ones before it, so
+// clause numbering restarted, terms drifted and definitions were repeated.
+// Carrying the full previous chapter would be the thorough fix but costs
+// input tokens on every call; a compact digest gets most of the consistency
+// for almost nothing.
+let chapterDigests = [];
+
+function recordChapterDigest(section, text) {
+  const t = (text || '').trim();
+  if (!t) return;
+
+  // Highest clause number the chapter actually assigned, so the next one
+  // continues the sequence instead of restarting at 1. Matches both "2." and
+  // "2.1"/"2.1." forms; the trailing-punctuation requirement on bare integers
+  // keeps years and amounts at line start from being read as clause numbers.
+  const nums = [...t.matchAll(/^[ \t]*(\d+(?:\.\d+)+[.)]?|\d+[.)])[ \t]+\S/gm)]
+    .map(m => m[1].replace(/[.)]$/, ''));
+  const lastNum = nums.length ? nums[nums.length - 1] : null;
+
+  // Headings carry the chapter's actual structure — more reliable than the
+  // planned section name, which the model does not always follow.
+  const heads = [...t.matchAll(/^#{2,4}\s+(.+)$/gm)].map(m => m[1].trim()).slice(0, 6);
+
+  chapterDigests.push({
+    name: section.section || '',
+    lastNum,
+    heads,
+    tail: t.slice(-400),
+  });
+}
+
+function continuityBlock() {
+  if (!chapterDigests.length) return '';
+  const lines = chapterDigests.map((d, i) => {
+    const bits = [`${i + 1}. ${d.name}`];
+    if (d.heads.length) bits.push(`   כותרות: ${d.heads.join(' | ')}`);
+    if (d.lastNum) bits.push(`   מספר הסעיף האחרון: ${d.lastNum}`);
+    return bits.join('\n');
+  });
+  const last = chapterDigests[chapterDigests.length - 1];
+  return `\n\nפרקים שכבר נכתבו במסמך הזה — אל תחזור על תוכנם, המשך את מספור הסעיפים מהם, ושמור על אותם מונחים והגדרות:
+${lines.join('\n')}
+
+סוף הפרק הקודם (להמשכיות סגנון ומספור):
+"""${last.tail}"""
+`;
 }
 
 // Split a document into small blocks at paragraph/tag boundaries, preserving
@@ -1146,7 +1206,7 @@ ${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFile
 function buildExecutionTaskPrompt(section, sectionIdx, totalSections) {
   return `על בסיס ההקשר המשותף שנמסר לך למעלה (ההנחיות וחומרי הגלם), כתוב עכשיו את פרק ${sectionIdx + 1} מתוך ${totalSections} של מסמך המכרז (${section.section}):
 ${section.prompt}
-${answersBlock()}
+${answersBlock()}${continuityBlock()}
 ${writingPrinciples()}`;
 }
 
@@ -1154,7 +1214,8 @@ const WRITING_PRINCIPLES = `עקרונות כתיבה מחייבים:
 - לשון מכרז רשמית, ברורה ומדויקת — ללא עמימות. כל דרישה ניתנת לבדיקה.
 - כל קריטריון הערכה מדיד ואובייקטיבי, עם משקל מספרי בטבלה משוקללת.
 - SLA מגדיר בדיוק: מה נמדד, מתי, מי מודד, מה הסנקציה.
-- השתמש בכותרות (## ו-###), סעיפים ממוספרים וטבלאות Markdown לפי הצורך.
+- כותרת הפרק עצמו נוספת אוטומטית — אל תכתוב אותה. כותרות פנימיות בתוך הפרק: ### ו-#### בלבד, לעולם לא ##.
+- השתמש בסעיפים ממוספרים ובטבלאות Markdown לפי הצורך.
 - אל תמציא נתונים שאינם בחומרים — במקום נתון חסר כתוב [להשלמה: ___] כדי שהגורם המזמין ימלא.
 - כתוב בעברית בלבד, מלבד מונחים טכניים.
 כתוב את הפרק במלואו. אל תכתוב פתיח או סיכום מחוץ לפרק.`;
@@ -1192,7 +1253,7 @@ ${calib.internalPrompt || ''}
 הפרק שעליך לכתוב עכשיו (${section.section}):
 ${section.prompt}
 
-${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFiles, CAP_MATERIALS, shrink)}\n` : ''}${answersBlock()}
+${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFiles, CAP_MATERIALS, shrink)}\n` : ''}${answersBlock()}${continuityBlock()}
 ---
 ${writingPrinciples()}`;
 }
@@ -1222,6 +1283,28 @@ function parseCalibration(raw) {
 }
 
 // ── Document assembly + download ───────────────────────────────────────────
+// The prompt reserves ## for the chapter title the assembler adds, but models
+// don't reliably obey. Left alone, two competing ## levels produce a broken
+// table of contents in Word. Demote any the model emitted, and drop a leading
+// heading that just restates the chapter title we already wrote.
+function normalizeChapterHeadings(text, title) {
+  let t = (text || '').trim();
+
+  const firstHeading = t.match(/^#{1,3}\s+(.+?)\s*$/m);
+  if (firstHeading && t.startsWith(firstHeading[0])) {
+    const norm = (s) => s.replace(/[#*_\s:।.-]/g, '').toLowerCase();
+    if (norm(firstHeading[1]) === norm(title || '')) {
+      t = t.slice(firstHeading[0].length).trimStart();
+    }
+  }
+
+  // Demote every remaining top-level heading one step so the chapter title
+  // stays the only ##. h4 is the floor — Word stops distinguishing below it.
+  t = t.replace(/^(#{1,2})\s+/gm, '### ');
+  t = t.replace(/^#{5,}\s+/gm, '#### ');
+  return t;
+}
+
 function assembleTenderMarkdown() {
   const ts = new Date().toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' });
   const title = calibration?.tenderTitle || 'מסמך מכרז';
@@ -1233,7 +1316,7 @@ function assembleTenderMarkdown() {
   md += `---\n\n`;
 
   for (const sec of outputSections) {
-    md += `## ${sec.title}\n\n${sec.text}\n\n---\n\n`;
+    md += `## ${sec.title}\n\n${normalizeChapterHeadings(sec.text, sec.title)}\n\n`;
   }
 
   const open = openQuestions();

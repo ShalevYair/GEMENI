@@ -11,7 +11,9 @@ let lastInstruction = '';
 let runMode = 'write'; // 'write' (new tender from plan) | 'revise' (block-patch update of an existing tender)
 let patchStats = null; // revise mode: { blocksTotal, changed, inserted, deleted, segments, fallbackChunks, preserved, retried, dropped, reclaimed, shrunk }
 let pendingEdits = []; // revise mode: valid edits naming blocks outside the segment that produced them
-let callsDone = 0;     // API calls completed in the current run (for progress UI)
+let diffLog = [];      // revise mode: [{ id, op, before, after }] for the before/after review
+let callsDone = 0;         // API calls completed in the current run (for progress UI)
+let calibrationCalls = 1;  // calls the calibration phase actually cost — more than 1 when the material had to be read in groups
 let cacheState = null;   // active explicit context cache: { name, model }
 let cachePayload = null; // { sharedText, inlineParts } — what to (re)create the cache from
 let cacheEverUsed = false;
@@ -20,6 +22,8 @@ let reviseSourceFile = null;   // revise mode: the tender being patched
 let sourceFileGuessed = false; // true when picked by size, not by name match
 let answers = {};              // review screen: clarification answers, by question index
 let basePromptOverride = '';   // review screen: user edits to WRITING_PRINCIPLES
+let wantAudit = false;         // review screen: run the final consistency pass
+let auditFindings = '';        // result of that pass, shown on the done screen
 
 const MAX_FILES = 20;
 const WARN_CHARS = 80_000;
@@ -143,6 +147,8 @@ window.openTenderModal = function () {
   sourceFileGuessed = false;
   answers = {};
   basePromptOverride = '';
+  wantAudit = false;
+  auditFindings = '';
   document.getElementById('tender-modal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   showPhasePick();
@@ -503,6 +509,7 @@ window.runTenderWriter = async function () {
   cachePayload = null;
   cacheEverUsed = false;
   chapterDigests = [];
+  calibrationCalls = 1;
   deps.resetUsage?.();
 
   showRunning('🔍 קריאה 1 — כותב המכרזים קורא את החומרים ובונה תוכנית עבודה…', 1, 2);
@@ -512,14 +519,18 @@ window.runTenderWriter = async function () {
   // ── Call 1: calibration (single call — caching never pays off here) ────
   let calibJson;
   try {
-    const calibRaw = await callWithFallback((useCache, shrink) => ({ prompt: buildCalibrationPrompt(instruction, lvl, shrink) }), mIdx);
-    callsDone = 1;
+    const groups = calibrationGroups();
+    const calibRaw = groups.length > 1
+      ? await runHierarchicalCalibration(instruction, lvl, groups)
+      : await callWithFallback((useCache, shrink) => ({ prompt: buildCalibrationPrompt(instruction, lvl, shrink) }), mIdx);
+    if (!callsDone) callsDone = 1;
     calibJson = parseCalibration(calibRaw);
 
     // Malformed JSON leaves us with a degraded single-chapter plan. One
     // retry with a stern format reminder is far cheaper than letting the
     // whole run proceed on it.
     if (calibJson._parseFailed) {
+      calibrationCalls++;
       totalCallsPlanned++;
       updateRunning('🔁 תשובת הכיול לא הייתה JSON תקין — מנסה שוב…');
       const retryRaw = await callWithFallback((useCache, shrink) => ({
@@ -590,6 +601,8 @@ window.tenderRunApproved = async function () {
     showError(err.message || String(err), { partial: true });
     return;
   }
+
+  await runConsistencyAudit();
 
   dropTenderCache();
   phase = 'done';
@@ -669,7 +682,7 @@ window.tenderResume = async function () {
   if (doneCount >= plan.length) return;
 
   phase = 'running';
-  totalCallsPlanned = 1 + plan.length;
+  totalCallsPlanned = calibrationCalls + plan.length;
   // Rebuild continuity from what survived the failure, so resumed chapters
   // still see the numbering and terminology of the ones before them.
   chapterDigests = [];
@@ -699,6 +712,8 @@ window.tenderResume = async function () {
     return;
   }
 
+  await runConsistencyAudit();
+
   dropTenderCache();
   phase = 'done';
   downloadTenderDoc();
@@ -718,7 +733,7 @@ async function runReviseFlow(instruction, lvl, sourceFile) {
   const annotated = blocks.map((b, i) => `⟦B${i}⟧\n${b}`);
   const segments = buildSegments(annotated, lvl.segmentChars);
 
-  totalCallsPlanned = 1 + segments.length;
+  totalCallsPlanned = calibrationCalls + segments.length;
   patchStats = {
     blocksTotal: blocks.length, changed: 0, inserted: 0, deleted: 0,
     segments: segments.length, fallbackChunks: 0, preserved: 0, retried: 0,
@@ -727,6 +742,7 @@ async function runReviseFlow(instruction, lvl, sourceFile) {
     shrunk: 0,     // replaces rejected as summarization, original kept
   };
   pendingEdits = [];
+  diffLog = [];
 
   // The change instructions + change files are re-sent with every segment —
   // cache them once when there are several segments and they're big enough
@@ -848,7 +864,7 @@ async function runWriteFlow(instruction, lvl) {
   // absorb sections added there beyond the level's ceiling.
   const plan = clampWorkPlan(calibration.workPlan || [], lvl);
   calibration.workPlan = plan;
-  totalCallsPlanned = 1 + plan.length;
+  totalCallsPlanned = calibrationCalls + plan.length;
 
   // Every chapter call re-sends the full raw materials (up to 120K chars per
   // file, plus inline PDFs/images) — with 2+ chapters and enough material,
@@ -879,6 +895,64 @@ async function runWriteFlow(instruction, lvl) {
     outputSections.push({ title: section.section || `פרק ${i + 1}`, text: result });
     recordChapterDigest(section, result);
   }
+}
+
+// ── Final consistency audit ───────────────────────────────────────────────
+// One optional pass over the assembled document that returns a list of
+// defects, never a rewrite. Rewriting a whole document is exactly the
+// scenario where the model summarizes and loses content — the failure the
+// block-patch protocol was built to avoid. A findings list is cheap, fast,
+// and leaves the decision with the user.
+//
+// Never throws: the document is already written and downloaded by this point,
+// so a failed audit must not cost the user their run.
+async function runConsistencyAudit() {
+  auditFindings = '';
+  if (!wantAudit || !outputSections.length) return;
+
+  totalCallsPlanned++;
+  callsDone++;
+  updateRunning('🔎 בדיקת עקביות סופית על המסמך המורכב…', callsDone, totalCallsPlanned);
+
+  const doc = runMode === 'revise'
+    ? outputSections.map(s => s.text).join('\n\n')
+    : assembleTenderMarkdown();
+
+  try {
+    const raw = await callWithFallback(() => ({
+      prompt: buildAuditPrompt(doc.slice(0, CAP_MATERIALS)),
+      noCache: true,
+      genCfg: { temperature: 0.2 },
+    }), deps.getModelIdx());
+    const t = cleanModelOutput(raw).trim();
+    // The prompt asks for this exact token when the document is clean, so an
+    // empty findings list is distinguishable from a failed call.
+    auditFindings = /^אין ליקויים/.test(t) ? '' : t;
+  } catch {
+    auditFindings = '';
+  }
+}
+
+function buildAuditPrompt(doc) {
+  return `אתה בודק איכות של מסמכי מכרז. לפניך מסמך מכרז שהורכב ממספר פרקים שנכתבו בנפרד.
+
+משימתך: **לאתר ליקויים בלבד — אל תשכתב ואל תתקן.** החזר רשימה קצרה וממוקדת.
+
+בדוק במיוחד:
+1. **סתירות בין פרקים** — נתון, תאריך, סכום או דרישה שמופיעים אחרת בשני מקומות.
+2. **חזרות** — אותו תוכן שנכתב פעמיים בפרקים שונים.
+3. **מספור שבור** — סעיפים שמתחילים מחדש או מדלגים.
+4. **מונחים לא עקביים** — אותו דבר בשמות שונים.
+5. **דרישות שהוזכרו ולא פורטו** — הבטחה בפרק אחד שלא מומשה באחר.
+6. **שדות [להשלמה: ___]** שנשארו — ציין כמה ואיפה.
+
+המסמך:
+<<<
+${doc}
+>>>
+
+פורמט התשובה: רשימה ממוספרת, שורה עד שתיים לכל ליקוי, עם ציון הפרק. עד 15 ליקויים, החמורים ראשונים.
+אם המסמך תקין ולא מצאת ליקויים ממשיים — החזר בדיוק את המילים: אין ליקויים`;
 }
 
 // ── Cross-chapter continuity ──────────────────────────────────────────────
@@ -1043,6 +1117,7 @@ function applyEditsToSegment(blocks, seg, edits, isHtml) {
   for (let i = seg.start; i < seg.end; i++) {
     if (del.has(i)) {
       patchStats.deleted++;
+      diffLog.push({ id: i, op: 'delete', before: blocks[i], after: '' });
     } else if (repl.has(i)) {
       const text = repl.get(i);
       // The legacy rewrite path has an anti-summarization guard; the patch
@@ -1053,9 +1128,11 @@ function applyEditsToSegment(blocks, seg, edits, isHtml) {
       if (text.trim().length < blocks[i].trim().length * 0.4) {
         patchStats.shrunk++;
         out += blocks[i];
+        diffLog.push({ id: i, op: 'rejected', before: blocks[i], after: text });
       } else {
         patchStats.changed++;
         out += withBlockTail(blocks[i], text, isHtml);
+        diffLog.push({ id: i, op: 'replace', before: blocks[i], after: text });
       }
     } else {
       out += blocks[i];
@@ -1064,6 +1141,7 @@ function applyEditsToSegment(blocks, seg, edits, isHtml) {
       for (const t of ins.get(i)) {
         patchStats.inserted++;
         out += withBlockTail('', t, isHtml);
+        diffLog.push({ id: i, op: 'insert_after', before: '', after: t });
       }
     }
   }
@@ -1154,6 +1232,122 @@ function fileBlocksFor(limit, files = pickedFiles, totalCap = 0, shrink = 0) {
       : '';
     return `=== קובץ: "${f.name}"${f.isHtml ? ' (HTML שחולץ מ-DOCX — המבנה המקורי נשמר)' : ''} ===\n${t.slice(0, eff)}${truncNote}\n=== סוף קובץ ===`;
   }).join('\n\n');
+}
+
+// ── Hierarchical calibration ──────────────────────────────────────────────
+// CAP_CALIBRATION divides the budget across every file, so with a lot of
+// heavy material each file arrives heavily truncated and the work plan — the
+// decision that shapes the entire document — is made on a fraction of the
+// content. When the material overflows, calibrate over groups of files that
+// each fit, then merge the partial readings into one plan.
+//
+// Returns [] when a single call suffices, so the common case pays nothing.
+function calibrationGroups() {
+  const textFiles = pickedFiles.filter(f => !f.isInline && (f.text || '').trim());
+  const total = textFiles.reduce((s, f) => s + f.text.length, 0);
+  if (total <= CAP_CALIBRATION || textFiles.length < 2) return [];
+
+  // At most 3 groups: beyond that the merge call sees too many partial
+  // readings to reconcile, and the cost stops being worth the fidelity.
+  const groupCount = Math.min(3, Math.ceil(total / CAP_CALIBRATION));
+  const target = total / groupCount;
+
+  const groups = [];
+  let cur = [], curSize = 0;
+  for (const f of textFiles) {
+    if (cur.length && curSize + f.text.length > target && groups.length < groupCount - 1) {
+      groups.push(cur); cur = []; curSize = 0;
+    }
+    cur.push(f); curSize += f.text.length;
+  }
+  if (cur.length) groups.push(cur);
+  return groups.length > 1 ? groups : [];
+}
+
+async function runHierarchicalCalibration(instruction, lvl, groups) {
+  calibrationCalls = groups.length + 1; // one reading per group, plus the merge
+  totalCallsPlanned = calibrationCalls;
+  const readings = [];
+
+  for (let i = 0; i < groups.length; i++) {
+    callsDone++;
+    updateRunning(
+      `🔍 כיול ${i + 1} מתוך ${groups.length} — קורא ${groups[i].length} קבצים (החומר גדול מדי לקריאה אחת)…`,
+      callsDone, totalCallsPlanned
+    );
+    const raw = await callWithFallback((useCache, shrink) => ({
+      prompt: buildGroupReadingPrompt(instruction, groups[i], i, groups.length, shrink),
+      noCache: true,
+    }), deps.getModelIdx());
+    readings.push({ files: groups[i].map(f => f.name), text: cleanModelOutput(raw) });
+  }
+
+  callsDone++;
+  updateRunning(`🧩 ממזג ${groups.length} קריאות לתוכנית עבודה אחת…`, callsDone, totalCallsPlanned);
+  return callWithFallback(() => ({
+    prompt: buildCalibrationMergePrompt(instruction, lvl, readings),
+    noCache: true,
+  }), deps.getModelIdx());
+}
+
+// Per-group pass: extract facts, not a plan. The plan needs the whole
+// picture, so asking each group for one would produce three plans to
+// reconcile instead of three readings to combine.
+function buildGroupReadingPrompt(instruction, files, idx, total, shrink = 0) {
+  return `אתה "כותב המכרזים" — מומחה לניסוח מסמכי מכרז (RFP) ורכש. החומר גדול מדי לקריאה אחת, ולכן הוא מחולק לקבוצות. זו קבוצה ${idx + 1} מתוך ${total}.
+
+${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}קבצי הקבוצה:
+${fileBlocksFor(200000, files, CAP_CALIBRATION, shrink)}
+
+---
+
+משימתך בקריאה זו: **לחלץ עובדות בלבד — לא לבנות תוכנית מכרז.** התוכנית תיבנה בהמשך על בסיס כל הקבוצות יחד.
+
+החזר טקסט מובנה וקצר (לא JSON) בסעיפים הבאים:
+1. **הצורך העסקי** — מה עולה מהקבצים האלה.
+2. **דרישות ונושאים** — רשימה תמציתית של הנושאים שחייבים להופיע במכרז לפי החומר הזה.
+3. **נתונים קשיחים** — היקפים, תקציבים, לוחות זמנים, כמויות משתמשים, מערכות קיימות.
+4. **תנאי סף ודרישות רגולציה** אם מוזכרים.
+5. **פערים** — מה חסר או לא ברור בחומר הזה.
+
+היה תמציתי — עד 400 מילים. אל תמציא מה שלא כתוב.`;
+}
+
+// Merge pass: sees only the distilled readings, never the raw files, so it
+// always fits regardless of how much material there was.
+function buildCalibrationMergePrompt(instruction, lvl, readings) {
+  const rangeText = lvl.min === lvl.max
+    ? `בדיוק ${lvl.max} קריאת ביצוע אחת — החזר סעיף workPlan אחד בלבד`
+    : `בין ${lvl.min} ל-${lvl.max} קריאות ביצוע — החזר ${lvl.min}–${lvl.max} סעיפי workPlan`;
+
+  return `אתה "כותב המכרזים" — מומחה לניסוח מסמכי מכרז (RFP) ורכש. עכשיו בשלב הכיול.
+
+החומר היה גדול מכדי להיקרא בבת אחת, ולכן נקרא ב-${readings.length} קבוצות. לפניך הקריאות:
+
+${readings.map((r, i) => `=== קריאה ${i + 1} (קבצים: ${r.files.join(', ')}) ===\n${r.text}`).join('\n\n')}
+
+---
+
+רמת העיבוד שנבחרה: "${lvl.label}" — ${rangeText}.
+${instruction ? `\nהנחיית המפעיל:\n"${instruction}"\n` : ''}
+משימתך: אחד את כל הקריאות לתוכנית עבודה אחת קוהרנטית. אם יש סתירות בין הקריאות — ציין אותן ב-questions.
+
+שים לב: כל הקריאות מתארות **מכרז אחד**. אל תיצור פרק נפרד לכל קריאה — ארגן את הפרקים לפי נושא.
+
+מצב העבודה כאן הוא תמיד "write" (כתיבת מכרז חדש), כי החומר פוצל לקריאות.
+
+ענה **אך ורק** ב-JSON תקני (ללא גושי קוד, ללא טקסט נלווה):
+{
+  "understanding": "תיאור קצר של הצורך והמשימה, המאחד את כל הקריאות",
+  "mode": "write",
+  "sourceFileName": "",
+  "tenderTitle": "כותרת מסמך המכרז",
+  "internalPrompt": "הנחיות כלליות — סגנון ודגשים",
+  "workPlan": [
+    { "section": "שם הפרק", "prompt": "מה לכתוב בפרק זה — פירוט מלא, כולל הנתונים הקשיחים הרלוונטיים מהקריאות" }
+  ],
+  "questions": ["שאלה 1", "שאלה 2"]
+}`;
 }
 
 function buildCalibrationPrompt(instruction, lvl, shrink = 0) {
@@ -1704,6 +1898,15 @@ function showPhaseReview() {
       </div>
     </div>` : ''}
 
+    <!-- Final consistency review -->
+    <label style="display:flex;align-items:flex-start;gap:.5rem;padding:.6rem .8rem;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;cursor:pointer;">
+      <input type="checkbox" id="tender-rv-audit" ${wantAudit ? 'checked' : ''} style="margin-top:.15rem;cursor:pointer;">
+      <span style="font-size:.82rem;color:#374151;line-height:1.5;">
+        <strong>בדיקת עקביות סופית</strong> <span style="color:#94a3b8;">(+קריאת API אחת)</span><br>
+        <span style="font-size:.78rem;color:#64748b;">בסיום, הסוכן יעבור על המסמך המורכב ויחזיר רשימת ליקויים — סתירות בין פרקים, חזרות, מספור שבור ושדות [להשלמה] שנשארו. רשימה בלבד, ללא שכתוב.</span>
+      </span>
+    </label>
+
     <!-- Writing principles -->
     <details style="border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
       <summary style="padding:.5rem .8rem;cursor:pointer;font-size:.82rem;font-weight:600;color:#374151;">📜 עקרונות כתיבה — הצג / ערוך</summary>
@@ -1734,6 +1937,9 @@ function showPhaseReview() {
 function readReviewEdits() {
   const internal = document.getElementById('tender-rv-internal');
   if (internal) calibration.internalPrompt = internal.value;
+
+  const audit = document.getElementById('tender-rv-audit');
+  if (audit) wantAudit = audit.checked;
 
   const principles = document.getElementById('tender-rv-principles');
   if (principles) {
@@ -1867,6 +2073,142 @@ function reviseWarnings() {
     </div>`;
 }
 
+// ── Single-chapter rewrite ────────────────────────────────────────────────
+// One weak chapter used to mean re-running everything, calibration included.
+// The calibration is still in memory, so a rewrite is one call that replaces
+// one entry in outputSections. An optional note lets the user say what was
+// wrong, which is usually more useful than a blind retry.
+window.tenderRewriteChapter = async function (idx) {
+  const plan = calibration?.workPlan || [];
+  const section = plan[idx];
+  if (!section || !outputSections[idx] || runMode === 'revise') return;
+
+  const note = prompt(
+    `כתיבה מחדש של הפרק "${section.section}".\n\n` +
+    'אפשר להוסיף הערת תיקון — מה היה חסר או שגוי (רשות):',
+    ''
+  );
+  if (note === null) return; // cancelled
+
+  phase = 'running';
+  totalCallsPlanned = callsDone + 1;
+  showRunning(`✍️ כותב מחדש את "${section.section}"…`, callsDone, totalCallsPlanned);
+
+  // Continuity from the chapters around this one, so the rewrite still fits
+  // the numbering and terminology of its neighbours.
+  chapterDigests = [];
+  outputSections.forEach((s, i) => {
+    if (i !== idx) recordChapterDigest(plan[i] || { section: s.title }, s.text);
+  });
+
+  const noteBlock = note.trim()
+    ? `\n\nהערת תיקון מהמשתמש על הגרסה הקודמת של הפרק — התייחס אליה כדרישה מחייבת:\n"${note.trim()}"\n`
+    : '';
+
+  try {
+    const result = await callWithFallback((useCache, shrink) => ({
+      prompt: (useCache
+        ? buildExecutionTaskPrompt(section, idx, plan.length)
+        : buildExecutionPrompt(lastInstruction, calibration, section, idx, plan.length, shrink)) + noteBlock,
+      inlineFile: useCache ? null : (pickedFiles.find(f => f.isInline) || null),
+      genCfg: { temperature: 0.55 },
+    }), deps.getModelIdx());
+    callsDone++;
+    outputSections[idx] = { title: section.section || `פרק ${idx + 1}`, text: result };
+  } catch (err) {
+    // The other chapters are untouched — return to the done screen rather
+    // than dropping the user into an error state over one failed rewrite.
+    phase = 'done';
+    showDone();
+    showModalError(`הכתיבה מחדש נכשלה: ${err.message || err}. שאר הפרקים לא נפגעו.`, true);
+    return;
+  }
+
+  // The audit described the previous text; re-running it is the user's call.
+  auditFindings = '';
+  dropTenderCache();
+  phase = 'done';
+  downloadTenderDoc();
+  showDone();
+};
+
+// ── Revise-mode diff ──────────────────────────────────────────────────────
+// The stats line said "12 blocks changed" and handed over a .doc. What
+// actually changed was only discoverable by opening Word and reading. The
+// data was there all along — original blocks and applied edits — it just was
+// not kept for display.
+const DIFF_PREVIEW_CHARS = 700;
+const DIFF_MAX_ENTRIES = 60;
+
+function diffHtml() {
+  if (runMode !== 'revise' || !diffLog.length) return '';
+
+  const strip = (s) => (s || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/⟦IMG\d+⟧/g, '[תמונה]')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const clip = (s) => {
+    const t = strip(s);
+    return t.length > DIFF_PREVIEW_CHARS ? t.slice(0, DIFF_PREVIEW_CHARS) + ' …' : t;
+  };
+
+  const LABEL = {
+    replace:  { text: 'שונה',   bg: '#eff6ff', bd: '#bfdbfe', fg: '#1e40af' },
+    insert_after: { text: 'נוסף',   bg: '#f0fdf4', bd: '#bbf7d0', fg: '#166534' },
+    delete:   { text: 'נמחק',   bg: '#fef2f2', bd: '#fecaca', fg: '#b91c1c' },
+    rejected: { text: 'נדחה — נשמר המקור', bg: '#fffbeb', bd: '#fde68a', fg: '#92400e' },
+  };
+
+  const shown = diffLog.slice(0, DIFF_MAX_ENTRIES);
+  const rows = shown.map(d => {
+    const L = LABEL[d.op] || LABEL.replace;
+    const before = clip(d.before);
+    const after  = clip(d.after);
+    return `
+      <div style="border:1px solid ${L.bd};border-radius:7px;background:${L.bg};padding:.5rem .65rem;">
+        <div style="font-size:.72rem;font-weight:700;color:${L.fg};margin-bottom:.3rem;">בלוק ${d.id} — ${L.text}</div>
+        ${before ? `<div style="font-size:.76rem;color:#7f1d1d;background:#fff;border-radius:5px;padding:.3rem .45rem;margin-bottom:.25rem;line-height:1.5;"><span style="opacity:.6;">לפני:</span> ${deps.escHtml(before)}</div>` : ''}
+        ${after  ? `<div style="font-size:.76rem;color:#14532d;background:#fff;border-radius:5px;padding:.3rem .45rem;line-height:1.5;"><span style="opacity:.6;">אחרי:</span> ${deps.escHtml(after)}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const more = diffLog.length > DIFF_MAX_ENTRIES
+    ? `<div style="font-size:.76rem;color:#94a3b8;padding:.3rem 0;">…ועוד ${diffLog.length - DIFF_MAX_ENTRIES} שינויים. הורד את המסמך כדי לראות את כולם.</div>`
+    : '';
+
+  return `
+    <details style="border:1px solid #e2e8f0;border-radius:9px;background:#fff;">
+      <summary style="padding:.55rem .85rem;cursor:pointer;font-size:.83rem;font-weight:600;color:#374151;">
+        🔀 הצג שינויים — ${diffLog.length} ${diffLog.length === 1 ? 'שינוי' : 'שינויים'} לפני/אחרי
+      </summary>
+      <div style="max-height:45vh;overflow-y:auto;padding:.6rem .85rem .8rem;border-top:1px solid #f1f5f9;display:flex;flex-direction:column;gap:.4rem;direction:rtl;">
+        ${rows}${more}
+      </div>
+    </details>`;
+}
+
+function chapterListHtml() {
+  if (runMode === 'revise' || !outputSections.length) return '';
+  return `
+    <details style="border:1px solid #e2e8f0;border-radius:9px;background:#fff;">
+      <summary style="padding:.55rem .85rem;cursor:pointer;font-size:.83rem;font-weight:600;color:#374151;">✍️ פרקים — כתוב מחדש פרק בודד</summary>
+      <div style="padding:.5rem .85rem .7rem;display:flex;flex-direction:column;gap:.35rem;border-top:1px solid #f1f5f9;">
+        ${outputSections.map((s, i) => `
+          <div style="display:flex;align-items:center;gap:.5rem;font-size:.81rem;color:#475569;">
+            <span style="color:#94a3b8;font-weight:700;min-width:1.2rem;">${i + 1}</span>
+            <span style="flex:1;">${deps.escHtml(s.title)}</span>
+            <span style="color:#94a3b8;font-size:.75rem;">${Math.round((s.text || '').length / 1000)}K</span>
+            <button onclick="window.tenderRewriteChapter(${i})"
+              style="padding:.18rem .55rem;border:1px solid #c8d0e0;background:#fff;border-radius:6px;cursor:pointer;font-size:.75rem;font-family:Heebo,sans-serif;color:#0891b2;font-weight:600;">
+              ↻ כתוב מחדש
+            </button>
+          </div>`).join('')}
+      </div>
+    </details>`;
+}
+
 // Rough per-1M-token rates, USD. These are the least reliable numbers in the
 // file — they come from third-party aggregators, not Google's pricing page
 // (see TENDER_WRITER_IMPROVEMENT_PLAN.md appendix B), so the figure is
@@ -1928,12 +2270,22 @@ function showDone() {
       ${statsLine}
       ${usageLine()}
     </div>
+    ${diffHtml()}
+    ${chapterListHtml()}
     <details style="border:1px solid #e2e8f0;border-radius:9px;background:#fff;">
       <summary style="padding:.55rem .85rem;cursor:pointer;font-size:.83rem;font-weight:600;color:#374151;">👁 תצוגה מקדימה — קרא בלי לפתוח את Word</summary>
       <div style="max-height:45vh;overflow-y:auto;padding:.8rem 1rem;border-top:1px solid #f1f5f9;direction:rtl;font-size:.82rem;line-height:1.65;color:#1e293b;">
         ${previewHtml()}
       </div>
     </details>
+    ${auditFindings ? `
+    <details open style="border:1px solid #fde68a;border-radius:9px;background:#fffbeb;">
+      <summary style="padding:.55rem .85rem;cursor:pointer;font-size:.83rem;font-weight:700;color:#92400e;">🔎 ליקויים שאותרו בבדיקת העקביות</summary>
+      <div style="padding:.5rem .95rem .8rem;font-size:.81rem;color:#92400e;line-height:1.65;white-space:pre-wrap;">${deps.escHtml(auditFindings)}</div>
+    </details>` : (wantAudit ? `
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:.6rem .9rem;font-size:.81rem;color:#166534;">
+      🔎 בדיקת העקביות לא מצאה ליקויים ממשיים.
+    </div>` : '')}
     ${reviseWarnings()}
     ${calibration?._parseFailed ? `
     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.75rem 1rem;font-size:.82rem;color:#92400e;line-height:1.55;">

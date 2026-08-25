@@ -116,12 +116,30 @@ Spec King's own single-shot "שאלות הבהרה" mode (`spec-king/clarificati
 
 Triggered by the "עבוד על מכרז" button on the tender-writer empty state (`modals/tender-writer-modal.js`).
 
+**Run shape:** calibration → **review gate** → execution → optional consistency audit → assembly.
+The review gate (`showPhaseReview`) is the one place the user can steer the run: it exposes the
+chapter plan (add/rename/reorder/delete), the internal style brief, the revise-mode source file,
+the clarification questions (answered *before* writing, injected as binding facts) and the
+editable `WRITING_PRINCIPLES`. Nothing above it costs an execution call, so corrections are free.
+
+When the material exceeds `CAP_CALIBRATION`, calibration splits into up to 3 group readings plus a
+merge call (`calibrationGroups` / `runHierarchicalCalibration`), so the work plan is built on all
+the material rather than a truncated slice. `calibrationCalls` tracks the real cost — anything
+computing `totalCallsPlanned` must add it rather than assume 1.
+
 1. User uploads background files (DOCX/DOC/PDF/TXT/MD/XLS/XLSX/images, up to 20) and/or writes a free-text instruction; either one alone is enough to enable the run button. DOCX is read via `mammoth.convertToHtml` (structure-preserving — headings, numbering, tables), falling back to raw text. Embedded images (which mammoth inlines as base64 data URIs — a 45K-word tender with scans can balloon to tens of MB of HTML) are extracted at read time into `tenderImages` and replaced with `⟦IMG<n>⟧` placeholders, then swapped back at document assembly — the model never sees the base64 and the images survive end-to-end (in markdown output leaked placeholders are stripped instead, since there's no `src` attribute to restore into)
 2. User picks a **processing level**: in write mode it bounds the number of execution calls (נמוכה = exactly 1, רגילה = 2–3, גבוהה = 4–6, אוטומטית = model decides within 1–6); in revise mode it sets the patch-segment size instead (350K/250K/120K/250K chars per call — higher level = smaller segments = more calls; `chunkChars` sizes are used only by the legacy fallback)
 3. **Call 1 — Calibration:** returns JSON `{ understanding, mode: 'write'|'revise', sourceFileName, tenderTitle, internalPrompt, workPlan, questions }`. The model picks `revise` when the materials contain an existing tender to update per change instructions; in that case `internalPrompt` is a precise numbered list of the requested changes
 4. **Write mode (calls 2…N):** one call per tender chapter (background & need, functional/technical requirements, threshold conditions, weighted evaluation criteria, SLA/KPIs, contractual terms); the work plan is clamped client-side to the level bounds (overflow sections merged, never dropped); missing facts rendered as `[להשלמה: ___]` placeholders. Execution calls see up to 120K chars per file. With 2+ chapters and ≥20K chars of shared material, the shared context (instruction + calibration + raw materials + inline files) is uploaded once to an **explicit Gemini context cache** (`cachedContents`, 30-min TTL, deleted after the run) and each chapter call sends only its section task referencing the cache — repeated input is billed at the discounted cached rate
 5. **Revise mode (calls 2…N) — block-addressed patching:** the source tender is split losslessly into small ID-tagged blocks (~1.2K chars, at closing HTML block tags / blank lines — `blocks.join('') === source`); blocks are sent in large segments (per the processing level) annotated as `⟦B<n>⟧`, and the model returns **only a JSON edit list** `[{ id, op: 'replace'|'delete'|'insert_after', text }]` for blocks the requested changes actually touch. Assembly is programmatic: unmentioned blocks are copied byte-for-byte from the source, so untouched content structurally cannot be summarized or lost, and output tokens are paid only for real changes (a few-page change in a 300-page tender no longer rewrites the document). Requires the source tender as extractable text (DOCX/TXT/MD — not PDF, which is sent inline and can't be split; falls back to write mode). A malformed-JSON response is retried once with a stern format reminder; if still invalid, that segment only falls back to the **legacy full-rewrite path** (chunk-by-chunk echo with the 50%-shrink anti-summarization safety net). The change instructions + change files are context-cached when there are 2+ segments and they exceed the cache minimum. The done screen reports changed/inserted/deleted block counts vs. total
-6. Output assembled into a Word-compatible RTL HTML document and downloaded as `.doc` — in revise mode segments are reassembled as-is (no metadata header) to preserve the original structure; clarification questions for the ordering party shown in the done screen
+6b. **Recovery and inspection.** A mid-run failure keeps `outputSections` and offers a partial
+download plus `tenderResume()` (unwritten chapters only, no second calibration). The done screen
+carries an in-modal preview, `.md` export, a per-chapter `tenderRewriteChapter()` (one call,
+optional correction note), and in revise mode a before/after `diffLog` view. The optional
+consistency audit returns a **findings list, never a rewrite** — rewriting a whole document is the
+exact scenario where the model summarizes and loses content.
+
+7. Output assembled into a Word-compatible RTL HTML document and downloaded as `.doc` — in revise mode segments are reassembled as-is (no metadata header) to preserve the original structure; clarification questions for the ordering party shown in the done screen
 
 An explicit context cache is bound to one exact model — a quota fallback that switches models drops the cache and recreates it on the new model (`ensureCacheFor`); cache-related call errors retry once without the cache. `agent-chat.js: callGeminiForSpec` accepts `opts.cachedContent` (a `cachedContents/…` name) and attaches it to the request and its auto-continuations.
 

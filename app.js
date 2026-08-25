@@ -1,7 +1,10 @@
 import { getSectionPrompt } from './prompt.js';
 import { CLAUDE_DESKTOP_PROMPT } from './claude-prompt.js';
+import { getModelChain, thinkingCfg } from './models.js';
 
-const MODEL_CHAIN     = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
+// Salesforce Killer keeps its own API key (gemini_sf_api_key) but shares the
+// app-wide engine choice, so the chain is read from the registry.
+const MODEL_CHAIN     = getModelChain();
 const MAX_OUTPUT_TOKENS = 65000;
 const TOTAL_CHUNKS    = 3;
 
@@ -435,7 +438,7 @@ async function callGemini(chunkNumber) {
   const prompt = getSectionPrompt(fsdText, chunkNumber, deployedState, inFlightState);
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+    generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, ...thinkingCfg() },
   };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[modelIdx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
 

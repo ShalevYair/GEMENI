@@ -16,9 +16,15 @@ import { initBrieferModal }    from './modals/briefer-modal.js';
 import { initShragaModal }     from './modals/shraga-modal.js';
 import { initMaturityCheckerModal } from './modals/maturity-checker-modal.js';
 import { initTenderWriterModal } from './modals/tender-writer-modal.js';
+import {
+  ENGINES, getEngine, setEngine, getModelChain,
+  thinkingCfg, DEFAULT_THINKING_LEVEL, JSON_THINKING_LEVEL,
+  isThinkingFieldError, markThinkingUnsupported,
+  isBillingRequiredError, isUnknownModelError,
+  fetchAvailableModels, pruneChain,
+} from './models.js';
 
 const STORAGE_KEY       = 'gemini_api_key';
-const MODEL_CHAIN       = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const MAX_FILE_MB       = 10;
 const MAX_OUTPUT_TOKENS = 65000;
 const CHUNK_SIZE        = 50000;  // chars per input chunk for large text files
@@ -34,6 +40,19 @@ let typingCounter   = 0;
 let pendingFile     = null;
 let natContext      = null; // loaded Natural files awaiting first chat message
 let modelIdx        = 0; // current position in MODEL_CHAIN
+
+// Mutated in place rather than reassigned: modals hold a reference to this
+// array through deps.MODEL_CHAIN, so swapping engines has to keep the same
+// array identity or their fallback logic would read a stale chain.
+const MODEL_CHAIN = [...getModelChain()];
+
+function refreshModelChain() {
+  const next = getModelChain();
+  MODEL_CHAIN.length = 0;
+  MODEL_CHAIN.push(...next);
+  modelIdx = 0;
+  setHeaderActions(true);
+}
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
 const agentId = new URLSearchParams(location.search).get('id');
@@ -147,6 +166,7 @@ window.changeApiKey = function () {
 function showChatReady() {
   document.getElementById('api-banner').hidden = true;
   setHeaderActions(true);
+  pruneChainToAvailable();
 }
 
 function setHeaderActions(show) {
@@ -154,10 +174,50 @@ function setHeaderActions(show) {
   if (!slot) return;
   if (!show) { slot.innerHTML = ''; return; }
   const modelLabel = MODEL_CHAIN[modelIdx] || MODEL_CHAIN[0];
+  const engine = getEngine();
   slot.innerHTML = `
+    <select class="site-header-engine" id="engine-select" title="מנוע — חל על כל הסוכנים"
+      onchange="window.changeEngine(this.value)">
+      ${Object.values(ENGINES).map(e =>
+        `<option value="${e.id}"${e.id === engine ? ' selected' : ''}>${e.icon} ${e.label}</option>`
+      ).join('')}
+    </select>
     <span class="site-header-model-tag" title="מודל פעיל">${modelLabel}</span>
     <button class="site-header-btn" onclick="clearChat()" title="נקה שיחה">🗑</button>
     <button class="site-header-btn" onclick="changeApiKey()" title="החלף מפתח API">🔑</button>`;
+}
+
+// The engine choice is global — every agent reads it on its next call — so a
+// switch mid-conversation is worth confirming rather than silently repricing
+// the rest of the session.
+window.changeEngine = function (id) {
+  if (!ENGINES[id] || id === getEngine()) return;
+  if (id === 'pro' && !confirm(
+    'מצב "מדויק" (Pro) איטי ויקר משמעותית, ודורש חשבון Google עם חיוב מופעל.\n' +
+    'הבחירה חלה על כל הסוכנים באתר.\n\nלהחליף?'
+  )) {
+    const sel = document.getElementById('engine-select');
+    if (sel) sel.value = getEngine();
+    return;
+  }
+  setEngine(id);
+  refreshModelChain();
+  appendMessage('error', `🔀 המנוע הוחלף ל-${ENGINES[id].icon} ${ENGINES[id].label} — ${MODEL_CHAIN[0]}`);
+};
+
+// One listing call per key per day tells us which chain entries this key can
+// actually reach, so a model retired upstream is dropped from the fallback
+// chain instead of surfacing as a mid-run failure.
+async function pruneChainToAvailable() {
+  if (!apiKey) return;
+  const ids = await fetchAvailableModels(apiKey);
+  if (!ids) return;
+  const pruned = pruneChain(getModelChain(), ids);
+  if (pruned.length === MODEL_CHAIN.length && pruned.every((m, i) => m === MODEL_CHAIN[i])) return;
+  MODEL_CHAIN.length = 0;
+  MODEL_CHAIN.push(...pruned);
+  if (modelIdx >= MODEL_CHAIN.length) modelIdx = 0;
+  setHeaderActions(true);
 }
 
 // ── Empty state / suggestions ─────────────────────────────────────────────
@@ -429,7 +489,7 @@ async function callGemini(userText, file) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: agent.systemPrompt }] },
       contents,
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2, ...thinkingCfg() },
     }),
   });
 
@@ -489,7 +549,7 @@ async function callGeminiOnce(promptText) {
     body: JSON.stringify({
       system_instruction: { parts: [{ text: agent.systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: promptText }] }],
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2, ...thinkingCfg() },
     }),
   });
   if (!res.ok) {
@@ -561,12 +621,33 @@ function isQuotaExceeded(msg) {
 
 function handleError(err) {
   const msg = err.message || '';
-  if (/API_KEY|401|403|INVALID|api key/i.test(msg)) {
+  // Pro is not offered on the free tier, so this failure means "no billing",
+  // not "out of quota" — falling through to the quota path would silently
+  // demote the run to Flash while the header still advertised Pro.
+  if (isBillingRequiredError(msg) && getEngine() === 'pro') {
+    appendMessage('error',
+      `⚠️ מצב "מדויק" (Pro) אינו זמין למפתח הזה — הוא דורש חשבון Google עם חיוב מופעל.\n` +
+      `אפשר לחזור למצב ⚡ מהיר בבורר שבראש העמוד, או להפעיל חיוב:\n` +
+      `👉 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>`
+    );
+  } else if (isUnknownModelError(msg)) {
+    // A retired model ID: re-probe the listing endpoint so the stale entry is
+    // dropped from the chain instead of failing again on the next message.
+    appendMessage('error',
+      `⚠️ המודל ${MODEL_CHAIN[modelIdx]} אינו זמין עוד. מרענן את רשימת המודלים…`
+    );
+    fetchAvailableModels(apiKey, { force: true }).then(() => pruneChainToAvailable());
+  } else if (/API_KEY|401|403|INVALID|api key/i.test(msg)) {
     apiKey = '';
     localStorage.removeItem(STORAGE_KEY);
     document.getElementById('api-banner').hidden = false;
     setHeaderActions(false);
-    appendMessage('error', 'מפתח ה-API אינו תקף. אנא הזן מפתח חדש.');
+    appendMessage('error',
+      'מפתח ה-API אינו תקף. אנא הזן מפתח חדש.\n' +
+      'שים לב: Google מפסיקה בהדרגה את התמיכה במפתחות מהדור הישן — ' +
+      'אם המפתח עבד בעבר, ייתכן שצריך ליצור חדש ב-' +
+      '<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">AI Studio</a>.'
+    );
   } else if (isQuotaExceeded(msg)) {
     handleQuotaError();
   } else if (/429|overload|high demand|503/i.test(msg)) {
@@ -786,27 +867,52 @@ function escHtml(str) {
 
 
 async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null, opts = {}) {
-  const makeUrl = (idx) => `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_CHAIN[idx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const genConfig = { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2, ...(opts.genCfg || {}) };
+  const makeUrl = (idx) => `https://generativelanguage.googleapis.com/v1beta/models/${opts.model || MODEL_CHAIN[idx]}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const maxCont   = opts.maxContinuations ?? 3;
   // opts.cachedContent — name of an explicit context cache ("cachedContents/…")
   // whose contents are prepended server-side; must match the model in the URL
   const cacheRef  = opts.cachedContent ? { cachedContent: opts.cachedContent } : {};
+  // A system instruction baked into a cache at creation time is already in
+  // effect server-side; sending it again alongside cachedContent is rejected.
+  const sysText   = opts.systemPrompt ?? agent.systemPrompt;
+  const sysRef    = (sysText && !opts.cachedContent)
+    ? { system_instruction: { parts: [{ text: sysText }] } }
+    : {};
   const userParts = [{ text: promptText }];
   if (inlineFile) userParts.push({ inlineData: { mimeType: inlineFile.mimeType, data: inlineFile.base64 } });
 
-  const res = await fetch(makeUrl(mIdx), {
+  // Reasoning budget is billed as output and counts against maxOutputTokens,
+  // so it rides in generationConfig alongside the cap it consumes.
+  const buildCfg = () => ({
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    temperature: 0.2,
+    ...thinkingCfg(opts.thinkingLevel ?? DEFAULT_THINKING_LEVEL),
+    ...(opts.genCfg || {}),
+  });
+  let genConfig = buildCfg();
+
+  const post = (body) => fetch(makeUrl(mIdx), {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...cacheRef,
-      contents: [{ role: 'user', parts: userParts }],
-      generationConfig: genConfig,
-    }),
+    body: JSON.stringify(body),
   });
+
+  let res = await post({ ...sysRef, ...cacheRef, contents: [{ role: 'user', parts: userParts }], generationConfig: genConfig });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+    const msg = err?.error?.message ?? `HTTP ${res.status}`;
+    // The thinkingLevel request shape is unverified against primary docs, so
+    // a rejection naming that field retires it for the session and retries
+    // rather than failing the run over an optional tuning parameter.
+    if (isThinkingFieldError(msg)) {
+      markThinkingUnsupported();
+      genConfig = buildCfg();
+      res = await post({ ...sysRef, ...cacheRef, contents: [{ role: 'user', parts: userParts }], generationConfig: genConfig });
+    }
+    if (!res.ok) {
+      const err2 = await res.json().catch(() => ({}));
+      throw new Error(err2?.error?.message ?? msg);
+    }
   }
   const data      = await res.json();
   const candidate = data.candidates[0];
@@ -819,18 +925,15 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null, o
     while (truncated && contNum < maxCont) {
       contNum++;
       appendMessage('error', `⚠️ חלק נחתך — ממשיך אוטומטית (${contNum}/${maxCont})…`);
-      const contRes = await fetch(makeUrl(mIdx), {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...cacheRef,
-          contents: [
-            { role: 'user',  parts: userParts },
-            { role: 'model', parts: [{ text }] },
-            { role: 'user',  parts: [{ text: 'המשך ישירות מהיכן שנעצרת — ללא חזרה על מה שכבר נכתב.' }] },
-          ],
-          generationConfig: genConfig,
-        }),
+      const contRes = await post({
+        ...sysRef,
+        ...cacheRef,
+        contents: [
+          { role: 'user',  parts: userParts },
+          { role: 'model', parts: [{ text }] },
+          { role: 'user',  parts: [{ text: 'המשך ישירות מהיכן שנעצרת — ללא חזרה על מה שכבר נכתב.' }] },
+        ],
+        generationConfig: genConfig,
       });
       if (!contRes.ok) break;
       const contData = await contRes.json();
@@ -852,8 +955,13 @@ async function callGeminiForBacklog(promptText, mIdx) {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      system_instruction: { parts: [{ text: agent.systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: promptText }] }],
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS, temperature: 0.2 },
+      generationConfig: {
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        temperature: 0.2,
+        ...thinkingCfg(),
+      },
     }),
   });
   if (!res.ok) {

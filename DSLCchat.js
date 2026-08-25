@@ -234,7 +234,9 @@ async function callGeminiChat(userMessage) {
     contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
     const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiApiKey}`,
+        // Model ID: keep in sync with FLASH_CHAIN[0] in models.js — this file is a
+        // classic script (no ES module import available on its page).
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -212,9 +212,33 @@ sendChunked(userText, file, typingId)
 
 ## Gemini Model Fallback Chain
 
+`models.js` is the single source of truth for model IDs, the engine choice and the
+thinking level. Nothing else should hardcode a model ID — the three classic-script
+mind-map chats (`DSLCchat.js`, `natural-mindmap-chat.js`, `summarizer-mindmap-chat.js`)
+are the exception, because their pages load them as non-module scripts; each carries a
+"keep in sync with models.js" comment.
+
+**Engine choice is global**, not per-agent: a `<select>` in the shared header writes
+`gemini-engine` to localStorage and every agent picks it up on its next call.
+
 ```
-gemini-3.5-flash  →  gemini-2.5-flash  →  gemini-2.5-flash-lite
+⚡ מהיר (default):  gemini-3.6-flash  →  gemini-3.5-flash  →  gemini-3.1-flash-lite
+🎯 מדויק (opt-in):  gemini-3.1-pro-preview  →  gemini-3.6-flash  →  gemini-3.5-flash
 ```
+
+- `gemini-2.5-*` was removed from the chain — deprecated, shutdown 2026-10-16.
+- Pro is preview-only and **not available on the free tier**; its chain falls back to
+  Flash so a user without billing still completes the run. `isBillingRequiredError()`
+  distinguishes that failure from a quota error so it is surfaced, not swallowed.
+- `fetchAvailableModels()` probes `GET /v1beta/models` once per key per day and
+  `pruneChain()` drops entries the key can't reach — a model retired upstream leaves
+  the chain instead of failing mid-run.
+
+**Thinking level:** `thinkingCfg()` emits `generationConfig.thinkingConfig.thinkingLevel`,
+default `HIGH` (`MEDIUM` for JSON-only calls). The request shape is unverified against
+primary docs, so `isThinkingFieldError()` + `markThinkingUnsupported()` retire the field
+for the session and retry once if the API rejects it — an optional tuning parameter must
+never fail a run.
 
 - Quota errors → increment `modelIdx`, retry same request, show "Switching to X..." message
 - 429 overload → 15-second countdown, retry, "Retry now" button

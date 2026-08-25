@@ -1,6 +1,6 @@
 import { GeneratedFile } from '@/types/salesforce';
 
-const GEMINI_MODEL = 'gemini-3.5-flash';
+const GEMINI_MODEL = 'gemini-3.6-flash';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 export const DEPLOY_STEPS = [

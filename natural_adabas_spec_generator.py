@@ -46,7 +46,7 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
 
-GEMINI_MODEL  = "gemini-3.5-flash"
+GEMINI_MODEL  = "gemini-3.6-flash"
 GEMINI_BASE   = "https://generativelanguage.googleapis.com/v1beta/models"
 MAX_TOKENS    = 65000
 TEMPERATURE   = 0.1

@@ -503,6 +503,7 @@ window.runTenderWriter = async function () {
   cachePayload = null;
   cacheEverUsed = false;
   chapterDigests = [];
+  deps.resetUsage?.();
 
   showRunning('🔍 קריאה 1 — כותב המכרזים קורא את החומרים ובונה תוכנית עבודה…', 1, 2);
 
@@ -1441,6 +1442,53 @@ window.tenderRedownload = function () {
   downloadTenderDoc();
 };
 
+// The markdown behind the .doc. Useful for pasting into another tool, and for
+// diffing two runs — neither of which the Word file makes easy.
+window.tenderDownloadMd = function () {
+  if (!outputSections.length) return;
+  const md = runMode === 'revise'
+    ? outputSections.map(s => s.text).join('\n\n')
+    : assembleTenderMarkdown();
+  const ts = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  const blob = new Blob([md.replace(/⟦IMG\d+⟧/g, '')], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tender_${ts}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+window.tenderCopy = async function () {
+  if (!outputSections.length) return;
+  const md = runMode === 'revise'
+    ? outputSections.map(s => s.text).join('\n\n')
+    : assembleTenderMarkdown();
+  try {
+    await navigator.clipboard.writeText(md.replace(/⟦IMG\d+⟧/g, ''));
+    showModalError('הועתק ללוח ✓');
+  } catch {
+    showModalError('ההעתקה נחסמה על ידי הדפדפן — השתמש בהורדת .md');
+  }
+};
+
+// Reading the result should not require opening Word. In revise mode the
+// sections are already HTML; in write mode they are markdown.
+function previewHtml() {
+  if (runMode === 'revise' && outputSections[0]?.isHtml) {
+    return restoreInlineImages(outputSections.map(s => s.text).join('\n'));
+  }
+  const md = runMode === 'revise'
+    ? outputSections.map(s => s.text).join('\n\n')
+    : assembleTenderMarkdown();
+  const clean = md.replace(/⟦IMG\d+⟧/g, '');
+  if (window.marked) {
+    try { return window.marked.parse(clean, { breaks: true, gfm: true }); }
+    catch { /* fall through to escaped plain text */ }
+  }
+  return deps.escHtml(clean).replace(/\n/g, '<br>');
+}
+
 // ── Explicit context caching (Gemini cachedContents API) ──────────────────
 // An explicit cache holds the run's shared context (raw materials / change
 // instructions) server-side, so repeated calls pay the discounted cached-token
@@ -1759,6 +1807,7 @@ function openQuestions() {
 
 // ── Running UI ─────────────────────────────────────────────────────────────
 function showRunning(msg, current, total) {
+  lastPct = 0;
   const pct = total > 1 ? Math.round((current / total) * 100) : 10;
   setBody(`
     <div style="display:flex;flex-direction:column;gap:.9rem;padding:.3rem 0;">
@@ -1778,15 +1827,20 @@ function showRunning(msg, current, total) {
   setFooter('');
 }
 
+// totalCallsPlanned grows mid-run on every retry and bisection, which made
+// the bar jump backwards — it reads as a fault. The percentage is held
+// monotonic and the total is labelled as the estimate it actually is.
+let lastPct = 0;
+
 function updateRunning(msg, current, total) {
   const el = document.getElementById('tender-running-msg');
   if (el) el.textContent = msg;
   if (current && total) {
     const fill = document.getElementById('tender-prog-fill');
     const label = document.getElementById('tender-prog-label');
-    const pct = Math.round((current / total) * 100);
-    if (fill) fill.style.width = pct + '%';
-    if (label) label.textContent = `קריאה ${current} מתוך ${total}`;
+    lastPct = Math.min(99, Math.max(lastPct, Math.round((current / total) * 100)));
+    if (fill) fill.style.width = lastPct + '%';
+    if (label) label.textContent = `קריאה ${current} מתוך ~${total}`;
   }
 }
 
@@ -1813,6 +1867,36 @@ function reviseWarnings() {
     </div>`;
 }
 
+// Rough per-1M-token rates, USD. These are the least reliable numbers in the
+// file — they come from third-party aggregators, not Google's pricing page
+// (see TENDER_WRITER_IMPROVEMENT_PLAN.md appendix B), so the figure is
+// labelled an estimate in the UI. Update the date when you verify them.
+const PRICING = {
+  updated: '2026-08',
+  flash:   { in: 0.75, out: 3.75, cached: 0.075 },
+  pro:     { in: 2.00, out: 12.00, cached: 0.20 },
+};
+
+function usageLine() {
+  const u = deps.getUsage?.();
+  if (!u || !u.calls) return '';
+  const rate = PRICING[/pro/i.test(MODEL_FOR_PRICING()) ? 'pro' : 'flash'];
+  const fresh = Math.max(0, u.prompt - u.cached);
+  const cost = (fresh / 1e6) * rate.in + (u.cached / 1e6) * rate.cached + (u.output / 1e6) * rate.out;
+  const fmt = n => n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
+
+  return `<div style="margin-top:.25rem;font-size:.8rem;color:#6b7280;">
+    טוקנים: <strong>${fmt(u.prompt)}</strong> קלט${u.cached ? ` (מתוכם <strong>${fmt(u.cached)}</strong> מהמטמון 💾)` : ''} ·
+    <strong>${fmt(u.output)}</strong> פלט${u.thoughts ? ` (מתוכם <strong>${fmt(u.thoughts)}</strong> חשיבה)` : ''} |
+    עלות משוערת: <strong>$${cost.toFixed(3)}</strong>
+    <span style="font-size:.72rem;opacity:.75;">(אומדן לפי מחירון ${PRICING.updated} — לא מאומת מול Google)</span>
+  </div>`;
+}
+
+function MODEL_FOR_PRICING() {
+  return deps.MODEL_CHAIN?.[deps.getModelIdx?.() || 0] || '';
+}
+
 function showDone() {
   const lvl = LEVELS[selectedLevel] || LEVELS.auto;
   const outChars = outputSections.reduce((s, x) => s + (x.text || '').length, 0);
@@ -1831,10 +1915,25 @@ function showDone() {
           style="margin-right:.3rem;font-size:.75rem;padding:.15rem .5rem;background:#dcfce7;border:1px solid #86efac;border-radius:5px;cursor:pointer;color:#166534;font-family:Heebo,sans-serif;">
           ⬇ הורד שוב
         </button>
+        <button onclick="window.tenderDownloadMd()"
+          style="font-size:.75rem;padding:.15rem .5rem;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;cursor:pointer;color:#475569;font-family:Heebo,sans-serif;">
+          ⬇ .md
+        </button>
+        <button onclick="window.tenderCopy()"
+          style="font-size:.75rem;padding:.15rem .5rem;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:5px;cursor:pointer;color:#475569;font-family:Heebo,sans-serif;">
+          📋 העתק
+        </button>
       </div>
       <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280;">מצב: <strong>${runMode === 'revise' ? 'עדכון מכרז קיים' : 'כתיבת מכרז חדש'}</strong> | רמת עיבוד: <strong>${lvl.label}</strong> | קבצי רקע: <strong>${pickedFiles.length}</strong> | קריאות API: <strong>${totalCallsPlanned}</strong></div>
       ${statsLine}
+      ${usageLine()}
     </div>
+    <details style="border:1px solid #e2e8f0;border-radius:9px;background:#fff;">
+      <summary style="padding:.55rem .85rem;cursor:pointer;font-size:.83rem;font-weight:600;color:#374151;">👁 תצוגה מקדימה — קרא בלי לפתוח את Word</summary>
+      <div style="max-height:45vh;overflow-y:auto;padding:.8rem 1rem;border-top:1px solid #f1f5f9;direction:rtl;font-size:.82rem;line-height:1.65;color:#1e293b;">
+        ${previewHtml()}
+      </div>
+    </details>
     ${reviseWarnings()}
     ${calibration?._parseFailed ? `
     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.75rem 1rem;font-size:.82rem;color:#92400e;line-height:1.55;">

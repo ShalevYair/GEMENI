@@ -79,6 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setModelIdx:  (v) => { modelIdx = v; setHeaderActions(true); },
     getIsLoading: () => isLoading,
     setNatContext: (files) => { natContext = files; showNatContextBanner(files); },
+    resetUsage,
+    getUsage,
     MODEL_CHAIN,
     MAX_OUTPUT_TOKENS,
   });
@@ -863,6 +865,29 @@ function escHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
+// ── Token usage accounting ────────────────────────────────────────────────
+// Every response carries usageMetadata and it was being thrown away, so a run
+// that can cost real money reported its size in characters. Callers reset the
+// counter at the start of a run and read it at the end.
+let usage = { prompt: 0, output: 0, cached: 0, thoughts: 0, calls: 0 };
+
+function recordUsage(u) {
+  if (!u) return;
+  usage.prompt   += u.promptTokenCount        || 0;
+  usage.output   += u.candidatesTokenCount    || 0;
+  usage.cached   += u.cachedContentTokenCount || 0;
+  usage.thoughts += u.thoughtsTokenCount      || 0;
+  usage.calls    += 1;
+}
+
+function resetUsage() {
+  usage = { prompt: 0, output: 0, cached: 0, thoughts: 0, calls: 0 };
+}
+
+function getUsage() {
+  return { ...usage };
+}
+
 // ── Gemini helpers used by modal files (via deps) ─────────────────────────
 
 
@@ -915,6 +940,7 @@ async function callGeminiForArchitectSpec(promptText, mIdx, inlineFile = null, o
     }
   }
   const data      = await res.json();
+  recordUsage(data.usageMetadata);
   const candidate = data.candidates[0];
   let text = candidate.content.parts.map(p => p.text).join('');
 

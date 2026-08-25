@@ -21,6 +21,9 @@ export const deps = {
   getModelIdx: null,
   setModelIdx: null,
   getIsLoading: null,
+  // Token accounting — reset at the start of a run, read at the end
+  resetUsage: null,
+  getUsage:   null,
   // Constants
   MODEL_CHAIN:       null,
   MAX_OUTPUT_TOKENS: null,

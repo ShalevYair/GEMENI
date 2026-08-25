@@ -503,12 +503,40 @@ window.runTenderWriter = async function () {
     const calibRaw = await callWithFallback((useCache, shrink) => ({ prompt: buildCalibrationPrompt(instruction, lvl, shrink) }), mIdx);
     callsDone = 1;
     calibJson = parseCalibration(calibRaw);
+
+    // Malformed JSON leaves us with a degraded single-chapter plan. One
+    // retry with a stern format reminder is far cheaper than letting the
+    // whole run proceed on it.
+    if (calibJson._parseFailed) {
+      totalCallsPlanned++;
+      updateRunning('🔁 תשובת הכיול לא הייתה JSON תקין — מנסה שוב…');
+      const retryRaw = await callWithFallback((useCache, shrink) => ({
+        prompt: buildCalibrationPrompt(instruction, lvl, shrink) +
+          '\n\nתזכורת קריטית: בניסיון הקודם הפלט לא היה JSON תקין. החזר אך ורק אובייקט JSON יחיד לפי הסכימה שלמעלה — ללא גושי קוד וללא שום טקסט נוסף.',
+      }), deps.getModelIdx());
+      callsDone++;
+      const retryJson = parseCalibration(retryRaw);
+      if (!retryJson._parseFailed) calibJson = retryJson;
+    }
   } catch (err) {
     phase = 'error';
     showError(err.message || String(err)); return;
   }
 
   calibration = calibJson;
+
+  // Still degraded after the retry — this is the user's call, not ours. A
+  // silent run here produces a document they have no reason to distrust.
+  if (calibration._parseFailed && !confirm(
+    'שלב הכיול נכשל פעמיים — המודל לא החזיר תוכנית עבודה תקינה.\n\n' +
+    'אפשר להמשיך, אבל המכרז ייכתב בקריאה אחת גנרית ואיכותו תהיה נמוכה משמעותית.\n' +
+    'לרוב עדיף לבטל, לחדד את ההנחיה ולנסות שוב.\n\n' +
+    'להמשיך בכל זאת?'
+  )) {
+    phase = 'pick';
+    showPhasePick();
+    return;
+  }
 
   // ── Mode selection: revise an existing tender vs. write a new one ─────
   let sourceFile = null;
@@ -534,7 +562,50 @@ window.runTenderWriter = async function () {
   } catch (err) {
     dropTenderCache();
     phase = 'error';
-    showError(err.message || String(err)); return;
+    // Anything already written is real work the user paid for — offer it
+    // rather than discarding the run.
+    showError(err.message || String(err), { partial: true });
+    return;
+  }
+
+  dropTenderCache();
+  phase = 'done';
+  downloadTenderDoc();
+  showDone();
+};
+
+// Resume a write-mode run that died partway: the calibration is still in
+// memory, so only the unwritten chapters are re-requested. Charging the user
+// for a second calibration to recover from our own failure is not acceptable.
+window.tenderResume = async function () {
+  if (runMode !== 'write' || !calibration?.workPlan?.length) return;
+  const plan = calibration.workPlan;
+  const doneCount = outputSections.length;
+  if (doneCount >= plan.length) return;
+
+  phase = 'running';
+  totalCallsPlanned = 1 + plan.length;
+  showRunning(`⚙️ ממשיך מפרק ${doneCount + 1} מתוך ${plan.length}…`, callsDone, totalCallsPlanned);
+
+  try {
+    let mIdx = deps.getModelIdx();
+    for (let i = doneCount; i < plan.length; i++) {
+      const section = plan[i];
+      updateRunning(`⚙️ קריאה ${callsDone + 1} מתוך ${totalCallsPlanned} — ${section.section || 'כתיבת פרק'}…`, callsDone + 1, totalCallsPlanned);
+      const result = await callWithFallback((useCache, shrink) => ({
+        prompt: useCache
+          ? buildExecutionTaskPrompt(section, i, plan.length)
+          : buildExecutionPrompt(lastInstruction, calibration, section, i, plan.length, shrink),
+        inlineFile: useCache ? null : (pickedFiles.find(f => f.isInline) || null),
+      }), mIdx);
+      mIdx = deps.getModelIdx(); callsDone++;
+      outputSections.push({ title: section.section || `פרק ${i + 1}`, text: result });
+    }
+  } catch (err) {
+    dropTenderCache();
+    phase = 'error';
+    showError(err.message || String(err), { partial: true });
+    return;
   }
 
   dropTenderCache();
@@ -1051,7 +1122,11 @@ function parseCalibration(raw) {
   if (first !== -1 && last > first) {
     try { return JSON.parse(s.slice(first, last + 1)); } catch { /* ignore */ }
   }
+  // Degraded plan. _parseFailed is what the caller checks — without it this
+  // fallback is indistinguishable from a real calibration, and the run
+  // silently produces a weak single-chapter document.
   return {
+    _parseFailed: true,
     understanding: 'לא הצלחתי לפרסר את הכיול — עובר לכתיבה ישירה',
     mode: 'write',
     sourceFileName: '',
@@ -1307,6 +1382,11 @@ function showDone() {
       <div style="margin-top:.5rem;font-size:.8rem;color:#6b7280;">מצב: <strong>${runMode === 'revise' ? 'עדכון מכרז קיים' : 'כתיבת מכרז חדש'}</strong> | רמת עיבוד: <strong>${lvl.label}</strong> | קבצי רקע: <strong>${pickedFiles.length}</strong> | קריאות API: <strong>${totalCallsPlanned}</strong></div>
       ${statsLine}
     </div>
+    ${calibration?._parseFailed ? `
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.75rem 1rem;font-size:.82rem;color:#92400e;line-height:1.55;">
+      ⚠️ <strong>שלב הכיול נכשל בריצה הזו</strong> — המכרז נכתב במסלול גנרי מצומצם,
+      ללא תוכנית פרקים. מומלץ לחדד את ההנחיה ולהריץ שוב.
+    </div>` : ''}
     <div style="font-size:.82rem;color:#475569;line-height:1.5;">
       אם ההורדה נחסמה על ידי הדפדפן — לחץ "הורד שוב".
       שדות שסומנו [להשלמה: ___] דורשים מילוי על ידי הגורם המזמין.
@@ -1326,15 +1406,35 @@ function showDone() {
     </div>`);
 }
 
-function showError(msg) {
+function showError(msg, { partial = false } = {}) {
+  const written = partial ? outputSections.length : 0;
+  const planned = calibration?.workPlan?.length || 0;
+  const canResume = runMode === 'write' && written > 0 && planned > written;
+
   setBody(`
     <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:.9rem;color:#b91c1c;font-size:.85rem;">
       ❌ שגיאה: ${deps.escHtml(msg)}
-    </div>`);
+    </div>
+    ${written ? `
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.8rem 1rem;font-size:.83rem;color:#92400e;line-height:1.55;">
+      <strong>${written} ${written === 1 ? 'פרק נכתב' : 'פרקים נכתבו'} לפני התקלה${planned ? ` (מתוך ${planned})` : ''}</strong> —
+      אפשר להוריד אותם עכשיו${canResume ? ', או להמשיך מהפרק שנכשל בלי לשלם שוב על הכיול' : ''}.
+      <div style="display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap;">
+        <button onclick="window.tenderRedownload()"
+          style="padding:.35rem .8rem;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;cursor:pointer;font-size:.8rem;font-family:Heebo,sans-serif;color:#92400e;font-weight:600;">
+          ⬇ הורד את מה שנכתב
+        </button>
+        ${canResume ? `
+        <button onclick="window.tenderResume()"
+          style="padding:.35rem .8rem;background:#d97706;border:none;border-radius:6px;cursor:pointer;font-size:.8rem;font-family:Heebo,sans-serif;color:#fff;font-weight:600;">
+          🔄 המשך מפרק ${written + 1}
+        </button>` : ''}
+      </div>
+    </div>` : ''}`);
   setFooter(`
     <div style="display:flex;gap:.7rem;justify-content:space-between;">
       <button onclick="window.closeTenderModal()" style="padding:.48rem 1rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.87rem;font-family:Heebo,sans-serif;color:#374151;">סגור</button>
-      <button onclick="window.openTenderModal()" style="padding:.48rem 1rem;background:#d97706;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.87rem;font-family:Heebo,sans-serif;">נסה שוב</button>
+      <button onclick="window.openTenderModal()" style="padding:.48rem 1rem;background:#d97706;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.87rem;font-family:Heebo,sans-serif;">התחל מחדש</button>
     </div>`);
 }
 

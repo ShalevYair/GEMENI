@@ -1,28 +1,28 @@
-import { AGENTS } from './agents-config.js';
-import { deps } from './modals/deps.js';
-import { initStorytellerModal }  from './modals/storyteller-modal.js';
-import { initArchitectModal }    from './modals/architect-modal.js';
-import { initPlatformModal }     from './modals/platform-modal.js';
-import { initOutSystemsModal }   from './modals/outsystems-modal.js';
-import { initDesignQueenModal }  from './modals/design-queen-modal.js';
-import { initSpecKingModal }     from './modals/spec-king-modal.js';
-import { initRequirementsModal } from './modals/requirements-modal.js';
-import { initNaturalModal }      from './modals/natural-modal.js';
-import { initDynamicModal }     from './modals/dynamic-modal.js';
-import { initJsonModal }        from './modals/json-modal.js';
-import { initSummarizerModal }  from './modals/summarizer-modal.js';
-import { initUiExplorerModal } from './modals/ui-explorer-modal.js';
-import { initBrieferModal }    from './modals/briefer-modal.js';
-import { initShragaModal }     from './modals/shraga-modal.js';
-import { initMaturityCheckerModal } from './modals/maturity-checker-modal.js';
-import { initTenderWriterModal } from './modals/tender-writer-modal.js';
+import { AGENTS } from './agents-config.js?v=20260825';
+import { deps } from './modals/deps.js?v=20260825';
+import { initStorytellerModal }  from './modals/storyteller-modal.js?v=20260825';
+import { initArchitectModal }    from './modals/architect-modal.js?v=20260825';
+import { initPlatformModal }     from './modals/platform-modal.js?v=20260825';
+import { initOutSystemsModal }   from './modals/outsystems-modal.js?v=20260825';
+import { initDesignQueenModal }  from './modals/design-queen-modal.js?v=20260825';
+import { initSpecKingModal }     from './modals/spec-king-modal.js?v=20260825';
+import { initRequirementsModal } from './modals/requirements-modal.js?v=20260825';
+import { initNaturalModal }      from './modals/natural-modal.js?v=20260825';
+import { initDynamicModal }     from './modals/dynamic-modal.js?v=20260825';
+import { initJsonModal }        from './modals/json-modal.js?v=20260825';
+import { initSummarizerModal }  from './modals/summarizer-modal.js?v=20260825';
+import { initUiExplorerModal } from './modals/ui-explorer-modal.js?v=20260825';
+import { initBrieferModal }    from './modals/briefer-modal.js?v=20260825';
+import { initShragaModal }     from './modals/shraga-modal.js?v=20260825';
+import { initMaturityCheckerModal } from './modals/maturity-checker-modal.js?v=20260825';
+import { initTenderWriterModal } from './modals/tender-writer-modal.js?v=20260825';
 import {
   ENGINES, getEngine, setEngine, getModelChain,
   thinkingCfg, DEFAULT_THINKING_LEVEL, JSON_THINKING_LEVEL,
   isThinkingFieldError, markThinkingUnsupported,
   isBillingRequiredError, isUnknownModelError,
   fetchAvailableModels, pruneChain,
-} from './models.js';
+} from './models.js?v=20260825';
 
 const STORAGE_KEY       = 'gemini_api_key';
 const MAX_FILE_MB       = 10;

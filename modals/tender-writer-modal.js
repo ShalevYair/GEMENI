@@ -1,7 +1,7 @@
 import { deps } from './deps.js';
 
 // ── State ──────────────────────────────────────────────────────────────────
-let phase = 'pick'; // 'pick' | 'calibrating' | 'running' | 'done' | 'error'
+let phase = 'pick'; // 'pick' | 'calibrating' | 'review' | 'running' | 'done' | 'error'
 let pickedFiles = []; // [{ name, text, sizeChars, isInline, mimeType, base64? }]
 let calibration = null; // { understanding, tenderTitle, internalPrompt, mode, sourceFileName, workPlan:[{section,prompt}], questions:[] }
 let outputSections = []; // accumulated text from execution calls
@@ -15,6 +15,10 @@ let cacheState = null;   // active explicit context cache: { name, model }
 let cachePayload = null; // { sharedText, inlineParts } — what to (re)create the cache from
 let cacheEverUsed = false;
 let tenderImages = []; // base64 data URIs extracted from DOCX HTML, restored at assembly
+let reviseSourceFile = null;   // revise mode: the tender being patched
+let sourceFileGuessed = false; // true when picked by size, not by name match
+let answers = {};              // review screen: clarification answers, by question index
+let basePromptOverride = '';   // review screen: user edits to WRITING_PRINCIPLES
 
 const MAX_FILES = 20;
 const WARN_CHARS = 80_000;
@@ -134,6 +138,10 @@ window.openTenderModal = function () {
   outputSections = [];
   selectedLevel = 'auto';
   lastInstruction = '';
+  reviseSourceFile = null;
+  sourceFileGuessed = false;
+  answers = {};
+  basePromptOverride = '';
   document.getElementById('tender-modal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
   showPhasePick();
@@ -192,6 +200,7 @@ function showPhasePick() {
       <strong style="color:#334155;">איך זה עובד:</strong><br>
       📥 <strong>קבלה:</strong> עד ${MAX_FILES} קבצים — אפיונים, דרישות, פרוטוקולים, מכרזים לדוגמה.<br>
       🔍 <strong>קריאה 1 — כיול:</strong> הסוכן קורא את החומרים ומזהה: כתיבת מכרז חדש או עדכון מכרז קיים.<br>
+      ✅ <strong>אישור תוכנית:</strong> לפני שנכתבת מילה — תראה את תוכנית הפרקים, תוכל לערוך אותה ולענות על שאלות הבהרה.<br>
       ⚙️ <strong>מכרז חדש:</strong> כתיבת פרקים לפי רמת העיבוד — דרישות, קריטריוני הערכה, SLA, תנאים חוזיים.<br>
       🔁 <strong>עדכון מכרז קיים:</strong> המסמך מחולק לבלוקים ממוספרים והמודל מחזיר רק את הבלוקים שהשתנו — כל שאר התוכן מועתק מהמקור אות-באות (חיסכון ניכר בטוקנים, אפס סיכון לאיבוד תוכן). רמת עיבוד גבוהה = קטעי קריאה קטנים ויסודיים יותר.<br>
       💾 <strong>Context Caching:</strong> כשחומר משותף גדול נשלח בכמה קריאות — הוא נשמר במטמון בצד השרת ומחויב במחיר מוזל.<br>
@@ -539,25 +548,36 @@ window.runTenderWriter = async function () {
   }
 
   // ── Mode selection: revise an existing tender vs. write a new one ─────
-  let sourceFile = null;
-  if (calibration.mode === 'revise') {
-    sourceFile = pickedFiles.find(f => f.name === calibration.sourceFileName && !f.isInline && (f.text || '').trim());
-    if (!sourceFile) {
-      // fallback: the largest text file is almost certainly the tender
-      sourceFile = pickedFiles
-        .filter(f => !f.isInline && (f.text || '').trim())
-        .sort((a, b) => (b.text || '').length - (a.text || '').length)[0] || null;
-    }
-    if (sourceFile) runMode = 'revise';
+  resolveSourceFile();
+
+  // Clamp before the review screen, not after: the user must approve the
+  // plan that will actually run, not one that gets merged behind their back.
+  if (runMode === 'write') {
+    calibration.workPlan = clampWorkPlan(calibration.workPlan || [], lvl);
   }
 
+  // ── Review gate ────────────────────────────────────────────────────────
+  // Everything above was fire-and-forget before: the user pressed run and
+  // the next thing they saw was a .doc download. The plan, the source file
+  // and the clarification questions are all decided here and all were
+  // invisible. Stop and let them correct it while correcting is still cheap.
+  phase = 'review';
+  showPhaseReview();
+};
+
+// ── Phase 3: execution (entered from the review screen) ───────────────────
+window.tenderRunApproved = async function () {
+  readReviewEdits();
+
+  const lvl = LEVELS[selectedLevel] || LEVELS.auto;
   phase = 'running';
+  showRunning('⚙️ מתחיל בכתיבה…', callsDone, totalCallsPlanned || 2);
 
   try {
     if (runMode === 'revise') {
-      await runReviseFlow(instruction, lvl, sourceFile);
+      await runReviseFlow(lastInstruction, lvl, reviseSourceFile);
     } else {
-      await runWriteFlow(instruction, lvl);
+      await runWriteFlow(lastInstruction, lvl);
     }
   } catch (err) {
     dropTenderCache();
@@ -572,6 +592,68 @@ window.runTenderWriter = async function () {
   phase = 'done';
   downloadTenderDoc();
   showDone();
+};
+
+// Re-run calibration from the review screen, picking up any edits the user
+// made to the base prompt first.
+window.tenderRecalibrate = function () {
+  readReviewEdits();
+  window.runTenderWriter();
+};
+
+// Pick the tender to patch in revise mode. Exact name match first, then a
+// forgiving match, and only then the largest-file guess — which is recorded
+// so the review screen can flag that it was a guess rather than a match.
+function resolveSourceFile() {
+  reviseSourceFile = null;
+  sourceFileGuessed = false;
+  if (calibration.mode !== 'revise') { runMode = 'write'; return; }
+
+  const candidates = pickedFiles.filter(f => !f.isInline && (f.text || '').trim());
+  const wanted = (calibration.sourceFileName || '').trim().toLowerCase();
+  const bare = (n) => n.toLowerCase().replace(/\.[^.]+$/, '').trim();
+
+  let hit = candidates.find(f => f.name.toLowerCase() === wanted);
+  if (!hit && wanted) hit = candidates.find(f => bare(f.name) === bare(wanted));
+  if (!hit && wanted) hit = candidates.find(f => f.name.toLowerCase().includes(wanted) || wanted.includes(bare(f.name)));
+  if (!hit) {
+    hit = candidates.slice().sort((a, b) => (b.text || '').length - (a.text || '').length)[0] || null;
+    if (hit) sourceFileGuessed = true;
+  }
+
+  reviseSourceFile = hit;
+  runMode = hit ? 'revise' : 'write';
+}
+
+// Let the user override the source file from the review screen — a wrong
+// guess here means the run patches the wrong document from end to end.
+window.tenderSetSourceFile = function (idx) {
+  const f = pickedFiles[Number(idx)];
+  if (!f) return;
+  reviseSourceFile = f;
+  sourceFileGuessed = false;
+  calibration.sourceFileName = f.name;
+  showPhaseReview();
+};
+
+window.tenderSetMode = function (mode) {
+  if (mode === runMode) return;
+  if (mode === 'revise') {
+    calibration.mode = 'revise';
+    resolveSourceFile();
+    if (!reviseSourceFile) {
+      showModalError('אין קובץ טקסט שניתן לעדכן — מצב עדכון דורש מכרז קיים כ-DOCX/TXT/MD.');
+      calibration.mode = 'write';
+      runMode = 'write';
+    }
+  } else {
+    calibration.mode = 'write';
+    runMode = 'write';
+    if (!calibration.workPlan?.length) {
+      calibration.workPlan = clampWorkPlan([], LEVELS[selectedLevel] || LEVELS.auto);
+    }
+  }
+  showPhaseReview();
 };
 
 // Resume a write-mode run that died partway: the calibration is still in
@@ -739,6 +821,8 @@ async function legacyReviseSegment(instruction, sourceFile, segSource, lvl) {
 
 // ── Write mode: one call per planned tender chapter ────────────────────────
 async function runWriteFlow(instruction, lvl) {
+  // Already clamped and user-approved on the review screen; re-clamp only to
+  // absorb sections added there beyond the level's ceiling.
   const plan = clampWorkPlan(calibration.workPlan || [], lvl);
   calibration.workPlan = plan;
   totalCallsPlanned = 1 + plan.length;
@@ -1015,7 +1099,7 @@ function buildReviseSharedContext(instruction, calib, sourceFile, shrink = 0) {
 ${instruction ? `הנחיית המפעיל:\n"${instruction}"\n\n` : ''}השינויים המבוקשים כפי שסיכמת בשלב הכיול:
 ${calib.internalPrompt || ''}
 
-${changeFiles.length ? `קבצי הנחיות השינוי (במלואם):\n${fileBlocksFor(60000, changeFiles, CAP_CHANGE_DOCS, shrink)}\n` : ''}`;
+${changeFiles.length ? `קבצי הנחיות השינוי (במלואם):\n${fileBlocksFor(60000, changeFiles, CAP_CHANGE_DOCS, shrink)}\n` : ''}${answersBlock()}`;
 }
 
 function buildRevisePatchPrompt(instruction, sourceFile, segText, segLabel, useCache, shrink = 0) {
@@ -1054,7 +1138,7 @@ ${calib.internalPrompt || ''}
 
 הבנתך את הצורך: ${calib.understanding || ''}
 
-${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFiles, CAP_MATERIALS)}\n` : ''}`;
+${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFiles, CAP_MATERIALS)}\n` : ''}${answersBlock()}`;
 }
 
 // Chapter task sent when the shared context is already in the server-side
@@ -1062,8 +1146,8 @@ ${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFile
 function buildExecutionTaskPrompt(section, sectionIdx, totalSections) {
   return `על בסיס ההקשר המשותף שנמסר לך למעלה (ההנחיות וחומרי הגלם), כתוב עכשיו את פרק ${sectionIdx + 1} מתוך ${totalSections} של מסמך המכרז (${section.section}):
 ${section.prompt}
-
-${WRITING_PRINCIPLES}`;
+${answersBlock()}
+${writingPrinciples()}`;
 }
 
 const WRITING_PRINCIPLES = `עקרונות כתיבה מחייבים:
@@ -1108,9 +1192,9 @@ ${calib.internalPrompt || ''}
 הפרק שעליך לכתוב עכשיו (${section.section}):
 ${section.prompt}
 
-${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFiles, CAP_MATERIALS, shrink)}\n` : ''}
+${pickedFiles.length ? `חומרי הגלם:\n${fileBlocksFor(120000, pickedFiles, CAP_MATERIALS, shrink)}\n` : ''}${answersBlock()}
 ---
-${WRITING_PRINCIPLES}`;
+${writingPrinciples()}`;
 }
 
 // ── Calibration JSON parser ────────────────────────────────────────────────
@@ -1152,9 +1236,10 @@ function assembleTenderMarkdown() {
     md += `## ${sec.title}\n\n${sec.text}\n\n---\n\n`;
   }
 
-  if (calibration?.questions?.length) {
+  const open = openQuestions();
+  if (open.length) {
     md += `## שאלות הבהרה לגורם המזמין\n\n`;
-    calibration.questions.forEach((q, i) => { md += `${i + 1}. ${q}\n`; });
+    open.forEach((q, i) => { md += `${i + 1}. ${q}\n`; });
   }
 
   return md;
@@ -1327,6 +1412,225 @@ async function callWithFallback(buildRequest, startIdx) {
   }
 }
 
+// ── Phase 2: review gate ──────────────────────────────────────────────────
+// The calibration decides the chapter plan, the internal style brief, the
+// source file in revise mode and the clarification questions — all of which
+// used to be invisible until the .doc landed. This screen makes each of them
+// editable at the one moment when editing is still cheap: before any
+// execution call has been paid for.
+function showPhaseReview() {
+  const lvl  = LEVELS[selectedLevel] || LEVELS.auto;
+  const plan = calibration.workPlan || [];
+  const qs   = calibration.questions || [];
+  const truncated = pickedFiles.filter(f => !f.isInline && (f.text || '').length > CAP_CALIBRATION / Math.max(1, pickedFiles.filter(x => !x.isInline).length));
+
+  setBody(`
+    ${calibration._parseFailed ? `
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:.75rem 1rem;font-size:.82rem;color:#b91c1c;line-height:1.5;">
+      ⚠️ <strong>הכיול נכשל</strong> — התוכנית שלמטה גנרית. מומלץ לבטל, לחדד את ההנחיה ולנסות שוב.
+    </div>` : ''}
+
+    ${truncated.length ? `
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:.7rem 1rem;font-size:.8rem;color:#92400e;line-height:1.5;">
+      ℹ️ ${truncated.length} ${truncated.length === 1 ? 'קובץ נחתך' : 'קבצים נחתכו'} בשלב הכיול בגלל היקף החומר —
+      תוכנית העבודה מבוססת על חלק מהחומר. כדאי לעבור עליה.
+    </div>` : ''}
+
+    <!-- Understanding -->
+    <div>
+      <label style="font-size:.83rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">🔍 מה הסוכן הבין</label>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:.6rem .8rem;font-size:.82rem;color:#475569;line-height:1.55;">
+        ${deps.escHtml(calibration.understanding || '—')}
+      </div>
+    </div>
+
+    <!-- Mode -->
+    <div>
+      <label style="font-size:.83rem;font-weight:600;color:#374151;display:block;margin-bottom:.35rem;">⚙️ מצב עבודה</label>
+      <div style="display:flex;gap:.5rem;">
+        <button type="button" onclick="window.tenderSetMode('write')"
+          style="flex:1;padding:.45rem .6rem;border:1px solid ${runMode === 'write' ? '#d97706' : '#d1d5db'};background:${runMode === 'write' ? '#fff7ed' : '#fff'};border-radius:7px;cursor:pointer;font-size:.8rem;font-family:Heebo,sans-serif;font-weight:${runMode === 'write' ? '700' : '500'};color:#374151;">
+          ✍️ כתיבת מכרז חדש
+        </button>
+        <button type="button" onclick="window.tenderSetMode('revise')"
+          style="flex:1;padding:.45rem .6rem;border:1px solid ${runMode === 'revise' ? '#d97706' : '#d1d5db'};background:${runMode === 'revise' ? '#fff7ed' : '#fff'};border-radius:7px;cursor:pointer;font-size:.8rem;font-family:Heebo,sans-serif;font-weight:${runMode === 'revise' ? '700' : '500'};color:#374151;">
+          🔁 עדכון מכרז קיים
+        </button>
+      </div>
+    </div>
+
+    ${runMode === 'revise' ? `
+    <div>
+      <label style="font-size:.83rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">
+        📄 המכרז שיעודכן
+        ${sourceFileGuessed ? '<span style="font-weight:400;color:#b45309;">— ⚠️ זוהה לפי גודל, לא לפי שם. ודא שזה הקובץ הנכון</span>' : ''}
+      </label>
+      <select onchange="window.tenderSetSourceFile(this.value)"
+        style="width:100%;box-sizing:border-box;padding:.45rem .6rem;border:1px solid ${sourceFileGuessed ? '#fcd34d' : '#d1d5db'};border-radius:7px;font-size:.82rem;font-family:Heebo,sans-serif;direction:rtl;background:#fff;color:#1e293b;">
+        ${pickedFiles.map((f, i) => f.isInline || !(f.text || '').trim() ? '' :
+          `<option value="${i}"${f === reviseSourceFile ? ' selected' : ''}>${deps.escHtml(f.name)} — ${Math.round((f.text || '').length / 1000)}K תווים</option>`
+        ).join('')}
+      </select>
+    </div>` : ''}
+
+    <!-- Internal brief -->
+    <div>
+      <label style="font-size:.83rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">
+        🎯 הנחיות פנימיות ${runMode === 'revise' ? '<span style="font-weight:400;color:#94a3b8;">(רשימת השינויים שיוחלו)</span>' : '<span style="font-weight:400;color:#94a3b8;">(סגנון ודגשים)</span>'}
+      </label>
+      <textarea id="tender-rv-internal" rows="${runMode === 'revise' ? 6 : 3}"
+        style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:8px;padding:.55rem .7rem;font-family:Heebo,sans-serif;font-size:.82rem;resize:vertical;color:#1e293b;background:#fff;direction:rtl;line-height:1.55;">${deps.escHtml(calibration.internalPrompt || '')}</textarea>
+    </div>
+
+    ${runMode === 'write' ? `
+    <!-- Chapter plan -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem;">
+        <label style="font-size:.83rem;font-weight:600;color:#374151;">
+          📚 תוכנית הפרקים
+          <span style="font-weight:400;color:#94a3b8;">(${plan.length} ${plan.length === 1 ? 'פרק' : 'פרקים'} = ${plan.length} קריאות API)</span>
+        </label>
+        <button type="button" onclick="window.tenderAddSection()"
+          style="padding:.22rem .6rem;border:1px solid #c8d0e0;background:#fff;border-radius:6px;cursor:pointer;font-size:.75rem;font-family:Heebo,sans-serif;color:#0891b2;font-weight:600;">➕ הוסף פרק</button>
+      </div>
+      <div id="tender-rv-plan" style="display:flex;flex-direction:column;gap:.45rem;">
+        ${plan.map((s, i) => `
+          <div style="border:1px solid #e2e8f0;border-radius:8px;background:#fff;overflow:hidden;">
+            <div style="display:flex;align-items:center;gap:.4rem;padding:.4rem .6rem;background:#f8fafc;">
+              <span style="font-size:.75rem;color:#94a3b8;font-weight:700;min-width:1.2rem;">${i + 1}</span>
+              <input type="text" data-sec-name="${i}" value="${deps.escHtml(s.section || '')}"
+                style="flex:1;border:none;background:none;font-family:Heebo,sans-serif;font-size:.82rem;font-weight:600;color:#1e293b;direction:rtl;outline:none;padding:.15rem;">
+              <button type="button" onclick="window.tenderMoveSection(${i},-1)" ${i === 0 ? 'disabled' : ''} title="הזז למעלה"
+                style="border:none;background:none;cursor:${i === 0 ? 'default' : 'pointer'};opacity:${i === 0 ? '.25' : '.7'};font-size:.8rem;padding:.1rem .25rem;">⬆</button>
+              <button type="button" onclick="window.tenderMoveSection(${i},1)" ${i === plan.length - 1 ? 'disabled' : ''} title="הזז למטה"
+                style="border:none;background:none;cursor:${i === plan.length - 1 ? 'default' : 'pointer'};opacity:${i === plan.length - 1 ? '.25' : '.7'};font-size:.8rem;padding:.1rem .25rem;">⬇</button>
+              <button type="button" onclick="window.tenderRemoveSection(${i})" title="מחק פרק"
+                style="border:none;background:none;cursor:pointer;color:#b91c1c;font-size:.8rem;padding:.1rem .25rem;">🗑</button>
+            </div>
+            <textarea data-sec-prompt="${i}" rows="2" placeholder="מה לכתוב בפרק זה"
+              style="width:100%;box-sizing:border-box;border:none;border-top:1px solid #f1f5f9;padding:.45rem .6rem;font-family:Heebo,sans-serif;font-size:.78rem;color:#475569;resize:vertical;direction:rtl;line-height:1.5;outline:none;">${deps.escHtml(s.prompt || '')}</textarea>
+          </div>`).join('')}
+      </div>
+      ${plan.length > lvl.max ? `<div style="margin-top:.35rem;font-size:.75rem;color:#b45309;">⚠️ ${plan.length} פרקים חורגים מרמת העיבוד "${lvl.label}" (עד ${lvl.max}) — העודף ימוזג לפרק האחרון.</div>` : ''}
+    </div>` : ''}
+
+    ${qs.length ? `
+    <!-- Clarification questions, asked BEFORE writing rather than after -->
+    <div>
+      <label style="font-size:.83rem;font-weight:600;color:#374151;display:block;margin-bottom:.3rem;">
+        ❓ שאלות הבהרה <span style="font-weight:400;color:#94a3b8;">(כולן רשות — מה שתענה ייכנס למכרז, מה שלא יסומן [להשלמה])</span>
+      </label>
+      <div style="display:flex;flex-direction:column;gap:.4rem;">
+        ${qs.map((q, i) => `
+          <div style="border:1px solid #fed7aa;border-radius:8px;background:#fffbf5;padding:.45rem .6rem;">
+            <div style="font-size:.79rem;color:#9a3412;margin-bottom:.25rem;">${i + 1}. ${deps.escHtml(q)}</div>
+            <input type="text" data-answer="${i}" value="${deps.escHtml(answers[i] || '')}" placeholder="תשובה (רשות)"
+              style="width:100%;box-sizing:border-box;border:1px solid #fed7aa;border-radius:6px;padding:.3rem .5rem;font-family:Heebo,sans-serif;font-size:.79rem;direction:rtl;color:#1e293b;background:#fff;">
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <!-- Writing principles -->
+    <details style="border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">
+      <summary style="padding:.5rem .8rem;cursor:pointer;font-size:.82rem;font-weight:600;color:#374151;">📜 עקרונות כתיבה — הצג / ערוך</summary>
+      <div style="padding:0 .8rem .7rem;">
+        <textarea id="tender-rv-principles" rows="8"
+          style="width:100%;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:8px;padding:.55rem .7rem;font-family:'Courier New',monospace;font-size:.76rem;color:#1e293b;resize:vertical;direction:rtl;line-height:1.55;background:#fff;">${deps.escHtml(basePromptOverride || WRITING_PRINCIPLES)}</textarea>
+        <button type="button" onclick="window.tenderResetPrinciples()"
+          style="margin-top:.35rem;padding:.22rem .6rem;border:1px solid #c8d0e0;background:#fff;border-radius:6px;cursor:pointer;font-size:.74rem;font-family:Heebo,sans-serif;color:#475569;">↺ שחזר ברירת מחדל</button>
+      </div>
+    </details>`);
+
+  const callCount = runMode === 'revise' ? '?' : plan.length;
+  setFooter(`
+    <div style="display:flex;gap:.6rem;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+      <button onclick="window.closeTenderModal()" style="padding:.48rem .9rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.85rem;font-family:Heebo,sans-serif;color:#374151;">ביטול</button>
+      <div style="display:flex;gap:.5rem;align-items:center;">
+        <button onclick="window.tenderRecalibrate()" style="padding:.45rem .9rem;border:1px solid #c8d0e0;background:#fff;border-radius:8px;cursor:pointer;font-size:.83rem;font-family:Heebo,sans-serif;color:#0891b2;font-weight:600;">↻ כייל מחדש</button>
+        <button onclick="window.tenderRunApproved()"
+          style="padding:.5rem 1.3rem;background:linear-gradient(135deg,#d97706,#b45309);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:.88rem;font-weight:700;font-family:Heebo,sans-serif;box-shadow:0 2px 8px rgba(217,119,6,.35);">
+          ▶ הרץ${runMode === 'write' ? ` (${callCount} קריאות)` : ''}
+        </button>
+      </div>
+    </div>`);
+}
+
+// Pull every edit off the review screen back into state. Called before the
+// screen is torn down — by a run, a recalibration, or a re-render.
+function readReviewEdits() {
+  const internal = document.getElementById('tender-rv-internal');
+  if (internal) calibration.internalPrompt = internal.value;
+
+  const principles = document.getElementById('tender-rv-principles');
+  if (principles) {
+    const v = principles.value.trim();
+    basePromptOverride = (v && v !== WRITING_PRINCIPLES) ? v : '';
+  }
+
+  document.querySelectorAll('[data-sec-name]').forEach(el => {
+    const i = Number(el.dataset.secName);
+    if (calibration.workPlan?.[i]) calibration.workPlan[i].section = el.value;
+  });
+  document.querySelectorAll('[data-sec-prompt]').forEach(el => {
+    const i = Number(el.dataset.secPrompt);
+    if (calibration.workPlan?.[i]) calibration.workPlan[i].prompt = el.value;
+  });
+  document.querySelectorAll('[data-answer]').forEach(el => {
+    const v = el.value.trim();
+    if (v) answers[Number(el.dataset.answer)] = v; else delete answers[Number(el.dataset.answer)];
+  });
+}
+
+window.tenderAddSection = function () {
+  readReviewEdits();
+  (calibration.workPlan = calibration.workPlan || []).push({ section: 'פרק חדש', prompt: '' });
+  showPhaseReview();
+};
+
+window.tenderRemoveSection = function (i) {
+  readReviewEdits();
+  if (!calibration.workPlan || calibration.workPlan.length <= 1) {
+    showModalError('חייב להישאר לפחות פרק אחד.');
+    return;
+  }
+  calibration.workPlan.splice(i, 1);
+  showPhaseReview();
+};
+
+window.tenderMoveSection = function (i, delta) {
+  readReviewEdits();
+  const plan = calibration.workPlan || [];
+  const j = i + delta;
+  if (j < 0 || j >= plan.length) return;
+  [plan[i], plan[j]] = [plan[j], plan[i]];
+  showPhaseReview();
+};
+
+window.tenderResetPrinciples = function () {
+  basePromptOverride = '';
+  showPhaseReview();
+};
+
+// The answers the user supplied become hard facts for the writing calls;
+// unanswered questions stay open and are surfaced again on the done screen.
+function answersBlock() {
+  const qs = calibration?.questions || [];
+  const filled = qs.map((q, i) => answers[i] ? `${i + 1}. ${q} → ${answers[i]}` : null).filter(Boolean);
+  if (!filled.length) return '';
+  return `\n\nתשובות הגורם המזמין לשאלות ההבהרה — התייחס אליהן כעובדות מחייבות:\n${filled.join('\n')}\n`;
+}
+
+function writingPrinciples() {
+  return basePromptOverride || WRITING_PRINCIPLES;
+}
+
+// Questions the user left blank on the review screen. Answered ones are
+// already facts in the document, so re-listing them at the end would read as
+// though the tender still lacks them.
+function openQuestions() {
+  return (calibration?.questions || []).filter((_, i) => !answers[i]);
+}
+
 // ── Running UI ─────────────────────────────────────────────────────────────
 function showRunning(msg, current, total) {
   const pct = total > 1 ? Math.round((current / total) * 100) : 10;
@@ -1391,11 +1695,11 @@ function showDone() {
       אם ההורדה נחסמה על ידי הדפדפן — לחץ "הורד שוב".
       שדות שסומנו [להשלמה: ___] דורשים מילוי על ידי הגורם המזמין.
     </div>
-    ${calibration?.questions?.length ? `
+    ${openQuestions().length ? `
     <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:9px;padding:.75rem 1rem;font-size:.82rem;color:#9a3412;">
-      <strong>שאלות הבהרה לגורם המזמין:</strong>
+      <strong>שאלות שנותרו פתוחות לגורם המזמין:</strong>
       <ol style="margin:.3rem 0 0;padding-right:1.1rem;">
-        ${(calibration.questions || []).map(q => `<li>${deps.escHtml(q)}</li>`).join('')}
+        ${openQuestions().map(q => `<li>${deps.escHtml(q)}</li>`).join('')}
       </ol>
     </div>` : ''}`);
 
